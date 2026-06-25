@@ -1,0 +1,84 @@
+@import 'leaflet/dist/leaflet.css';
+@import './design/tokens.css';
+@import './design/psiog-ui.css';
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root { color-scheme: light; }
+
+html, body, #root { height: 100%; margin: 0; }
+
+/* Form controls: always black text */
+select, option, input, textarea { color: #000000; }
+select option { background: #ffffff; }
+body {
+  font-family: 'Poppins', system-ui, sans-serif;
+  font-size: 14px; /* Body Text default */
+  background: #ffffff;
+  color: #000000;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Scrollbars */
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #d0d5dd; border-radius: 6px; border: 2px solid transparent; background-clip: padding-box; }
+::-webkit-scrollbar-thumb:hover { background: #98a2b3; background-clip: padding-box; }
+
+/* Leaflet light tweaks */
+.leaflet-container { background: #e8eaed; font-family: inherit; }
+.leaflet-popup-content-wrapper, .leaflet-popup-tip {
+  background: #ffffff; color: #101828; border: 1px solid #e3e6ea; box-shadow: 0 4px 12px rgba(16,24,40,0.12);
+}
+.leaflet-bar a { background: #ffffff; color: #101828; border-color: #e3e6ea; }
+.leaflet-bar a:hover { background: #f6f7f9; }
+.leaflet-tooltip { background: #101828; color: #fff; border: none; box-shadow: 0 2px 6px rgba(0,0,0,0.2); font-weight: 500; }
+.leaflet-tooltip-top:before { border-top-color: #101828; }
+/* Compact permanent place labels on the map */
+.leaflet-tooltip.loc-label {
+  background: rgba(255,255,255,0.9); color: #07514D; border: none; box-shadow: none;
+  font-size: 10px; font-weight: 600; padding: 0 3px; white-space: nowrap;
+}
+.leaflet-tooltip.loc-label:before { display: none; }
+/* Rich vehicle hover dialog */
+.leaflet-tooltip.veh-tip {
+  background: #ffffff; color: #000000; border: 1px solid #d8dce2; border-radius: 12px;
+  padding: 10px 12px; box-shadow: 0 6px 20px rgba(16,24,40,0.18); font-family: inherit;
+}
+.leaflet-tooltip.veh-tip:before { border-top-color: #ffffff; }
+
+@layer components {
+  .panel { @apply bg-cmd-panel border border-cmd-border rounded-xl; box-shadow: 0 1px 2px rgba(255, 255, 255, 0.06), 0 1px 1px rgba(16,24,40,0.04); }
+  .panel-2 { @apply bg-cmd-panel2 border border-cmd-border rounded-lg; }
+  .btn { @apply px-4 py-2 rounded-lg text-[14px] font-medium transition-colors; }
+  .btn-primary { @apply btn text-white; background: #07514D; }
+  .btn-primary:hover { background: #0B6A64; }
+  .btn-secondary { @apply btn bg-white; border: 1px solid #07514D; color: #07514D; }
+  .btn-secondary:hover { background: #E6F0EE; }
+  .btn-cta { @apply btn font-semibold; background: #D6DF27; color: #07514D; }
+  .btn-cta:hover { filter: brightness(0.95); }
+  .btn-ghost { @apply btn border border-cmd-border bg-white text-cmd-text hover:bg-cmd-panel2; }
+  .chip { @apply inline-flex items-center gap-1 px-2 py-0.5 rounded text-[12px] font-medium; }
+  .label { @apply text-[11px] uppercase tracking-wide text-cmd-muted font-medium; }
+}
+
+/* Fuel view animations */
+@keyframes fuelDrip { 0% { transform: translateY(0); opacity: 0 } 25% { opacity: 1 } 100% { transform: translateY(20px); opacity: 0 } }
+.fuel-drip { animation: fuelDrip 1.8s ease-in infinite; }
+@keyframes fuelBob { 0%,100% { transform: translateY(0) } 50% { transform: translateY(-2px) } }
+.fuel-wave { animation: fuelBob 2.2s ease-in-out infinite; }
+@keyframes screenPulse { 0%,100% { opacity: 1 } 50% { opacity: .65 } }
+.screen-pulse { animation: screenPulse 2s ease-in-out infinite; }
+.fuel-fill { transition: height 1s cubic-bezier(.2,.8,.2,1); }
+@keyframes riseFade { from { opacity: 0; transform: translateY(8px) } to { opacity: 1; transform: translateY(0) } }
+.rise-fade { animation: riseFade .35s ease-out both; }
+
+.no-scrollbar::-webkit-scrollbar { display: none; }
+.no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+.vehicle-marker { transition: transform 0.9s linear; }
+@keyframes ambPulse { 0% { filter: drop-shadow(0 0 0 rgba(220,38,38,0.7)); } 70% { filter: drop-shadow(0 0 10px rgba(220,38,38,0)); } 100% { filter: drop-shadow(0 0 0 rgba(220,38,38,0)); } }
+.amb-pulse { animation: ambPulse 1.1s ease-out infinite; }
+@keyframes drawerIn { from { transform: translateX(100%); } to { transform: translateX(0); } }
+.drawer-panel { animation: drawerIn .22s cubic-bezier(.2,.8,.2,1); }

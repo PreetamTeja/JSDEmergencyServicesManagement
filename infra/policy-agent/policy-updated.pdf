@@ -1,0 +1,48 @@
+%PDF-1.4
+1 0 obj
+<</Type /Catalog /Pages 2 0 R>>
+endobj
+2 0 obj
+<</Type /Pages /Kids [3 0 R] /Count 1>>
+endobj
+3 0 obj
+<</Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources <</Font <</F1 4 0 R>>>> /Contents 5 0 R>>
+endobj
+4 0 obj
+<</Type /Font /Subtype /Type1 /BaseFont /Helvetica>>
+endobj
+5 0 obj
+<</Length 847>>
+stream
+BT /F1 13 Tf 50 760 Td 18 TL
+(Tata Steel Jamshedpur - Emergency Services Operational Policy) Tj T*
+() Tj T*
+(For estimating arrival times, control room should assume that ambulances and) Tj T*
+(fire trucks travel at about 20 kilometres per hour across the township) Tj T*
+(under normal conditions.) Tj T*
+() Tj T*
+(Any incident involving more than 1 injured people is to be treated) Tj T*
+(as a mass-casualty event. In such cases dispatch roughly one ambulance for) Tj T*
+(every 2 casualties, and in no situation send more than 5 ambulances) Tj T*
+(to a single incident.) Tj T*
+() Tj T*
+(If a response has not been completed, the system should automatically close the) Tj T*
+(trip after 6 minutes so the vehicle is freed for the next call.) Tj T*
+() Tj T*
+(When triaging, always prioritise critical cases first, then urgent, then normal.) Tj T*
+ET
+endstream
+endobj
+xref
+0 6
+0000000000 65535 f
+0000000009 00000 n
+0000000056 00000 n
+0000000111 00000 n
+0000000231 00000 n
+0000000299 00000 n
+trailer
+<</Size 6 /Root 1 0 R>>
+startxref
+1195
+%%EOF

@@ -1,0 +1,89 @@
+/* =====================================================================
+   PSIOG Component Layer v1.0 — framework-agnostic classes.
+   Build everything from these + tokens. React wrappers live in src/ui/.
+   Every interactive class supports: default / hover / focus / active /
+   disabled. Min touch target 44px. Focus ring for keyboard a11y.
+   ===================================================================== */
+
+/* ---------- Buttons ---------- */
+.psiog-btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: var(--space-2);
+  min-height: var(--control-height); padding: 0 var(--space-4);
+  font-family: var(--font-family); font-size: var(--fs-body); font-weight: var(--fw-medium);
+  border-radius: var(--radius-sm); border: 1px solid transparent; cursor: pointer;
+  transition: background-color .15s, border-color .15s, box-shadow .15s, filter .15s;
+  user-select: none; white-space: nowrap;
+}
+.psiog-btn:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+.psiog-btn:disabled, .psiog-btn[aria-disabled="true"] { opacity: .5; cursor: not-allowed; }
+
+.psiog-btn-primary { background: var(--color-primary); color: var(--color-white); }
+.psiog-btn-primary:hover:not(:disabled) { background: var(--color-primary-hover); }
+.psiog-btn-primary:active:not(:disabled) { filter: brightness(.95); }
+
+.psiog-btn-secondary { background: var(--color-surface); color: var(--color-primary); border-color: var(--color-primary); }
+.psiog-btn-secondary:hover:not(:disabled) { background: var(--color-primary-light); }
+
+.psiog-btn-cta { background: var(--color-accent); color: var(--color-accent-text); font-weight: var(--fw-semibold); }
+.psiog-btn-cta:hover:not(:disabled) { filter: brightness(.95); }
+
+.psiog-btn-ghost { background: transparent; color: var(--color-text); border-color: var(--color-border); }
+.psiog-btn-ghost:hover:not(:disabled) { background: var(--color-surface-2); }
+
+.psiog-icon-btn {
+  display: inline-grid; place-items: center; width: var(--control-height); height: var(--control-height);
+  border-radius: var(--radius-sm); border: none; background: transparent; color: var(--color-text-muted); cursor: pointer;
+  transition: background-color .15s, color .15s;
+}
+.psiog-icon-btn:hover { background: var(--color-surface-2); color: var(--color-text); }
+.psiog-icon-btn:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+
+/* ---------- Inputs ---------- */
+.psiog-input, .psiog-select, .psiog-textarea {
+  width: 100%; min-height: var(--control-height); padding: 0 var(--space-3);
+  font-family: var(--font-family); font-size: var(--fs-body); color: var(--color-text);
+  background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-sm);
+  transition: border-color .15s, box-shadow .15s;
+}
+.psiog-textarea { padding: var(--space-3); min-height: 88px; resize: vertical; }
+.psiog-input:hover, .psiog-select:hover, .psiog-textarea:hover { border-color: #b9c0cb; }
+.psiog-input:focus, .psiog-select:focus, .psiog-textarea:focus {
+  outline: none; border-color: var(--color-primary); box-shadow: var(--focus-ring);
+}
+.psiog-input:disabled, .psiog-select:disabled { background: var(--color-surface-2); opacity: .6; cursor: not-allowed; }
+.psiog-input[aria-invalid="true"], .psiog-input.is-error { border-color: var(--status-failed); }
+.psiog-field-label { display: block; font-size: var(--fs-small); font-weight: var(--fw-medium); color: var(--color-text-muted); margin-bottom: var(--space-1); }
+.psiog-field-error { font-size: var(--fs-caption); color: var(--status-failed); margin-top: var(--space-1); }
+
+/* ---------- Card ---------- */
+.psiog-card { background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-md); padding: var(--space-5); box-shadow: var(--shadow-card); }
+.psiog-card-title { font-size: var(--fs-h2); font-weight: var(--fw-semibold); color: var(--color-text); }
+
+/* ---------- KPI Card ---------- */
+.psiog-kpi { display: flex; flex-direction: column; gap: var(--space-2); }
+.psiog-kpi-label { font-size: var(--fs-small); text-transform: uppercase; letter-spacing: .04em; color: var(--color-text-muted); }
+.psiog-kpi-value { font-size: var(--fs-kpi); font-weight: var(--fw-bold); color: var(--color-text); line-height: 1.1; }
+.psiog-kpi-trend { font-size: var(--fs-small); }
+
+/* ---------- Badge ---------- */
+.psiog-badge { display: inline-flex; align-items: center; gap: var(--space-1); padding: 2px var(--space-2); border-radius: var(--radius-pill); font-size: var(--fs-small); font-weight: var(--fw-medium); }
+
+/* ---------- Table ---------- */
+.psiog-table { width: 100%; border-collapse: collapse; font-size: var(--fs-body); }
+.psiog-table thead th {
+  text-align: left; padding: var(--space-3) var(--space-4); background: var(--color-surface-2);
+  font-size: var(--fs-table); font-weight: var(--fw-semibold); text-transform: uppercase; letter-spacing: .03em; color: var(--color-text-muted);
+  border-bottom: 1px solid var(--color-border);
+}
+.psiog-table tbody td { padding: var(--space-3) var(--space-4); border-bottom: 1px solid var(--color-border); }
+.psiog-table tbody tr:hover { background: var(--color-primary-light); }
+.psiog-table tbody tr[aria-selected="true"] { background: #FBFCE3; } /* light yellow-green */
+
+/* ---------- Feedback ---------- */
+.psiog-modal-overlay { position: fixed; inset: 0; z-index: 1000; display: flex; align-items: center; justify-content: center; padding: var(--space-4); background: rgba(12,19,34,.5); }
+.psiog-modal { width: 100%; max-width: 520px; max-height: 88vh; overflow: auto; background: var(--color-surface); border-radius: var(--radius-lg); box-shadow: var(--shadow-pop); }
+.psiog-modal-header { display: flex; align-items: center; justify-content: space-between; padding: var(--space-4) var(--space-5); border-bottom: 1px solid var(--color-border); }
+.psiog-empty { text-align: center; color: var(--color-text-muted); padding: var(--space-7) var(--space-4); }
+
+@keyframes psiog-spin { to { transform: rotate(360deg); } }
+.psiog-spin { animation: psiog-spin .8s linear infinite; }

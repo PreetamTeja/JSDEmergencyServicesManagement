@@ -1,0 +1,79 @@
+/* =====================================================================
+   PSIOG Design System — Design Tokens v1.0
+   Single source of truth. Do NOT hardcode colors / spacing / radius / type.
+   Consume via var(--token) or the Tailwind aliases mapped in tailwind.config.js.
+   ===================================================================== */
+:root {
+  /* ---- Brand ---- */
+  --color-primary:        #07514D;
+  --color-primary-hover:  #0B6A64;
+  --color-primary-light:  #E6F0EE; /* active/hover surfaces, selected rows */
+  --color-accent:         #D6DF27;
+  --color-accent-text:    #07514D; /* text on accent */
+
+  /* ---- Neutrals / surfaces ---- */
+  --color-bg:        #ffffff;
+  --color-surface:   #ffffff;
+  --color-surface-2: #F5F6F8; /* table header, subtle fills */
+  --color-border:    #D8DCE2;
+  --color-text:      #0C1322;
+  --color-text-muted:#475467;
+  --color-white:     #ffffff;
+
+  /* ---- Status ---- */
+  --status-active:   #16a34a;
+  --status-pending:  #d97706;
+  --status-inactive: #64748b;
+  --status-failed:   #dc2626;
+
+  /* ---- Chart palette (max 5) ---- */
+  --chart-1: #07514D;
+  --chart-2: #0B6A64;
+  --chart-3: #4A9B96;
+  --chart-4: #D6DF27;
+  --chart-5: #F8FAD6;
+
+  /* ---- Spacing scale (ONLY these) ---- */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+  --space-7: 48px;
+  --space-8: 64px;
+
+  /* ---- Radius ---- */
+  --radius-sm: 8px;   /* buttons, inputs */
+  --radius-md: 12px;  /* cards */
+  --radius-lg: 16px;  /* modals */
+  --radius-pill: 999px;
+
+  /* ---- Typography ---- */
+  --font-family: 'Poppins', system-ui, sans-serif;
+  --fs-h1:      32px; /* page titles */
+  --fs-kpi:     28px; /* metric numbers */
+  --fs-h2:      20px; /* section / card titles */
+  --fs-body-lg: 16px; /* highlighted content */
+  --fs-body:    14px; /* default */
+  --fs-table:   13px; /* table headers */
+  --fs-small:   12px; /* labels, helper */
+  --fs-caption: 11px; /* timestamps */
+  --fw-regular: 400;
+  --fw-medium:  500;
+  --fw-semibold:600;
+  --fw-bold:    700;
+
+  /* ---- Elevation ---- */
+  --shadow-card: 0 1px 2px rgba(16,24,40,0.06), 0 1px 1px rgba(16,24,40,0.04);
+  --shadow-pop:  0 8px 24px rgba(16,24,40,0.12);
+
+  /* ---- Layout ---- */
+  --navbar-height: 64px;
+  --sidebar-width: 260px;
+  --content-max:   1440px;
+  --control-height:44px; /* min touch target */
+
+  /* ---- Focus ---- */
+  --focus-ring: 0 0 0 3px rgba(7,81,77,0.25);
+}

@@ -8,3 +8,6 @@ dist
 .vscode/
 .idea/
 Thumbs.db
+
+# documents / generated PDFs (kept local, not pushed)
+*.pdf

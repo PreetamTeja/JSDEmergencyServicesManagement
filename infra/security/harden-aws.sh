@@ -61,7 +61,7 @@ JSON
     ;;
 
   throttle-voice)
-    API="${2:?usage: throttle-voice <apiId>  (e.g. fxxff1629a)}"
+    API="${2:?usage: throttle-voice <apiId>  (e.g. abcd1234ef)}"
     aws apigatewayv2 update-stage --api-id "$API" --stage-name '$default' --region "$REGION" \
       --default-route-settings 'ThrottlingBurstLimit=10,ThrottlingRateLimit=5' >/dev/null
     echo "Voice API ${API} throttled to 5 rps / burst 10."

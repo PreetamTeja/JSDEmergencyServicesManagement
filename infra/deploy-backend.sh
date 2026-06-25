@@ -20,8 +20,8 @@ EMP_ARN="arn:aws:dynamodb:${REGION}:${ACCOUNT}:table/${EMP_TABLE}"
 
 # ---- security config (Cognito JWT verification + CORS) ----
 COGNITO_REGION="${COGNITO_REGION:-eu-central-1}"
-COGNITO_USER_POOL_ID="${COGNITO_USER_POOL_ID:-eu-central-1_74er6Yfnf}"
-COGNITO_CLIENT_ID="${COGNITO_CLIENT_ID:-3t356v1nm5dq54kbthttjev21l}"
+COGNITO_USER_POOL_ID="${COGNITO_USER_POOL_ID:-<your-cognito-user-pool-id>}"
+COGNITO_CLIENT_ID="${COGNITO_CLIENT_ID:-<your-cognito-client-id>}"
 ADMIN_GROUPS="${ADMIN_GROUPS:-transport-admin}"
 # Lock to your CloudFront URL(s), comma-separated. Default '*' for local/dev only.
 ALLOWED_ORIGINS="${ALLOWED_ORIGINS:-*}"

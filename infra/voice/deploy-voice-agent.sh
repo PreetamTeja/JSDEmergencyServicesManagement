@@ -2,7 +2,7 @@
 # =====================================================================
 # Deploy the voice emergency agent Lambda (Bedrock Claude + tool-use) with a
 # public Function URL. Run in AWS CloudShell from the folder with voice-agent.mjs:
-#   API_BASE=https://cfnjgxlvfl.execute-api.eu-west-1.amazonaws.com \
+#   API_BASE=https://<your-api-id>.execute-api.<region>.amazonaws.com \
 #   API_KEY=<CONSOLE_API_KEY> \
 #   BEDROCK_MODEL_ID=eu.amazon.nova-lite-v1:0 \
 #   AWS_REGION=eu-west-1 ./deploy-voice-agent.sh
@@ -21,8 +21,8 @@ API_KEY="${API_KEY:?Set API_KEY (a key with scope to POST /emergencies)}"
 MODEL="${BEDROCK_MODEL_ID:-eu.amazon.nova-lite-v1:0}"
 # Security: the voice line verifies the caller's Cognito JWT and locks CORS.
 COGNITO_REGION="${COGNITO_REGION:-eu-central-1}"
-COGNITO_USER_POOL_ID="${COGNITO_USER_POOL_ID:-eu-central-1_74er6Yfnf}"
-COGNITO_CLIENT_ID="${COGNITO_CLIENT_ID:-3t356v1nm5dq54kbthttjev21l}"
+COGNITO_USER_POOL_ID="${COGNITO_USER_POOL_ID:-<your-cognito-user-pool-id>}"
+COGNITO_CLIENT_ID="${COGNITO_CLIENT_ID:-<your-cognito-client-id>}"
 ALLOWED_ORIGINS="${ALLOWED_ORIGINS:-*}"
 ACCOUNT="$(aws sts get-caller-identity --query Account --output text)"
 

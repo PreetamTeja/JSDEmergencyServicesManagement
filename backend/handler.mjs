@@ -306,8 +306,8 @@ const sns = new SNSClient({})
 const ses = new SESClient({})
 const SES_FROM = process.env.SES_FROM
 // Public base URL of the SPA, used to build shareable tracking links.
-const APP_BASE_URL = (process.env.APP_BASE_URL || 'https://dkr9xqi0cx9b5.cloudfront.net').replace(/\/+$/, '')
-const trackUrl = (rec) => rec.track_token ? `${APP_BASE_URL}/track/${rec.id}?t=${rec.track_token}` : null
+const APP_BASE_URL = (process.env.APP_BASE_URL || '').replace(/\/+$/, '')
+const trackUrl = (rec) => (APP_BASE_URL && rec.track_token) ? `${APP_BASE_URL}/track/${rec.id}?t=${rec.track_token}` : null
 async function notify(contact, subject, message) {
   if (!contact || (!contact.phone && !contact.email)) return
   if (contact.phone) {

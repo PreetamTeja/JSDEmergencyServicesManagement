@@ -149,7 +149,7 @@ function Console({ session, onSignOut }) {
 
   return (
     <div className="flex h-screen overflow-hidden bg-cmd-bg text-cmd-text">
-      <aside className={`shrink-0 flex flex-col bg-accent text-white transition-all duration-200 ${collapsed ? 'w-16' : 'w-60'}`}>
+      <aside className={`relative z-[1000] shrink-0 flex flex-col bg-accent text-white transition-all duration-200 ${collapsed ? 'w-16' : 'w-60'}`}>
         <div className={`h-16 flex items-center ${collapsed ? 'justify-center' : 'justify-between px-3'} shrink-0 border-b border-white/10`}>
           {!collapsed && (
             <div className="flex items-center gap-2.5 min-w-0">
@@ -201,7 +201,7 @@ function Console({ session, onSignOut }) {
         <div ref={menuRef} className="mt-auto border-t border-white/10 p-3 relative">
           {/* expandable profile menu: active policy + sign out */}
           {menuOpen && (
-            <div className="absolute bottom-full mb-2 left-2 w-72 bg-white text-cmd-text rounded-xl shadow-card p-3 z-50">
+            <div className="absolute bottom-full mb-2 left-2 w-72 bg-white text-cmd-text rounded-xl shadow-card p-3 z-[1100]">
               <div className="pb-2 mb-2 border-b border-cmd-border">
                 <div className="text-[13px] font-semibold truncate">{session?.name || 'Dispatcher'}</div>
                 <div className="text-[11px] text-cmd-muted">Control Room · admin</div>

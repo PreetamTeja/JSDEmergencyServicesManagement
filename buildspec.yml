@@ -1,0 +1,31 @@
+version: 0.2
+
+# CodeBuild build+deploy for the Vite SPA.
+# Triggered by CodePipeline on every commit to CodeCommit 'main'.
+# Required env vars are injected by the CodeBuild project (see setup-pipeline.sh):
+#   S3_BUCKET, CLOUDFRONT_DISTRIBUTION_ID, AWS_REGION,
+#   VITE_API_URL, VITE_MAIN_APP_URL, VITE_COGNITO_REGION, VITE_COGNITO_USER_POOL_ID,
+#   VITE_COGNITO_CLIENT_ID, VITE_COGNITO_DOMAIN, VITE_ADMIN_GROUPS,
+#   VITE_POWERBI_SECURE, VITE_POWERBI_EMBED_URL, VITE_VOICE_URL
+
+phases:
+  install:
+    runtime-versions:
+      nodejs: 20
+    commands:
+      - npm ci
+  build:
+    commands:
+      - npm run build
+  post_build:
+    commands:
+      # hashed assets get a long immutable cache; index.html is never cached so updates show instantly
+      - aws s3 sync dist/ "s3://${S3_BUCKET}/" --delete --cache-control "public,max-age=31536000,immutable" --exclude "index.html"
+      - aws s3 cp dist/index.html "s3://${S3_BUCKET}/index.html" --cache-control "no-cache"
+      - aws cloudfront create-invalidation --distribution-id "${CLOUDFRONT_DISTRIBUTION_ID}" --paths "/*"
+
+artifacts:
+  files:
+    - '**/*'
+  base-directory: dist
+  name: jsd-emergency-dist

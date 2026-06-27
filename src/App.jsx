@@ -5,6 +5,7 @@ import { getSession, devLogin, login, logout, captureTokenFromUrl } from './auth
 import LiveMapPage from './features/map/LiveMapPage'
 import FleetPage from './features/fleet/FleetPage'
 import DashboardPage from './features/dashboard/DashboardPage'
+import PowerBIPage from './features/dashboard/PowerBIPage'
 import EmergencyPage from './features/emergency/EmergencyPage'
 import DispatchBoard from './features/requests/RequestsPage'
 import UserPortal from './portal/UserPortal'
@@ -21,6 +22,7 @@ const ICONS = {
   fleet: '<path d="M3 7h11v8H3z"/><path d="M14 9h3.5l3.5 3.5V15h-7z"/><circle cx="7" cy="17" r="1.6"/><circle cx="17" cy="17" r="1.6"/>',
   emergency: '<path d="M3 8h10v7H3z"/><path d="M13 10h4l3 3v2h-7z"/><circle cx="7" cy="17.5" r="1.6"/><circle cx="17" cy="17.5" r="1.6"/><path d="M6 11h3M7.5 9.5v3"/>',
   requests: '<path d="M9 5h10M9 12h10M9 19h10"/><path d="M4.5 5h.01M4.5 12h.01M4.5 19h.01"/>',
+  powerbi: '<path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/>',
 }
 
 const SECTIONS = [
@@ -32,6 +34,9 @@ const SECTIONS = [
   ] },
   { title: 'Resources', items: [
     { to: '/fleet', label: 'Fleet & Crews', icon: 'fleet' },
+  ] },
+  { title: 'Analytics', items: [
+    { to: '/powerbi', label: 'Power BI', icon: 'powerbi' },
   ] },
 ]
 
@@ -99,20 +104,26 @@ export default function App() {
 // Jamshedpur platform (Transport → Ambulance) carrying a token. The SSO button
 // bounces to the platform to authenticate; dev buttons are for local standalone runs.
 function Landing({ onPick }) {
-  const hasMainApp = !!import.meta.env.VITE_MAIN_APP_URL
+  // Production: this app has NO login of its own. Authentication is owned entirely
+  // by the Jamshedpur SSO portal (Cognito). Arriving without a valid sso_token means
+  // the user didn't come through the portal -> send them there. The dev role buttons
+  // are compiled in ONLY for local `vite dev` runs, never in a production build.
+  const isDev = import.meta.env.DEV
   return (
     <div className="h-screen grid place-items-center bg-cmd-bg p-6">
       <div className="panel p-8 max-w-sm w-full text-center">
         <div className="h-12 w-12 rounded-xl bg-cta grid place-items-center text-accent font-bold text-[18px] mx-auto mb-3">TS</div>
         <div className="text-[20px] font-semibold">Emergency Services</div>
         <div className="text-[13px] text-cmd-muted mb-1">Tata Steel · Jamshedpur</div>
-        <div className="text-[12px] text-cmd-muted mb-5">Access this service from the Jamshedpur platform (Transport → Ambulance).</div>
-        <div className="space-y-2">
-          {hasMainApp && <button className="btn-primary w-full" onClick={login}>Sign in via Jamshedpur SSO</button>}
-          <div className="text-[11px] uppercase tracking-wide text-cmd-muted pt-2">Local dev preview</div>
-          <button className="btn-secondary w-full" onClick={() => onPick('admin')}>Continue as Control Room (admin)</button>
-          <button className="btn-secondary w-full" onClick={() => onPick('user')}>Continue as Requester (user)</button>
-        </div>
+        <div className="text-[12px] text-cmd-muted mb-5">Access this service from the Jamshedpur SSO portal (Transport → Ambulance).</div>
+        <button className="btn-primary w-full" onClick={login}>Go to SSO Portal</button>
+        {isDev && (
+          <div className="space-y-2 mt-5 pt-4 border-t border-cmd-border">
+            <div className="text-[11px] uppercase tracking-wide text-cmd-muted">Local dev preview</div>
+            <button className="btn-secondary w-full" onClick={() => onPick('admin')}>Continue as Control Room (admin)</button>
+            <button className="btn-secondary w-full" onClick={() => onPick('user')}>Continue as Requester (user)</button>
+          </div>
+        )}
       </div>
     </div>
   )
@@ -225,6 +236,7 @@ function Console({ session, onSignOut }) {
           <Route path="/requests" element={<DispatchBoard />} />
           <Route path="/map" element={<LiveMapPage />} />
           <Route path="/fleet" element={<FleetPage />} />
+          <Route path="/powerbi" element={<PowerBIPage />} />
         </Routes>
       </main>
     </div>

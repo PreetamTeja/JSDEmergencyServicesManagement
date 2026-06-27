@@ -1,0 +1,27 @@
+{
+  "name": "JSD TATA Emergency Services",
+  "dataColors": ["#0F62FE", "#DA1E28", "#FF832B", "#198038", "#8A3FFC", "#1192E8", "#FA4D56", "#A56EFF"],
+  "background": "#FFFFFF",
+  "foreground": "#161616",
+  "tableAccent": "#0F62FE",
+  "good": "#198038",
+  "neutral": "#FF832B",
+  "bad": "#DA1E28",
+  "maximum": "#0F62FE",
+  "minimum": "#A6C8FF",
+  "textClasses": {
+    "title": { "fontFace": "Segoe UI Semibold", "fontSize": 14, "color": "#161616" },
+    "header": { "fontFace": "Segoe UI Semibold", "fontSize": 12, "color": "#161616" },
+    "label": { "fontFace": "Segoe UI", "fontSize": 10, "color": "#393939" },
+    "callout": { "fontFace": "Segoe UI Semibold", "fontSize": 34, "color": "#0F62FE" }
+  },
+  "visualStyles": {
+    "*": {
+      "*": {
+        "background": [{ "show": true, "color": { "solid": { "color": "#FFFFFF" } } }],
+        "border": [{ "show": true, "color": { "solid": { "color": "#E0E0E0" } }, "radius": 0 }],
+        "title": [{ "show": true, "fontColor": { "solid": { "color": "#161616" } }, "alignment": "left" }]
+      }
+    }
+  }
+}

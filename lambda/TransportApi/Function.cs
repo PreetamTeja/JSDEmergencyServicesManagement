@@ -1136,7 +1136,11 @@ public class Function
         var baseRec = new Dictionary<string, object?>
         {
             ["PK"] = $"EMG#{id}", ["SK"] = "META", ["entity"] = "EMG", ["id"] = id,
-            ["kind"] = kind, ["severity"] = severity, ["pickup"] = pickupObj, ["pickup_zone_id"] = zoneId,
+            ["kind"] = kind, ["severity"] = severity,
+            ["pickup"] = pickupObj != null && Str(pickupObj, "name") == null && pt != null
+                ? new Dictionary<string, object?>(pickupObj) { ["name"] = $"{pt.Lat:F4}, {pt.Lng:F4}" }
+                : pickupObj,
+            ["pickup_zone_id"] = zoneId,
             ["requested_by"] = Str(item, "requested_by"), ["source"] = source,
             ["incident_id"] = Str(item, "incident_id"), ["patients_count"] = patientsCount,
             ["note"] = Str(item, "note"), ["contact"] = Str(item, "contact"),

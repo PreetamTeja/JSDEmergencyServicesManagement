@@ -804,10 +804,11 @@ public class Function
                         cold_starts = metrics.ColdStarts, max_concurrent = metrics.MaxConcurrent,
                         series = new
                         {
-                            invocations = metrics.Series.Invocations, errors = metrics.Series.Errors,
-                            duration_avg = metrics.Series.DurationAvg,
+                            invocations = metrics.Series.Invocations.Select(s => new { t = s.T, v = s.V }).ToList(),
+                            errors = metrics.Series.Errors.Select(s => new { t = s.T, v = s.V }).ToList(),
+                            duration_avg = metrics.Series.DurationAvg.Select(s => new { t = s.T, v = s.V }).ToList(),
                         },
-                        recent_errors = metrics.RecentErrors,
+                        recent_errors = metrics.RecentErrors.Select(e => new { timestamp = e.Timestamp, message = e.Message }).ToList(),
                         generated_at = metrics.GeneratedAt,
                     }, corsHeaders);
                 }

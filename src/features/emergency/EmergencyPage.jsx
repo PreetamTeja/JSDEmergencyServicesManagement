@@ -31,15 +31,17 @@ export default function EmergencyPage() {
     if (params.get('new') === '1') { setOpen(true); setParams({}, { replace: true }) }
   }, [params, setParams])
 
+  const ACTIVE_STATES = ['EN_ROUTE', 'QUEUED', 'NO_HOSPITAL', 'NO_BLOODBANK', 'PREEMPTED']
+
   const counts = useMemo(() => ({
-    active: emergencies.filter((e) => e.state === 'EN_ROUTE').length,
+    active: emergencies.filter((e) => ACTIVE_STATES.includes(e.state)).length,
     completed: emergencies.filter((e) => e.state === 'COMPLETED').length,
     all: emergencies.length,
   }), [emergencies])
 
   const shown = useMemo(() => {
     const match = (e) => filter === 'all'
-      || (filter === 'active' && e.state === 'EN_ROUTE')
+      || (filter === 'active' && ACTIVE_STATES.includes(e.state))
       || (filter === 'completed' && e.state === 'COMPLETED')
     return [...emergencies].filter(match).sort((a, b) =>
       (SEVERITY_META[a.severity]?.rank - SEVERITY_META[b.severity]?.rank) ||

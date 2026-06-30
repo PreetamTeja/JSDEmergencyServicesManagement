@@ -45,7 +45,20 @@ public sealed class DynamoService : IDisposable
         if (av.NULL) return null;
         if (av.IsBOOLSet) return av.BOOL;
         if (av.S != null) return av.S;
-        if (av.N != null) return av.N; // keep as string; callers parse
+        if (av.N != null)
+        {
+            // Return as double so JS receives a JSON number, not a string.
+            // This preserves the behaviour of the Node.js DocumentClient.
+            if (double.TryParse(av.N, System.Globalization.NumberStyles.Any,
+                    System.Globalization.CultureInfo.InvariantCulture, out var d))
+                return d;
+            return av.N;
+        }
+        if (av.SS?.Count > 0) return av.SS.Cast<object?>().ToList(); // String Set → array
+        if (av.NS?.Count > 0) return av.NS                           // Number Set → numeric array
+            .Select(n => double.TryParse(n, System.Globalization.NumberStyles.Any,
+                System.Globalization.CultureInfo.InvariantCulture, out var d) ? (object?)d : n)
+            .ToList();
         if (av.M != null) return av.M.ToDictionary(k => k.Key, k => FromAv(k.Value));
         if (av.L != null) return av.L.Select(FromAv).ToList();
         return null;

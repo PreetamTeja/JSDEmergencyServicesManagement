@@ -71,18 +71,13 @@ const SCOPES = {
   HR: ['bookings'],
   FUEL: ['fleet'],
   MCP: ['infra'],
-  HEALTH: ['emergencies'],       // ambulance only — enforced by KIND_RESTRICT
-  MENTAL_HEALTH: ['emergencies'],// ambulance + fire truck (no restriction)
-  WELFARE: ['emergencies'],      // fire truck only — enforced by KIND_RESTRICT
+  HEALTH: ['emergencies'],
+  MENTAL_HEALTH: ['emergencies'],
+  WELFARE: ['emergencies'],
 }
 const canPost = (source, resource) => {
   const allow = SCOPES[source]
   return allow === '*' || (Array.isArray(allow) && allow.includes(resource))
-}
-// Emergency kind restrictions per source. Missing = no restriction.
-const KIND_RESTRICT = {
-  HEALTH:  ['medical', 'blood'],   // ambulance-dispatch kinds only
-  WELFARE: ['fire'],               // fire-truck kinds only
 }
 
 /* ---------- input validation (reject malformed/oversized writes) ---------- */
@@ -527,13 +522,6 @@ export const handler = async (event) => {
     // server keys are restricted to their scope
     if (apiKeySource && apiKeySource !== 'CONSOLE' && !canPost(apiKeySource, seg[0]))
       return err(403, 'FORBIDDEN', `${apiKeySource} key is not permitted to POST /${seg[0]}`)
-    // emergency kind restriction (HEALTH = ambulance only, WELFARE = fire only)
-    if (apiKeySource && seg[0] === 'emergencies' && KIND_RESTRICT[apiKeySource]) {
-      const allowed = KIND_RESTRICT[apiKeySource]
-      const reqKind = body.kind || 'medical'
-      if (!allowed.includes(reqKind))
-        return err(403, 'FORBIDDEN', `${apiKeySource} key may only request kinds: ${allowed.join(', ')}`)
-    }
     // non-admin browser users may only create/route emergencies and cancel their own
     if (!apiKeySource && claims && !admin) {
       const allowed = seg[0] === 'emergencies' || (seg[0] === 'requests' && seg[2] === 'cancel')

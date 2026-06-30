@@ -59,8 +59,10 @@ public sealed class DynamoService : IDisposable
             .Select(n => double.TryParse(n, System.Globalization.NumberStyles.Any,
                 System.Globalization.CultureInfo.InvariantCulture, out var d) ? (object?)d : n)
             .ToList();
-        if (av.M != null) return av.M.ToDictionary(k => k.Key, k => FromAv(k.Value));
-        if (av.L != null) return av.L.Select(FromAv).ToList();
+        // M and L are initialized to empty collections (not null) in the .NET SDK,
+        // so use Count to distinguish an actual map/list from the default empty value.
+        if (av.M?.Count > 0) return av.M.ToDictionary(k => k.Key, k => FromAv(k.Value));
+        if (av.L?.Count > 0) return av.L.Select(FromAv).ToList();
         return null;
     }
 

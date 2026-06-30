@@ -24,7 +24,7 @@ COGNITO_USER_POOL_ID="${COGNITO_USER_POOL_ID:-<your-cognito-user-pool-id>}"
 COGNITO_CLIENT_ID="${COGNITO_CLIENT_ID:-<your-cognito-client-id>}"
 ADMIN_GROUPS="${ADMIN_GROUPS:-transport-admin}"
 # Lock to your CloudFront URL(s), comma-separated. Default '*' for local/dev only.
-ALLOWED_ORIGINS="${ALLOWED_ORIGINS:-*}"
+ALLOWED_ORIGINS="${ALLOWED_ORIGINS:-https://dkr9xqi0cx9b5.cloudfront.net,https://d2mchs8gc8cv5v.cloudfront.net}"
 # Policy upload -> policy-sync agent (admin uploads the policy PDF from the UI).
 POLICY_BUCKET="${POLICY_BUCKET:-psiog-policy-docs}"
 POLICY_SYNC_FUNCTION="${POLICY_SYNC_FUNCTION:-psiog-policy-sync}"

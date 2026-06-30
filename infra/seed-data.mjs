@@ -199,7 +199,7 @@ for (const l of LOCATIONS) {
   const zone_id = nearestZone(l)
   put('ReferenceData', { PK:'LOC', SK:l.id, id:l.id, name:l.name, type:l.type, lat:l.lat, lng:l.lng, zone_id, active:true, version:1 })
 }
-for (const z of ZONES) put('ReferenceData', { PK:'ZONE', SK:z.id, ...z, version:1 })
+for (const z of ZONES) put('ReferenceData', { PK:'ZONE', SK:z.id, ...z, lat:z.ref.lat, lng:z.ref.lng, version:1 })
 clearPK('HOSP') // remove stale hospital rows before writing the new set
 for (const h of HOSPITALS) put('ReferenceData', { PK:'HOSP', SK:h.id, ...h, version:1 })
 clearPK('FIRE')

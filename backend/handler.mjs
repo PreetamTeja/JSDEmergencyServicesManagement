@@ -27,7 +27,7 @@ const TBL = {
   // Dedicated locations table: PK = location_id (unique per place).
   locations: process.env.TBL_LOCATIONS || 'Locations',
   // Shared org-wide employee directory, owned by HR/IAM. Transport only reads it.
-  employees: process.env.EMP_TABLE || 'Employees',
+  employees: process.env.EMP_TABLE || 'jamshedpur-users',
 }
 
 // Locked-down CORS: only configured origins are reflected. Set ALLOWED_ORIGINS to a
@@ -65,6 +65,7 @@ const SCOPES = {
   DELIVERY: ['requests'],
   ADMIN: ['requests'],
   HR: ['bookings'],
+  FUEL: ['fleet'],
 }
 const canPost = (source, resource) => {
   const allow = SCOPES[source]
@@ -134,49 +135,84 @@ function resolvePickup(ref, pickup) {
 }
 
 /* ---------- shared Employees table mapping ----------
-   FP-EMPLOYEE-TABLE-M schema (PK = employee_id, e.g. "EMP-OPS-00001"):
-     first_name, last_name, employee_job_level ("L1".."L12"), employee_band (0-4),
-     department_id, department_name, employee_title, status,
-     housing_type, residence_name, unit_number, floor_number, block_name, gate_number, zone, ...
-   The app needs: { id, name, job_level, band, grade, dept, status, housing }. */
+   jamshedpur-users schema (employee_id = business key, e.g. "EMP0071"/"TECH001"/"FIN0001"):
+     name (or first_name/last_name), employee_band (0-4, stored as Number OR String),
+     employee_department, employee_type, email, phone, zone,
+     status / employee_status ("Active"). Record key schema varies across rows
+     (some have PK/SK=PROFILE, some don't) -> look up by filtered scan, not GetItem.
+   The app needs: { id, name, employee_band, grade, bandLabel, allowed_vehicle_types, dept, status }. */
 
-// "L7" -> 7 ; tolerant of plain numbers too.
-const jobLevelNum = (v) => { const n = parseInt(String(v ?? '').replace(/\D/g, ''), 10); return Number.isFinite(n) ? n : 0 }
+// employee_band arrives as 0-4 (Number or String). Coerce + clamp to [0,4].
+const bandNum = (v) => { const n = parseInt(String(v ?? '').replace(/[^\d]/g, ''), 10); return Number.isFinite(n) ? Math.min(4, Math.max(0, n)) : 0 }
 
-// Policy is re-keyed by job level: policy.levels is a list of bands, each with a
-// min_level. The band for an employee = highest band whose min_level <= job level.
+// Policy is keyed by employee band: policy.levels is a list of bands, each with a
+// `band` (0-4) and allowed_vehicle_types.
 async function policyLevels() {
   const r = await ddb.send(new QueryCommand({ TableName: TBL.ref, KeyConditionExpression: 'PK = :p', ExpressionAttributeValues: { ':p': 'POLICY' }, ScanIndexForward: false, Limit: 1 }))
   return (r.Items?.[0]?.levels) || []
 }
-function bandForLevel(levels, level) {
-  const lv = jobLevelNum(level)
-  return [...(levels || [])].sort((a, b) => b.min_level - a.min_level)
-    .find((b) => lv >= b.min_level) || (levels || [])[levels.length - 1] || null
+// Exact band match; fall back to the highest defined band <= the employee's band.
+function bandForBand(levels, band) {
+  const b = bandNum(band)
+  const list = levels || []
+  return list.find((x) => bandNum(x.band) === b)
+    || [...list].sort((a, z) => bandNum(z.band) - bandNum(a.band)).find((x) => b >= bandNum(x.band))
+    || list[list.length - 1] || null
 }
 const mapEmployee = (i, bands) => {
-  const level = jobLevelNum(i.employee_job_level)
-  const band = bandForLevel(bands, level)
+  const b = bandNum(i.employee_band)
+  const def = bandForBand(bands, b)
   return {
     id: i.employee_id,
-    name: `${i.first_name || ''} ${i.last_name || ''}`.trim(),
-    job_level: level, employee_band: i.employee_band, grade: band?.id || null, bandLabel: band?.label || '',
-    dept: i.department_name || i.department_id || '', title: i.employee_title, status: i.status,
-    housing: {
-      type: i.housing_type, residence: i.residence_name, unit: i.unit_number,
-      floor: i.floor_number, block: i.block_name, gate: i.gate_number, zone: i.zone,
-    },
+    name: i.name || `${i.first_name || ''} ${i.last_name || ''}`.trim(),
+    employee_band: b, grade: def?.id || null, bandLabel: def?.label || '',
+    allowed_vehicle_types: def?.allowed_vehicle_types || [],
+    dept: i.employee_department || '', type: i.employee_type || '',
+    email: i.email || null, phone: i.phone || null, zone: i.zone || '',
+    status: i.status || i.employee_status || 'Active',
   }
 }
-// employee_id is the partition key (string) -> direct GetItem.
+// employee_id is the business key. Record key schema is inconsistent across rows,
+// so look up by a filtered scan (table is small) to stay schema-agnostic.
 async function employeeRaw(id) {
-  const r = await ddb.send(new GetCommand({ TableName: TBL.employees, Key: { employee_id: String(id) } }))
-  return r.Item || null
+  const r = await ddb.send(new ScanCommand({ TableName: TBL.employees, FilterExpression: 'employee_id = :id', ExpressionAttributeValues: { ':id': String(id) } }))
+  return (r.Items && r.Items[0]) || null
 }
 
 /* ---------- ids ---------- */
 const rid = (p, n) => `${p}-${Math.floor(n + Math.random() * 9 * n)}`
 const now = () => new Date().toISOString()
+
+/* ---------- fuel model ----------
+   We own consumption (we have trip distances); the fuel team owns dispensing.
+   Drain on completion = distance_km / kmpl. Below REFUEL_PCT -> needs_refuel. */
+const FUEL_SPEC = {
+  ambulance: { tank_l: 60, kmpl: 9 },
+  firetruck: { tank_l: 200, kmpl: 5 },
+}
+const REFUEL_PCT = 0.20
+const fuelSpec = (type) => FUEL_SPEC[type] || { tank_l: 60, kmpl: 9 }
+// Current litres: prefer fuel_l; else derive from the legacy `fuel` percent; else full.
+const currentFuelL = (v) => {
+  const spec = fuelSpec(v.type)
+  if (typeof v.fuel_l === 'number') return v.fuel_l
+  if (typeof v.fuel === 'number') return +(spec.tank_l * Math.min(100, Math.max(0, v.fuel)) / 100).toFixed(1)
+  return spec.tank_l
+}
+const fuelPct = (v) => Math.round((currentFuelL(v) / fuelSpec(v.type).tank_l) * 100)
+// Subtract the trip's litres and persist; flag needs_refuel at/below threshold.
+async function drainFuel(v, km) {
+  const spec = fuelSpec(v.type)
+  const used = km > 0 ? km / spec.kmpl : 0
+  const fuel_l = Math.max(0, +(currentFuelL(v) - used).toFixed(2))
+  const needs_refuel = fuel_l <= spec.tank_l * REFUEL_PCT
+  await ddb.send(new UpdateCommand({
+    TableName: TBL.fleet, Key: { PK: `VEH#${v.id}`, SK: 'META' },
+    UpdateExpression: 'SET fuel_l = :f, tank_capacity_l = :t, kmpl = :k, needs_refuel = :n, fuel = :pct',
+    ExpressionAttributeValues: { ':f': fuel_l, ':t': spec.tank_l, ':k': spec.kmpl, ':n': needs_refuel, ':pct': Math.round((fuel_l / spec.tank_l) * 100) },
+  }))
+  return { fuel_l, needs_refuel, tank_l: spec.tank_l }
+}
 
 /* ---------- fleet helpers ---------- */
 async function listFleet() {
@@ -262,7 +298,12 @@ async function patchOpsStatus(item, status, extra = {}) {
 async function completeOp(item) {
   if (item.assigned_vehicle_id) {
     const v = (await ddb.send(new GetCommand({ TableName: TBL.fleet, Key: { PK: `VEH#${item.assigned_vehicle_id}`, SK: 'META' } }))).Item
-    if (v) await setVehicleStatus(v, 'idle')
+    if (v) {
+      // Burn fuel for the trip distance; if it drops the tank to/under threshold,
+      // park it as 'refueling' (out of dispatch) until the fuel team tops it up.
+      const drained = await drainFuel(v, Number(item.distance_km) || 0)
+      await setVehicleStatus(v, drained.needs_refuel ? 'refueling' : 'idle')
+    }
   }
   if (item.assigned_driver_id) await setDriverStatus(item.assigned_driver_id, 'available', null)
   await patchOpsStatus(item, 'COMPLETED')
@@ -630,7 +671,7 @@ export const handler = async (event) => {
     // ---- employees (read-only from the shared org table, mapped to app shape) ----
     if (method === 'GET' && seg[0] === 'employees') {
       const [r, bands] = await Promise.all([ddb.send(new ScanCommand({ TableName: TBL.employees })), policyLevels()])
-      return ok((r.Items || []).filter((e) => !e.status || e.status === 'Active').map((e) => mapEmployee(e, bands)))
+      return ok((r.Items || []).filter((e) => { const s = e.status || e.employee_status; return !s || s === 'Active' }).map((e) => mapEmployee(e, bands)))
     }
 
     // ---- allotments (Fleet table, PK ALLOT#<empId>) ----
@@ -645,12 +686,12 @@ export const handler = async (event) => {
       if (!raw) return err(404, 'UNKNOWN_EMPLOYEE', `employee ${body.employeeId} not found`)
       const veh = (await ddb.send(new GetCommand({ TableName: TBL.fleet, Key: { PK: `VEH#${body.vehicleId}`, SK: 'META' } }))).Item
       if (!veh) return err(404, 'NOT_FOUND', 'vehicle not found')
-      const level = jobLevelNum(raw.employee_job_level)
-      const band = bandForLevel(await policyLevels(), level)
-      const allowed = band?.allowed_vehicle_types || []
-      if (!allowed.includes(veh.type)) return err(422, 'NOT_ELIGIBLE', `Job level ${level} (${band?.label || '-'}) is not eligible for a ${veh.type}`, { allowed })
+      const band = bandNum(raw.employee_band)
+      const def = bandForBand(await policyLevels(), band)
+      const allowed = def?.allowed_vehicle_types || []
+      if (!allowed.includes(veh.type)) return err(422, 'NOT_ELIGIBLE', `Band ${band} (${def?.label || '-'}) is not eligible for a ${veh.type}`, { allowed })
       const id = `al-${Date.now()}`
-      const it = { PK: `ALLOT#${body.employeeId}`, SK: 'META', id, employeeId: body.employeeId, vehicleId: body.vehicleId, job_level: raw.job_level, grade: band?.id, validTill: body.validTill || '2027-03-31' }
+      const it = { PK: `ALLOT#${body.employeeId}`, SK: 'META', id, employeeId: body.employeeId, vehicleId: body.vehicleId, employee_band: band, grade: def?.id, validTill: body.validTill || '2027-03-31' }
       await ddb.send(new PutCommand({ TableName: TBL.fleet, Item: it }))
       return ok(it, 201)
     }
@@ -667,6 +708,54 @@ export const handler = async (event) => {
       const it = { PK: `VEH#${body.vehicleId}`, SK: `FUEL#${date}#${id}`, id, vehicleId: body.vehicleId, litres: body.litres, cost: body.cost, date, station: body.station || 'Fuel Station Depot' }
       await ddb.send(new PutCommand({ TableName: TBL.fleet, Item: it }))
       return ok(it, 201)
+    }
+
+    // ---- fuel-team integration (FUEL key or admin) ----
+    // The fuel team has its own vehicle DB; they map to ours by `reg`. They never
+    // touch our DB — they poll the refuel queue and POST a confirmation back.
+    const fuelCaller = admin || apiKeySource === 'FUEL'
+    if (method === 'GET' && seg[0] === 'fleet' && seg[1] === 'vehicles') {
+      if (!fuelCaller) return err(403, 'FORBIDDEN', 'FUEL key or admin only')
+      const { vehicles } = await listFleet()
+      return ok(vehicles.filter((v) => FUEL_SPEC[v.type]).map((v) => ({
+        vehicle_id: v.id, reg: v.reg, type: v.type, status: v.status,
+        tank_capacity_l: fuelSpec(v.type).tank_l, kmpl: fuelSpec(v.type).kmpl,
+        fuel_l: currentFuelL(v), fuel_pct: fuelPct(v), needs_refuel: !!v.needs_refuel,
+      })))
+    }
+    if (method === 'GET' && seg[0] === 'fleet' && seg[1] === 'refuel-requests') {
+      if (!fuelCaller) return err(403, 'FORBIDDEN', 'FUEL key or admin only')
+      const [{ vehicles }, fuelLoc] = await Promise.all([
+        listFleet(),
+        ddb.send(new GetCommand({ TableName: TBL.ref, Key: { PK: 'LOC', SK: 'loc-fuel' } })).then((r) => r.Item).catch(() => null),
+      ])
+      const out = vehicles.filter((v) => v.needs_refuel).map((v) => ({
+        vehicle_id: v.id, reg: v.reg, type: v.type, status: v.status,
+        fuel_l: currentFuelL(v), tank_capacity_l: fuelSpec(v.type).tank_l, fuel_pct: fuelPct(v),
+        station_id: fuelLoc?.id || 'loc-fuel', station_name: fuelLoc?.name || 'Fuel Station Depot',
+        location: fuelLoc ? { lat: fuelLoc.lat, lng: fuelLoc.lng } : null,
+        requested_at: v.updated_at || null,
+      }))
+      return ok(out)
+    }
+    if (method === 'POST' && seg[0] === 'fleet' && seg[1] === 'refuel') {
+      if (!fuelCaller) return err(403, 'FORBIDDEN', 'FUEL key or admin only')
+      const v = (await ddb.send(new GetCommand({ TableName: TBL.fleet, Key: { PK: `VEH#${body.vehicle_id}`, SK: 'META' } }))).Item
+      if (!v) return err(404, 'NOT_FOUND', `vehicle ${body.vehicle_id} not found`)
+      const added = Number(body.litres_added)
+      if (!Number.isFinite(added) || added <= 0) return err(422, 'INVALID', 'litres_added must be a positive number')
+      const spec = fuelSpec(v.type)
+      const fuel_l = Math.min(spec.tank_l, +(currentFuelL(v) + added).toFixed(2))
+      await ddb.send(new UpdateCommand({
+        TableName: TBL.fleet, Key: { PK: `VEH#${v.id}`, SK: 'META' },
+        UpdateExpression: 'SET fuel_l = :f, tank_capacity_l = :t, kmpl = :k, needs_refuel = :n, fuel = :pct',
+        ExpressionAttributeValues: { ':f': fuel_l, ':t': spec.tank_l, ':k': spec.kmpl, ':n': false, ':pct': Math.round((fuel_l / spec.tank_l) * 100) },
+      }))
+      if (v.status === 'refueling') await setVehicleStatus(v, 'idle')  // back in service
+      const date = now().slice(0, 10)
+      const id = `f-${Date.now()}`
+      await ddb.send(new PutCommand({ TableName: TBL.fleet, Item: { PK: `VEH#${v.id}`, SK: `FUEL#${date}#${id}`, id, vehicleId: v.id, litres: added, cost: body.cost ?? null, date, station: body.station || 'Fuel team', source: 'FUEL', at: body.at || now() } }))
+      return ok({ vehicle_id: v.id, fuel_l, fuel_pct: Math.round((fuel_l / spec.tank_l) * 100), tank_capacity_l: spec.tank_l, needs_refuel: false, status: 'idle' })
     }
 
     // ---- fleet ----

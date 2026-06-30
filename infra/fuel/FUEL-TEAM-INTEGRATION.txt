@@ -1,0 +1,134 @@
+================================================================
+JSD TATA EMERGENCY SERVICES — FUEL TEAM INTEGRATION
+Refueling of emergency vehicles (ambulances & fire trucks)
+================================================================
+
+OVERVIEW
+--------
+The Emergency Services platform dispatches ambulances and fire trucks and
+tracks how much fuel each vehicle consumes per trip (we know the distances).
+Your team runs the fuel stations / bowsers and tops the vehicles up.
+
+Neither side shares a database. You integrate over a small set of HTTPS/JSON
+endpoints using an API key we issue you. You map our vehicles to yours by the
+vehicle registration number (`reg`).
+
+WHO OWNS WHAT
+-------------
+  Emergency platform (us):  vehicle list, current fuel level, draining fuel as
+                            trips complete, deciding when a vehicle is low.
+  Fuel team (you):          physically refueling, and reporting how many litres
+                            you dispensed so our level resets.
+
+CONSUMPTION MODEL (for your reference)
+-------------------------------------
+  Ambulance  : 60 L tank, ~9 km per litre
+  Fire truck : 200 L tank, ~5 km per litre
+  A vehicle is flagged "needs refuel" at or below 20% of tank.
+  When flagged after a trip, we take it OUT of dispatch (status = "refueling")
+  and route it to the nearest fuel station. Your confirmation puts it back in
+  service.
+
+CONNECTION DETAILS
+------------------
+  Base URL : https://cfnjgxlvfl.execute-api.eu-west-1.amazonaws.com
+  API key  : <FUEL_API_KEY>
+  Auth     : send header  x-api-key: <FUEL_API_KEY>  on every request
+  Format   : JSON request and response bodies
+  (Your key is scoped to fuel endpoints only. Keep it secret; rotate on request.)
+
+----------------------------------------------------------------
+ENDPOINT 1 — List vehicles that need fuel  (poll this)
+----------------------------------------------------------------
+  GET /fleet/refuel-requests
+  Headers: x-api-key: <key>
+
+  Response 200:
+  [
+    {
+      "vehicle_id": "veh-bistupur-amb-1",
+      "reg": "JH05-AM-1014",
+      "type": "ambulance",
+      "status": "refueling",
+      "fuel_l": 9.4,
+      "tank_capacity_l": 60,
+      "fuel_pct": 16,
+      "station_id": "loc-fuel",
+      "station_name": "Fuel Station Depot",
+      "location": { "lat": 22.7732, "lng": 86.2012 },
+      "requested_at": "2026-06-29T10:12:00.000Z"
+    }
+  ]
+
+  Poll every 2-5 minutes. Match each item to your vehicle DB using `reg`.
+  Dispatch your bowser / direct the vehicle to the station shown.
+
+----------------------------------------------------------------
+ENDPOINT 2 — Confirm a completed refuel  (call after refueling)
+----------------------------------------------------------------
+  POST /fleet/refuel
+  Headers: x-api-key: <key>, content-type: application/json
+
+  Request body:
+  {
+    "vehicle_id": "veh-bistupur-amb-1",   // from refuel-requests
+    "litres_added": 50.6,                  // required, > 0
+    "cost": 5260,                          // optional (INR)
+    "station": "IOCL Bistupur",            // optional
+    "at": "2026-06-29T10:40:00.000Z"       // optional ISO time; defaults to now
+  }
+
+  Response 200:
+  {
+    "vehicle_id": "veh-bistupur-amb-1",
+    "fuel_l": 60,
+    "fuel_pct": 100,
+    "tank_capacity_l": 60,
+    "needs_refuel": false,
+    "status": "idle"
+  }
+
+  This tops up our fuel level (capped at tank size), clears the refuel flag, and
+  returns the vehicle to service. We also store it in our fuel log.
+
+----------------------------------------------------------------
+ENDPOINT 3 — Full vehicle roster  (optional, for first-time mapping)
+----------------------------------------------------------------
+  GET /fleet/vehicles
+  Headers: x-api-key: <key>
+
+  Response 200:
+  [
+    { "vehicle_id":"veh-bistupur-amb-1", "reg":"JH05-AM-1014", "type":"ambulance",
+      "status":"idle", "tank_capacity_l":60, "kmpl":9,
+      "fuel_l":48.0, "fuel_pct":80, "needs_refuel":false }
+  ]
+
+  Use once to build your reg -> vehicle_id mapping; refresh occasionally.
+
+STEP-BY-STEP FOR THE FUEL TEAM
+------------------------------
+  1. We send you: the base URL above + your x-api-key.
+  2. Call GET /fleet/vehicles once; map our vehicles to yours by `reg`.
+  3. Poll GET /fleet/refuel-requests every few minutes.
+  4. For each vehicle returned, refuel it (bowser or have it routed to the
+     station in the response).
+  5. After refueling, POST /fleet/refuel with vehicle_id + litres_added.
+  6. Done — we mark the vehicle full and available again automatically.
+
+ERRORS
+------
+  401 Authentication required   -> missing/invalid x-api-key
+  403 FORBIDDEN                  -> key not permitted (wrong key)
+  404 NOT_FOUND                 -> unknown vehicle_id in POST /fleet/refuel
+  422 INVALID                    -> litres_added missing or <= 0
+
+QUICK TEST (curl)
+-----------------
+  curl -s -H "x-api-key: <key>" \
+    https://cfnjgxlvfl.execute-api.eu-west-1.amazonaws.com/fleet/refuel-requests
+
+  curl -s -X POST -H "x-api-key: <key>" -H "content-type: application/json" \
+    -d '{"vehicle_id":"veh-bistupur-amb-1","litres_added":40,"cost":4200,"station":"IOCL Bistupur"}' \
+    https://cfnjgxlvfl.execute-api.eu-west-1.amazonaws.com/fleet/refuel
+================================================================

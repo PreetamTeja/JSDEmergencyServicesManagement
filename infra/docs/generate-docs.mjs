@@ -210,6 +210,7 @@ function finalize(D, fileTitle) {
 }
 
 function save(D, name) {
+  finalize(D, name)   // fill the TOC page + draw footers before flushing
   const file = path.join(OUT_DIR, name)
   const stream = fs.createWriteStream(file)
   D.doc.pipe(stream)
@@ -298,6 +299,211 @@ function flowDiagram(D, steps) {
     y += boxH + gap
   })
   d.y = y + 6
+}
+
+/* ===================================================================
+   POWER BI DATA PIPELINE DIAGRAM (Sources -> Web connector -> Power
+   Query -> Model -> Report -> Embed)
+   =================================================================== */
+function biPipelineDiagram(D) {
+  const d = D.doc
+  d.addPage()
+  d.fillColor(INK).font('Helvetica-Bold').fontSize(13).text('Power BI data pipeline', M.left, M.top)
+  d.font('Helvetica').fontSize(9).fillColor(MUTED).text('How operational data flows from the live API into business-ready visuals.', M.left, M.top + 18, { width: CW })
+  let y = M.top + 46
+  const cx = M.left + CW / 2
+  const band = (label, boxes, h = 50) => {
+    d.save().font('Helvetica-Bold').fontSize(7.5).fillColor('#94a3b8').text(label.toUpperCase(), M.left, y - 11, { characterSpacing: 1 }).restore()
+    const n = boxes.length, gap = 12, bw = (CW - gap * (n - 1)) / n
+    boxes.forEach((b, i) => D.box(M.left + i * (bw + gap), y, bw, h, b.t, b.s, b.o || {}))
+    const bottom = y + h; y = bottom + 30; return bottom
+  }
+  const arrow = (fromY) => D.vArrow(cx, fromY, fromY + 30)
+  let b
+  b = band('Sources (live platform)', [
+    { t: 'DynamoDB via API', s: 'Ops, Fleet, Reference', o: { fill: '#e9f3f2', stroke: ACCENT2, color: ACCENT } },
+    { t: 'jamshedpur-users', s: 'employees & bands', o: { fill: '#e9f3f2', stroke: ACCENT2, color: ACCENT } },
+    { t: 'Integrations', s: 'hospital · fuel · voice', o: { fill: '#e9f3f2', stroke: ACCENT2, color: ACCENT } },
+  ]); arrow(b)
+  b = band('Ingestion (Power BI Web connector)', [
+    { t: 'GET /ops', s: 'requests·emergencies·bookings', o: { fill: '#eef6ff', stroke: '#bcd6f5', color: BLUE } },
+    { t: 'GET /fleet · /fleet/vehicles', s: 'vehicles·drivers·fuel', o: { fill: '#eef6ff', stroke: '#bcd6f5', color: BLUE } },
+    { t: 'GET /employees', s: 'x-api-key header', o: { fill: '#eef6ff', stroke: '#bcd6f5', color: BLUE } },
+  ]); arrow(b)
+  b = band('Transform (Power Query / M)', [
+    { t: 'Expand JSON → tables', s: 'lists → rows → columns' },
+    { t: 'Type & clean', s: 'numbers, dates, nulls' },
+    { t: 'Derive', s: 'band label, SLA bucket' },
+  ]); arrow(b)
+  b = band('Model (star schema + DAX)', [
+    { t: 'Fact: Emergencies', s: 'one row per incident', o: { fill: SOFT, stroke: '#bcd', color: ACCENT } },
+    { t: 'Dimensions', s: 'Zone·Hospital·Vehicle·Band·Date', o: { fill: SOFT, stroke: '#bcd', color: ACCENT } },
+    { t: 'Measures', s: 'SLA% · util · avg ETA', o: { fill: SOFT, stroke: '#bcd', color: ACCENT } },
+  ]); arrow(b)
+  band('Deliver (report + embed)', [
+    { t: 'Report pages', s: 'KPIs · maps · AI visuals', o: { fill: '#fdf2f8', stroke: '#f5cfe3', color: '#be185d' } },
+    { t: 'Embed in app', s: 'App-owns-data · SSO', o: { fill: '#fdf2f8', stroke: '#f5cfe3', color: '#be185d' } },
+    { t: 'Refresh', s: 'manual / gateway schedule', o: { fill: '#fdf2f8', stroke: '#f5cfe3', color: '#be185d' } },
+  ])
+  d.addPage()
+}
+
+/* ===================================================================
+   4) POWER BI & DATA ENGINEERING
+   =================================================================== */
+async function buildPowerBI() {
+  const D = new Doc('Power BI Analytics & Data Engineering',
+    'Turning live emergency-response data into business insight',
+    'A combined business and engineering document: what the platform measures and the decisions it enables, followed by the end-to-end data-engineering workflow that powers the Power BI reports — sources, Web-connector ingestion, Power Query transformations, the data model, DAX, refresh, and the analytics design (including advanced Power BI capabilities).')
+
+  // ---------- BUSINESS LAYER ----------
+  D.h1('1. Executive summary')
+  D.p('JSD TATA Emergency Services coordinates ambulances, fire trucks and blood-bank logistics across the Jamshedpur township. Every booking, dispatch, ETA and completion is captured as live operational data. This document describes how that data is engineered into Power BI and the business insights it surfaces — response performance, fleet readiness, demand patterns, fuel economics and service-level compliance — so leadership can act on facts, not guesswork.')
+  D.p('Analytics is delivered two ways: an embedded dashboard inside the operations app (no separate Power BI login, authorised by the same corporate SSO), and the full Power BI report for deeper analysis. The data is sourced directly from the platform’s live API using Power BI Web connectors, so reports reflect real operations with no manual exports.')
+
+  D.h1('2. What we measure & why it matters')
+  D.table(['Metric', 'What it tells the business'], [
+    ['Total responses & today’s volume', 'Service demand and load trend over time.'],
+    ['Active vs queued incidents', 'Whether current capacity meets live demand.'],
+    ['Avg response time (to scene)', 'How fast help arrives — the core service promise.'],
+    ['SLA compliance %', 'Share of incidents met within target by severity (Critical 8 / Urgent 15 / Normal 30 min).'],
+    ['Responses by severity & type', 'Case mix — medical vs fire, Critical/Urgent/Normal.'],
+    ['Responses by zone', 'Geographic demand hotspots for resource placement.'],
+    ['Fleet utilisation', 'How hard the fleet is working; spare capacity.'],
+    ['Fuel burn & refuel cadence', 'Operating cost driver and readiness risk (low-fuel units).'],
+    ['Band-based entitlements', 'Transport allotment governance by employee band (0–4).'],
+  ], [165, CW - 165])
+
+  D.h1('3. Services & data the platform produces')
+  D.p('All analytics draw from one platform. The table below maps each service to the data it contributes to the reporting layer.')
+  D.table(['Service / source', 'Data contributed to analytics'], [
+    ['Dispatch API (psiog-transport-api)', 'Emergencies, requests, bookings, status, severity, ETA, distance, assignments.'],
+    ['Fleet (DynamoDB)', 'Vehicles, drivers, status, fuel level, tank/consumption, refuel flags.'],
+    ['ReferenceData (DynamoDB)', 'Zones, hospitals, fire stations, locations, dispatch policy.'],
+    ['jamshedpur-users (shared)', 'Employee directory and band (0–4) for entitlement analytics.'],
+    ['Hospital integration', 'Inbound hospital ambulance requests (source = HOSPITAL).'],
+    ['Fuel-team integration', 'Refuel confirmations and litres dispensed (fuel logs).'],
+    ['Voice agent (Bedrock)', 'Voice-originated bookings (source channel mix).'],
+  ], [180, CW - 180])
+
+  // ---------- ENGINEERING LAYER ----------
+  biPipelineDiagram(D)
+
+  D.h1('4. Data engineering workflow')
+  D.p('The reporting layer is built directly on the live API — no warehouse or manual extracts for the current scope. The pipeline has five stages: ingest, transform, model, measure, refresh.')
+
+  D.h2('4.1 Ingestion — Power BI Web connectors')
+  D.p('Power BI connects to the platform’s HTTPS/JSON API using the Web connector (Get Data → Web → Advanced), sending a server-to-server API key in the request header. The CONSOLE-scoped key grants read access to the analytics endpoints; credentials are stored as Anonymous because authentication is carried by the header, not a Power BI credential.')
+  D.table(['Query', 'Endpoint', 'Produces'], [
+    ['ops', 'GET /ops', 'One object with three lists: requests, emergencies, bookings.'],
+    ['fleet', 'GET /fleet', 'Vehicles and drivers (status, zone, assignment).'],
+    ['fleet_fuel', 'GET /fleet/vehicles', 'Per-vehicle fuel: tank, kmpl, fuel_l, fuel_pct, needs_refuel.'],
+    ['employees', 'GET /employees', 'Directory with employee_band, grade, department, status.'],
+  ], [90, 140, CW - 230])
+  D.code([
+    '// Power Query — Web connector with API-key header (per query)',
+    'let',
+    '  Source = Json.Document(Web.Contents(',
+    '    "https://cfnjgxlvfl.execute-api.eu-west-1.amazonaws.com/ops",',
+    '    [ Headers = [ #"x-api-key" = "<CONSOLE_API_KEY>" ] ]))',
+    'in Source',
+  ])
+  D.note('Security: the API key sits inside the dataset credentials. For production, store it in the data-gateway data source (or move analytics to a read-only key) and never publish the report publicly with the key embedded.')
+
+  D.h2('4.2 Transformation — Power Query (M)')
+  D.p('The /ops object is shaped into three fact-style tables; the others map directly. Typical steps:')
+  D.bullets([
+    'Expand the emergencies list to new rows, then expand the record fields into columns (no name prefix).',
+    'Repeat for requests and bookings as separate queries (duplicate the source, keep one list each).',
+    'Set data types: eta_min, eta_to_pickup_min, distance_km → Decimal; patients_count, employee_band → Whole number; created_at/updated_at → Date/time.',
+    'Clean: trim text, replace empty strings with null, filter to status = Active for employees.',
+    'Derive columns: SLA target by severity, response-time bucket (≤8 / ≤15 / ≤30 / over), band label (B0–B4), hour-of-day and date keys for trend analysis.',
+  ])
+
+  D.h2('4.3 Data model — star schema')
+  D.p('Model the expanded tables as a star: a central fact (Emergencies) related to conformed dimensions. This keeps measures simple and slicers fast.')
+  D.table(['Table', 'Role', 'Key fields'], [
+    ['Emergencies', 'Fact (one row per incident)', 'id, kind, severity, status, eta_min, distance_km, zone, hospital_id, vehicle_id, band, created_at'],
+    ['Dim Date', 'Dimension', 'date, day, week, month (mark as date table)'],
+    ['Dim Zone', 'Dimension', 'zone_id, zone name, lat/lng'],
+    ['Dim Hospital', 'Dimension', 'hospital_id, name, specialties, capability'],
+    ['Dim Vehicle', 'Dimension', 'vehicle_id, reg, type, home zone, tank, kmpl'],
+    ['Dim Band', 'Dimension', 'band (0–4), label, allowed_vehicle_types'],
+  ], [95, 110, CW - 205])
+
+  D.h2('4.4 Measures (DAX)')
+  D.p('Core measures that drive the report and the embedded dashboard:')
+  D.code([
+    'Total Incidents = COUNTROWS(Emergencies)',
+    'Active = CALCULATE([Total Incidents], Emergencies[status] = "EN_ROUTE")',
+    'Completed = CALCULATE([Total Incidents], Emergencies[status] = "COMPLETED")',
+    'Avg Response (min) = AVERAGE(Emergencies[eta_to_pickup_min])',
+    'SLA Target (min) = SWITCH(SELECTEDVALUE(Emergencies[severity]),',
+    '   "Critical", 8, "Urgent", 15, "Normal", 30)',
+    'Within SLA = CALCULATE([Total Incidents],',
+    '   FILTER(Emergencies, Emergencies[eta_to_pickup_min] <= [SLA Target (min)]))',
+    'SLA Compliance % = DIVIDE([Within SLA], [Total Incidents])',
+    'Fleet Utilisation % = DIVIDE(',
+    '   CALCULATE(DISTINCTCOUNT(Emergencies[vehicle_id]), Emergencies[status]="EN_ROUTE"),',
+    '   DISTINCTCOUNT(Dim Vehicle[vehicle_id]))',
+    'Fuel Burn (L) = SUMX(Emergencies, DIVIDE(Emergencies[distance_km],',
+    '   RELATED(Dim Vehicle[kmpl])))',
+  ])
+
+  D.h2('4.5 Refresh strategy')
+  D.p('Two modes, matched to maturity:')
+  D.table(['Mode', 'How it works', 'Use when'], [
+    ['POC (current)', 'Web connector + Publish to web / manual refresh in the service.', 'Demo and early reporting.'],
+    ['Production', 'On-premises / VNet data gateway holds the API key; scheduled refresh (e.g. every 30–60 min); secure App-owns-data embed.', 'Live leadership reporting.'],
+  ], [90, CW - 90 - 110, 110])
+
+  D.h1('5. Report design & unique Power BI usage')
+  D.p('The report is organised into focused pages. Beyond standard KPI cards and charts, it uses several advanced Power BI capabilities to turn data into explanation and foresight — not just description.')
+  D.h2('5.1 Operations overview')
+  D.bullets([
+    'KPI strip: Total, Active, Queued, Completed, Avg response, Fleet utilisation.',
+    'Responses by type (donut), by severity (column), by zone (bar), trend over time (line).',
+  ])
+  D.h2('5.2 Geospatial hotspots (Map visual)')
+  D.p('Plot incidents on a map by zone/coordinate to reveal demand hotspots and response-time blackspots across the township — the basis for where to pre-position units.')
+  D.h2('5.3 AI visuals — Key Influencers & Decomposition Tree')
+  D.p('Key Influencers explains what drives slow responses or SLA breaches (e.g. zone, severity, time-of-day, traffic factor). The Decomposition Tree lets a manager drill from a high number (e.g. total breaches) down through dimensions interactively to find the root contributor.')
+  D.h2('5.4 What-if scenario parameters')
+  D.p('What-if parameters let leadership simulate decisions live: add N ambulances to a zone, change the assumed travel speed or SLA target, or adjust the fuel refuel threshold — and immediately see the modelled effect on SLA compliance and utilisation.')
+  D.h2('5.5 Drill-through & row-level security')
+  D.p('Drill-through moves from any KPI to the underlying incident list for that slice. Row-level security (RLS) restricts what each role sees — e.g. a zone supervisor sees only their zone — so the same report safely serves many audiences.')
+
+  D.h1('6. Business insights & recommendations')
+  D.p('The analytics are designed to answer leadership questions and prompt action. Representative insights and the decisions they support:')
+  D.table(['Insight (from the data)', 'Recommended action'], [
+    ['A zone consistently breaches the Critical 8-min SLA', 'Pre-position or add an ambulance in that zone; review traffic-factor on its routes.'],
+    ['Urgent volume peaks at specific hours', 'Shift-plan crews to peak windows instead of flat staffing.'],
+    ['Fire trucks average ~5 km/L; rising trip distances', 'Forecast monthly fuel spend; schedule refuels off-peak to protect readiness.'],
+    ['Repeated NO_HOSPITAL / queued incidents', 'Expand specialty coverage or partner hospitals for that case type.'],
+    ['Fleet utilisation persistently high (low spare)', 'Justify capital case for additional units before demand outpaces capacity.'],
+    ['Most demand from a few zones/sources', 'Target prevention and outreach where incidents concentrate.'],
+    ['Band-based allotment mismatches', 'Tune the band→vehicle policy so entitlements match actual need.'],
+  ], [CW / 2, CW / 2])
+  D.note('Because the dispatch policy itself is configurable (speeds, SLA targets, unit caps, fuel thresholds), several of these recommendations can be enacted by updating policy — no code change — and their impact then re-measured in the same report.')
+
+  D.h1('7. Governance & security')
+  D.bullets([
+    'Access to analytics endpoints is via a scoped server API key; the browser never holds it.',
+    'Production refresh keeps the key inside the data gateway, not the published report.',
+    'Embedded analytics use App-owns-data: authorised by corporate SSO, no separate Power BI login.',
+    'Row-level security tailors visibility by role/zone; no patient-identifying data is published.',
+    'The public "Publish to web" option is used only for non-sensitive POC demos.',
+  ])
+
+  D.h1('8. Roadmap')
+  D.bullets([
+    'Move ingestion behind a data gateway with scheduled refresh and a read-only analytics key.',
+    'Add a curated historical store (e.g. S3 + Athena or a small warehouse) for long-range trends.',
+    'Promote the embedded dashboard to a paid Power BI capacity for login-free production embedding.',
+    'Expand AI visuals and what-if models as more history accumulates.',
+  ])
+
+  await save(D, 'PowerBI-DataEngineering.pdf')
 }
 
 /* ===================================================================
@@ -626,4 +832,5 @@ async function buildDbSchema() {
 await buildArchitecture()
 await buildSystemDesign()
 await buildDbSchema()
+await buildPowerBI()
 console.log('\nAll PDFs generated in', OUT_DIR)

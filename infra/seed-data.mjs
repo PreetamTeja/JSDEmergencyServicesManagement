@@ -63,21 +63,23 @@ const HOSPITALS = [
   { id:'hosp-tinplate', name:'Tinplate Hospital', lat:22.7972, lng:86.1572, specialties:['General','Maternity'], capability:2, beds_available:0, status:'full' },
 ]
 
-// Policy re-keyed by job_level. Each band: highest min_level <= employee.job_level wins.
+// Policy keyed by employee_band (0-4, from the jamshedpur-users table).
+// Higher band = more senior. Eligibility = the entry whose `band` matches the
+// employee's employee_band (with fallback to the highest band <= theirs).
 const POLICY = {
   version:'v2026.06',
   levels:[
-    { id:'L9', min_level:9, label:'Executive / Sr. Management', allowed_vehicle_types:['car','van','bus'], monthly_fuel_cap_litres:220, shuttle_rides:60, fare_cap:6000 },
-    { id:'L7', min_level:7, label:'Senior Officer', allowed_vehicle_types:['car','van'], monthly_fuel_cap_litres:160, shuttle_rides:45, fare_cap:4500 },
-    { id:'L5', min_level:5, label:'Officer', allowed_vehicle_types:['car','bike'], monthly_fuel_cap_litres:110, shuttle_rides:30, fare_cap:3000 },
-    { id:'L3', min_level:3, label:'Supervisor / Staff', allowed_vehicle_types:['bike','bus'], monthly_fuel_cap_litres:70, shuttle_rides:20, fare_cap:2000 },
-    { id:'L0', min_level:0, label:'Operations / Service', allowed_vehicle_types:['ambulance','van','bus'], monthly_fuel_cap_litres:400, shuttle_rides:40, fare_cap:4000 },
+    { id:'B4', band:4, label:'Executive / Sr. Management', allowed_vehicle_types:['car','van','bus'], monthly_fuel_cap_litres:220, shuttle_rides:60, fare_cap:6000 },
+    { id:'B3', band:3, label:'Senior Officer', allowed_vehicle_types:['car','van'], monthly_fuel_cap_litres:160, shuttle_rides:45, fare_cap:4500 },
+    { id:'B2', band:2, label:'Officer', allowed_vehicle_types:['car','bike'], monthly_fuel_cap_litres:110, shuttle_rides:30, fare_cap:3000 },
+    { id:'B1', band:1, label:'Supervisor / Staff', allowed_vehicle_types:['bike','bus'], monthly_fuel_cap_litres:70, shuttle_rides:20, fare_cap:2000 },
+    { id:'B0', band:0, label:'Operations / Service', allowed_vehicle_types:['ambulance','van','bus'], monthly_fuel_cap_litres:400, shuttle_rides:40, fare_cap:4000 },
   ],
   vehicle_type_caps:{ bus:600, ambulance:320, van:280, car:180, bike:60 },
 }
 
 // Employees, allotments and shuttle cards are NOT seeded:
-// - employees live in the shared org table (FP-EMP-TABLE-M)
+// - employees live in the shared org table (jamshedpur-users)
 // - allotments & shuttle cards are created through the app against real employees
 const FUEL_LOGS = [
   { id:'f1', vehicleId:'veh-sakchi-bus-1', litres:120, cost:12480, date:'2026-06-03', station:'Fuel Station Depot' },
@@ -212,6 +214,8 @@ console.log('Seeding Fleet ...')
 const LICENSE = { ambulance:'AMB', bus:'HMV', car:'LMV', van:'LMV', bike:'MC', firetruck:'HMV' }
 const REGP = { ambulance:'AM', bus:'BG', car:'CR', van:'VN', bike:'MC', firetruck:'FT' }
 const POOL = [['ambulance',5],['bus',1],['car',2],['van',1],['bike',10],['firetruck',2]]  // per zone -> 25 ambulances, 50 bikes, 10 fire trucks
+// Fuel model per type (matches backend FUEL_SPEC): tank size + consumption.
+const FUELSPEC = { ambulance:{ tank:60, kmpl:9 }, firetruck:{ tank:200, kmpl:5 } }
 const NAMES = ['Ranjan Mahato','Sunita Devi','Imran Ansari','Bikash Soren','Priya Kumari','Arvind Singh','Fatima Khatun','Deepak Oraon','Manoj Gupta','Reena Tudu','Sanjay Hembrom','Anita Mahto','Wasim Akhtar','Pooja Sinha','Rakesh Munda','N. Lakra','Naveen Kujur','Sarita Devi','Tarun Bhakat','Mohan Das','Jyoti Kerketta','Salim Khan','Geeta Bauri','Vivek Ranjan','Asha Topno','R. Prasad','D. Singh','M. Khan','P. Roy','K. Das']
 let di = 0, regc = {}
 for (const z of ZONES) {
@@ -223,9 +227,13 @@ for (const z of ZONES) {
       const did = `drv-${short}-${type.slice(0,3)}-${k}`  // deterministic per vehicle (idempotent reseed)
       const reg = `JH05-${REGP[type]}-${String(1000+regc[type]*7).slice(0,4)}`
       const status = 'idle'
+      const fs = FUELSPEC[type]
+      // Start ambulances/fire trucks at 60-90% so they don't all need fuel at once.
+      const fuelL = fs ? +(fs.tank * (0.6 + (di % 4) * 0.1)).toFixed(1) : undefined
       put('Fleet', {
         PK:`VEH#${vid}`, SK:'META', id:vid, reg, type, status, home_zone_id:z.id, driver_id:did,
-        odometer:15000+(di*1234)%80000, fuel:35+(di*17)%60, next_service:'2026-07-15',
+        odometer:15000+(di*1234)%80000, fuel:fs ? Math.round(fuelL/fs.tank*100) : 35+(di*17)%60, next_service:'2026-07-15',
+        ...(fs ? { tank_capacity_l:fs.tank, kmpl:fs.kmpl, fuel_l:fuelL, needs_refuel:false } : {}),
         GSI1PK:`ZONE#${z.id}#VEH`, GSI1SK:`${status}#${type}#${vid}`,
         GSI3PK:`VEHSTATUS#${status}`, GSI3SK:vid,
       })

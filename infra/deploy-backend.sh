@@ -15,7 +15,7 @@ ROLE="${FN}-role"
 RUNTIME="nodejs20.x"
 ACCOUNT="$(aws sts get-caller-identity --query Account --output text)"
 # Shared org Employees table (HR/IAM-owned). Override EMP_TABLE if the name differs.
-EMP_TABLE="${EMP_TABLE:-FP-EMPLOYEE-TABLE-M}"
+EMP_TABLE="${EMP_TABLE:-jamshedpur-users}"
 EMP_ARN="arn:aws:dynamodb:${REGION}:${ACCOUNT}:table/${EMP_TABLE}"
 
 # ---- security config (Cognito JWT verification + CORS) ----
@@ -75,8 +75,8 @@ fi
 # ---- API keys: preserve existing, else generate console + hospital keys ----
 EXIST_KEYS="$(aws lambda get-function-configuration --function-name "$FN" --region "$REGION" --query 'Environment.Variables.API_KEYS' --output text 2>/dev/null || true)"
 if [ -z "$EXIST_KEYS" ] || [ "$EXIST_KEYS" = "None" ]; then
-  CONSOLE_KEY="$(openssl rand -hex 16)"; HOSPITAL_KEY="$(openssl rand -hex 16)"
-  API_KEYS_JSON="$(jq -n --arg c "$CONSOLE_KEY" --arg h "$HOSPITAL_KEY" -c '{($c):"CONSOLE",($h):"HOSPITAL"}')"
+  CONSOLE_KEY="$(openssl rand -hex 16)"; HOSPITAL_KEY="$(openssl rand -hex 16)"; FUEL_KEY="$(openssl rand -hex 16)"
+  API_KEYS_JSON="$(jq -n --arg c "$CONSOLE_KEY" --arg h "$HOSPITAL_KEY" --arg f "$FUEL_KEY" -c '{($c):"CONSOLE",($h):"HOSPITAL",($f):"FUEL"}')"
 else
   API_KEYS_JSON="$EXIST_KEYS"
 fi

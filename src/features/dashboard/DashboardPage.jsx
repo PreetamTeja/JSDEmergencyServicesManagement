@@ -8,120 +8,125 @@ import { locById, zoneById, ZONES } from '../../data/locations'
 import { hospitalById, SEVERITY_META } from '../../data/hospitals'
 import PowerBIReport from './PowerBIReport'
 
-const TODAY = '2026-06-20'
-const KIND = { medical: '#2563eb', fire: '#ea580c' }
-const GREENS = ['#07514D', '#0B6A64', '#2E8B84', '#4A9B96', '#8FB920', '#D6DF27']
+const TODAY = new Date().toISOString().slice(0, 10)
+const KIND = { medical: '#0B6A64', fire: '#E8833A' }
+// Cohesive teal ramp for categorical charts (brand-aligned, minimal).
+const RAMP = ['#07514D', '#0B6A64', '#2E8B84', '#4A9B96', '#7FB0AB', '#A9CCC8']
+const AXIS = '#9AA3A1'
+const GRID = '#EEF1F0'
 const mean = (a) => (a.length ? a.reduce((s, x) => s + x, 0) / a.length : 0)
+
+// Shared minimal tooltip look.
+const TIP = {
+  contentStyle: { border: '1px solid #E5E9E8', borderRadius: 0, fontSize: 12, boxShadow: 'none', padding: '6px 10px' },
+  labelStyle: { color: '#161616', fontWeight: 600 }, cursor: { fill: 'rgba(7,81,77,0.05)' },
+}
 
 export default function DashboardPage() {
   const emergencies = useFleetStore((s) => s.emergencies)
   const vehicles = useFleetStore((s) => s.vehicles)
   const hospitals = useFleetStore((s) => s.hospitals)
-  const firestations = useFleetStore((s) => s.firestations)
 
   const m = useMemo(() => buildMetrics(emergencies, vehicles, hospitals), [emergencies, vehicles, hospitals])
 
-  // Secure Power BI embed (App-owns-data): authorized by the user's SSO session,
-  // backend mints the embed token. No Power BI login. Preferred for production.
+  // Secure Power BI embed (App-owns-data) — preferred for production.
   if (import.meta.env.VITE_POWERBI_SECURE === 'true') return <PowerBIReport />
-
-  // Public "Publish to web" fallback: a plain iframe (no auth, public link).
+  // Public "Publish to web" fallback (plain iframe).
   const pbiUrl = import.meta.env.VITE_POWERBI_EMBED_URL
   if (pbiUrl) {
     return (
       <div className="h-full bg-cmd-bg">
-        <iframe title="Analytics (Power BI)" src={pbiUrl}
-          className="w-full h-full border-0" allowFullScreen />
+        <iframe title="Analytics (Power BI)" src={pbiUrl} className="w-full h-full border-0" allowFullScreen />
       </div>
     )
   }
 
   return (
     <div className="h-full overflow-auto bg-cmd-bg">
-      <div className="p-6 space-y-6">
-        {/* KPI row */}
-        <div className="grid grid-cols-2 lg:grid-cols-6 gap-4">
-          <Kpi label="Total responses" value={m.total} sub={`${m.todayCount} today`} accent="#07514D" />
-          <Kpi label="Active now" value={m.active} sub={`${m.queued} queued`} accent="#16a34a" />
-          <Kpi label="Avg response" value={`${m.avgResp.toFixed(1)}m`} sub="to scene" accent="#0B6A64" />
-          <Kpi label="Avg trip" value={`${m.avgTrip.toFixed(1)}m`} sub="end to end" accent="#4A9B96" />
-          <Kpi label="Fleet in use" value={`${m.utilPct}%`} sub={`${m.enroute}/${m.fleetTotal} units`} accent="#d97706" />
+      {/* page header */}
+      <div className="px-6 pt-6 pb-4">
+        <h1 className="text-[22px] font-semibold tracking-tight text-cmd-text">Operations Overview</h1>
+        <p className="text-[13px] text-cmd-muted">Emergency response analytics · live from dispatch</p>
+      </div>
+
+      <div className="px-6 pb-8 space-y-4">
+        {/* KPI strip */}
+        <div className="grid grid-cols-2 lg:grid-cols-5 border border-cmd-border bg-white divide-x divide-cmd-border">
+          <Kpi icon="activity" label="Total responses" value={m.total} sub={`${m.todayCount} today`} />
+          <Kpi icon="pulse" label="Active now" value={m.active} sub={`${m.queued} queued`} accent="#16a34a" />
+          <Kpi icon="clock" label="Avg response" value={`${m.avgResp.toFixed(1)}m`} sub="to scene" />
+          <Kpi icon="route" label="Avg trip" value={`${m.avgTrip.toFixed(1)}m`} sub="end to end" />
+          <Kpi icon="truck" label="Fleet in use" value={`${m.utilPct}%`} sub={`${m.enroute}/${m.fleetTotal} units`} accent="#d97706" />
         </div>
 
         {/* Row 1 — mix */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-          <Card title="Responses by type">
-            <Donut data={m.byKind} />
-          </Card>
-          <Card title="Responses by severity">
-            <Bars data={m.bySeverity} />
-          </Card>
-          <Card title="Medical cases by type">
-            <Bars data={m.byCase} color="#07514D" />
-          </Card>
+          <Card title="Responses by type"><Donut data={m.byKind} /></Card>
+          <Card title="Responses by severity"><Bars data={m.bySeverity} /></Card>
+          <Card title="Medical cases by type"><Bars data={m.byCase} color={RAMP[0]} /></Card>
         </div>
 
         {/* Row 2 — geography + time */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-          <Card title="Responses by zone">
-            <Bars data={m.byZone} color="#0B6A64" />
-          </Card>
-          <Card title="Responses over time (14 days)">
-            <ResponsiveContainer width="100%" height={220}>
-              <LineChart data={m.overTime} margin={{ left: -18 }}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                <XAxis dataKey="day" tick={{ fontSize: 11, fill: '#000' }} />
-                <YAxis allowDecimals={false} tick={{ fontSize: 11, fill: '#000' }} />
-                <Tooltip />
+          <Card title="Responses by zone"><Bars data={m.byZone} color={RAMP[1]} /></Card>
+          <Card title="Responses over time · 14 days">
+            <ResponsiveContainer width="100%" height={210}>
+              <LineChart data={m.overTime} margin={{ left: -20, top: 6, right: 6 }}>
+                <CartesianGrid stroke={GRID} vertical={false} />
+                <XAxis dataKey="day" tickLine={false} axisLine={{ stroke: GRID }} tick={{ fontSize: 11, fill: AXIS }} />
+                <YAxis allowDecimals={false} tickLine={false} axisLine={false} tick={{ fontSize: 11, fill: AXIS }} />
+                <Tooltip {...TIP} />
                 <Line type="monotone" dataKey="medical" stroke={KIND.medical} strokeWidth={2} dot={false} />
                 <Line type="monotone" dataKey="fire" stroke={KIND.fire} strokeWidth={2} dot={false} />
-                <Legend wrapperStyle={{ fontSize: 12 }} />
+                <Legend wrapperStyle={{ fontSize: 11 }} iconType="plainline" />
               </LineChart>
             </ResponsiveContainer>
           </Card>
-          <Card title="Avg response time by severity (min)">
-            <Bars data={m.respBySeverity} />
-          </Card>
+          <Card title="Avg response time by severity · min"><Bars data={m.respBySeverity} /></Card>
         </div>
 
         {/* Row 3 — resources */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
           <Card title="Fleet availability">
-            <ResponsiveContainer width="100%" height={220}>
-              <BarChart data={m.fleetAvail}>
-                <XAxis dataKey="name" tick={{ fontSize: 12, fill: '#000' }} /><YAxis allowDecimals={false} tick={{ fontSize: 12, fill: '#000' }} />
-                <Tooltip />
-                <Bar dataKey="idle" stackId="a" fill="#64748b" />
+            <ResponsiveContainer width="100%" height={210}>
+              <BarChart data={m.fleetAvail} margin={{ left: -20, top: 6 }} barCategoryGap="35%">
+                <CartesianGrid stroke={GRID} vertical={false} />
+                <XAxis dataKey="name" tickLine={false} axisLine={{ stroke: GRID }} tick={{ fontSize: 12, fill: AXIS }} />
+                <YAxis allowDecimals={false} tickLine={false} axisLine={false} tick={{ fontSize: 12, fill: AXIS }} />
+                <Tooltip {...TIP} />
+                <Bar dataKey="idle" stackId="a" fill="#CBD5D3" />
                 <Bar dataKey="enroute" stackId="a" fill="#16a34a" />
-                <Bar dataKey="maintenance" stackId="a" fill="#d97706" radius={[6, 6, 0, 0]} />
-                <Legend wrapperStyle={{ fontSize: 12 }} />
+                <Bar dataKey="maintenance" stackId="a" fill="#d97706" />
+                <Legend wrapperStyle={{ fontSize: 11 }} iconType="square" />
               </BarChart>
             </ResponsiveContainer>
           </Card>
-          <Card title="Top receiving hospitals (dispatches)">
-            <Bars data={m.topHospitals} color="#2E8B84" vertical />
+          <Card title="Top receiving hospitals" className="lg:col-span-2">
+            <Bars data={m.topHospitals} color={RAMP[2]} vertical />
           </Card>
         </div>
 
         {/* Active table */}
-        <Card title={`Active responses (${m.active})`}>
+        <Card title={`Active responses · ${m.active}`}>
           {m.active === 0 ? <Empty msg="No active emergencies." /> : (
-            <table className="w-full text-sm">
-              <thead className="text-black text-xs uppercase border-b border-slate-200">
-                <tr><Th>ID</Th><Th>Type</Th><Th>Severity</Th><Th>Zone</Th><Th>Vehicle</Th><Th>Destination</Th></tr>
+            <table className="w-full text-[13px]">
+              <thead>
+                <tr className="text-cmd-muted text-[11px] uppercase tracking-wide border-b border-cmd-border">
+                  <Th>ID</Th><Th>Type</Th><Th>Severity</Th><Th>Zone</Th><Th>Vehicle</Th><Th>Destination</Th>
+                </tr>
               </thead>
               <tbody>
                 {emergencies.filter((e) => e.state === 'EN_ROUTE').map((e) => {
                   const isFire = e.kind === 'fire'
                   const veh = vehicles.find((v) => v.id === e.ambulanceId)
                   return (
-                    <tr key={e.id} className="border-t border-slate-100">
-                      <td className="py-2 font-medium text-black">{e.id}</td>
-                      <td><span className="px-2 py-0.5 rounded-full text-xs font-medium" style={{ background: isFire ? '#fff1e8' : '#e8eefb', color: isFire ? KIND.fire : KIND.medical }}>{isFire ? 'Fire' : e.caseType || 'Medical'}</span></td>
-                      <td className="text-black">{e.severity}</td>
-                      <td className="text-black">{zoneById(locById(e.pickup)?.zone_id)?.name || '—'}</td>
-                      <td className="font-mono text-[13px] text-black">{veh?.reg || '—'}</td>
-                      <td className="text-black">{isFire ? (locById(e.pickup)?.name || '—') : (hospitalById(e.hospitalId)?.name || '—')}</td>
+                    <tr key={e.id} className="border-b border-cmd-border/60 hover:bg-cmd-panel2">
+                      <td className="py-2 font-medium text-cmd-text">{e.id}</td>
+                      <td><span className="px-2 py-0.5 text-[11px] font-medium" style={{ background: isFire ? '#FBEDE2' : '#E4EEEC', color: isFire ? KIND.fire : KIND.medical }}>{isFire ? 'Fire' : e.caseType || 'Medical'}</span></td>
+                      <td className="text-cmd-text">{e.severity}</td>
+                      <td className="text-cmd-text">{zoneById(locById(e.pickup)?.zone_id)?.name || '—'}</td>
+                      <td className="font-mono text-[12px] text-cmd-text">{veh?.reg || '—'}</td>
+                      <td className="text-cmd-text">{isFire ? (locById(e.pickup)?.name || '—') : (hospitalById(e.hospitalId)?.name || '—')}</td>
                     </tr>
                   )
                 })}
@@ -129,16 +134,12 @@ export default function DashboardPage() {
             </table>
           )}
         </Card>
-
-        <p className="text-[12px] text-cmd-muted">
-          Measures (replicable in Power BI): <b>count</b> of emergencies by kind/severity/case/zone/date,
-          <b> average</b> of response &amp; trip minutes by severity, fleet status counts, and hospital bed levels.
-        </p>
       </div>
     </div>
   )
 }
 
+/* ---------- metrics (unchanged data model) ---------- */
 function buildMetrics(emergencies, vehicles, hospitals) {
   const list = emergencies
   const active = list.filter((e) => e.state === 'EN_ROUTE')
@@ -163,7 +164,6 @@ function buildMetrics(emergencies, vehicles, hospitals) {
   list.forEach((e) => { const z = zoneById(locById(e.pickup)?.zone_id)?.name || 'Unknown'; zoneCounts[z] = (zoneCounts[z] || 0) + 1 })
   const byZone = ZONES.map((z) => ({ name: z.name, value: zoneCounts[z.name] || 0, color: z.color })).filter((d) => d.value > 0)
 
-  // time series: last 14 days
   const days = []
   for (let i = 13; i >= 0; i--) { const d = new Date(TODAY); d.setDate(d.getDate() - i); days.push(d.toISOString().slice(0, 10)) }
   const overTime = days.map((day) => ({
@@ -207,19 +207,35 @@ function buildMetrics(emergencies, vehicles, hospitals) {
 }
 
 /* ---------- presentational ---------- */
-function Kpi({ label, value, sub, accent }) {
+const ICONS = {
+  activity: '<path d="M3 12h4l2 6 4-14 2 8h6"/>',
+  pulse: '<path d="M3 12h4l2-5 3 10 2-7h7"/>',
+  clock: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
+  route: '<circle cx="6" cy="18" r="2"/><circle cx="18" cy="6" r="2"/><path d="M8 18h7a3 3 0 0 0 0-6H9a3 3 0 0 1 0-6h7"/>',
+  truck: '<path d="M3 7h11v8H3z"/><path d="M14 9h3.5l3.5 3.5V15h-7z"/><circle cx="7" cy="17" r="1.6"/><circle cx="17" cy="17" r="1.6"/>',
+}
+function Glyph({ name, className = '' }) {
   return (
-    <div className="bg-white rounded-xl border border-slate-200 p-4">
-      <div className="text-[12px] uppercase tracking-wide text-black">{label}</div>
-      <div className="text-[26px] font-bold mt-1 text-black leading-tight">{value}</div>
-      <div className="text-[12px]" style={{ color: accent }}>{sub}</div>
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"
+      strokeLinecap="round" strokeLinejoin="round" className={className} dangerouslySetInnerHTML={{ __html: ICONS[name] }} />
+  )
+}
+function Kpi({ icon, label, value, sub, accent }) {
+  return (
+    <div className="p-4">
+      <div className="flex items-center gap-2 text-cmd-muted">
+        <Glyph name={icon} />
+        <span className="text-[11px] uppercase tracking-wide">{label}</span>
+      </div>
+      <div className="text-[30px] font-semibold mt-1.5 text-cmd-text leading-none">{value}</div>
+      <div className="text-[12px] mt-1.5" style={{ color: accent || '#6B7672' }}>{sub}</div>
     </div>
   )
 }
-function Card({ title, children }) {
+function Card({ title, children, className = '' }) {
   return (
-    <div className="bg-white rounded-xl border border-slate-200 p-4">
-      <div className="text-[16px] font-semibold text-black mb-2">{title}</div>
+    <div className={`bg-white border border-cmd-border p-4 ${className}`}>
+      <div className="text-[12px] uppercase tracking-wide font-semibold text-cmd-muted mb-3">{title}</div>
       {children}
     </div>
   )
@@ -228,16 +244,21 @@ function Donut({ data }) {
   if (!data.length) return <Empty />
   return (
     <>
-      <ResponsiveContainer width="100%" height={190}>
+      <ResponsiveContainer width="100%" height={180}>
         <PieChart>
-          <Pie data={data} dataKey="value" nameKey="name" innerRadius={50} outerRadius={80} paddingAngle={2}>
-            {data.map((d, i) => <Cell key={i} fill={d.color || GREENS[i % GREENS.length]} />)}
+          <Pie data={data} dataKey="value" nameKey="name" innerRadius={52} outerRadius={78} paddingAngle={2} stroke="none">
+            {data.map((d, i) => <Cell key={i} fill={d.color || RAMP[i % RAMP.length]} />)}
           </Pie>
-          <Tooltip />
+          <Tooltip {...TIP} />
         </PieChart>
       </ResponsiveContainer>
-      <div className="flex flex-wrap gap-3 mt-1">
-        {data.map((d, i) => <span key={d.name} className="flex items-center gap-1 text-xs text-black"><i className="h-2.5 w-2.5 rounded-full" style={{ background: d.color || GREENS[i % GREENS.length] }} />{d.name} ({d.value})</span>)}
+      <div className="flex flex-wrap gap-x-4 gap-y-1 mt-2">
+        {data.map((d, i) => (
+          <span key={d.name} className="flex items-center gap-1.5 text-[12px] text-cmd-text">
+            <i className="h-2 w-2 rounded-full" style={{ background: d.color || RAMP[i % RAMP.length] }} />
+            {d.name} <span className="text-cmd-muted">({d.value})</span>
+          </span>
+        ))}
       </div>
     </>
   )
@@ -246,26 +267,29 @@ function Bars({ data, color, vertical }) {
   if (!data.length || data.every((d) => !d.value)) return <Empty />
   if (vertical) {
     return (
-      <ResponsiveContainer width="100%" height={220}>
-        <BarChart data={data} layout="vertical" margin={{ left: 10 }}>
+      <ResponsiveContainer width="100%" height={210}>
+        <BarChart data={data} layout="vertical" margin={{ left: 10, right: 12 }} barCategoryGap="30%">
           <XAxis type="number" allowDecimals={false} hide />
-          <YAxis dataKey="name" type="category" width={110} tick={{ fontSize: 10, fill: '#000' }} />
-          <Tooltip /><Bar dataKey="value" fill={color || '#07514D'} radius={[0, 6, 6, 0]} />
+          <YAxis dataKey="name" type="category" width={130} tickLine={false} axisLine={false} tick={{ fontSize: 11, fill: '#4B5552' }} />
+          <Tooltip {...TIP} />
+          <Bar dataKey="value" fill={color || RAMP[0]} />
         </BarChart>
       </ResponsiveContainer>
     )
   }
   return (
-    <ResponsiveContainer width="100%" height={220}>
-      <BarChart data={data}>
-        <XAxis dataKey="name" tick={{ fontSize: 11, fill: '#000' }} /><YAxis allowDecimals={false} tick={{ fontSize: 11, fill: '#000' }} />
-        <Tooltip />
-        <Bar dataKey="value" radius={[6, 6, 0, 0]}>
-          {data.map((d, i) => <Cell key={i} fill={d.color || color || '#07514D'} />)}
+    <ResponsiveContainer width="100%" height={210}>
+      <BarChart data={data} margin={{ left: -20, top: 6 }} barCategoryGap="35%">
+        <CartesianGrid stroke={GRID} vertical={false} />
+        <XAxis dataKey="name" tickLine={false} axisLine={{ stroke: GRID }} tick={{ fontSize: 11, fill: AXIS }} />
+        <YAxis allowDecimals={false} tickLine={false} axisLine={false} tick={{ fontSize: 11, fill: AXIS }} />
+        <Tooltip {...TIP} />
+        <Bar dataKey="value">
+          {data.map((d, i) => <Cell key={i} fill={d.color || color || RAMP[0]} />)}
         </Bar>
       </BarChart>
     </ResponsiveContainer>
   )
 }
-const Empty = ({ msg = 'No data yet.' }) => <div className="text-[13px] text-black py-12 text-center">{msg}</div>
+const Empty = ({ msg = 'No data yet.' }) => <div className="text-[13px] text-cmd-muted py-12 text-center">{msg}</div>
 const Th = ({ children }) => <th className="text-left font-medium py-2">{children}</th>

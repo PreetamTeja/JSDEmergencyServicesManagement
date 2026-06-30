@@ -129,7 +129,7 @@ public class Function
             if (method == "GET" && seg[0] == "track" && seg.Length > 1 && !string.IsNullOrEmpty(seg[1]))
             {
                 var item = await GetOpsItem(seg[1]);
-                var token = request.QueryStringParameters?.GetValueOrDefault("t") ?? request.QueryStringParameters?.GetValueOrDefault("token");
+                var token = QS(request, "t") ?? QS(request, "token");
                 if (item == null || Str(item, "entity") != "EMG" || string.IsNullOrEmpty(Str(item, "track_token")) || token != Str(item, "track_token"))
                     return ErrResp(404, "NOT_FOUND", "tracking link invalid or expired", corsHeaders);
                 var refData = await LoadRef();
@@ -251,11 +251,10 @@ public class Function
                     BucketName = PolicyBucket, Key = PolicyKey,
                     InputStream = new System.IO.MemoryStream(bytes), ContentType = "application/pdf",
                 });
-                var payload = Encoding.UTF8.GetBytes(JsonSerializer.Serialize(new { bucket = PolicyBucket, key = PolicyKey }));
                 var inv = await LambdaClient.InvokeAsync(new Amazon.Lambda.Model.InvokeRequest
                 {
                     FunctionName = PolicySyncFn,
-                    Payload = new System.IO.MemoryStream(payload),
+                    Payload = JsonSerializer.Serialize(new { bucket = PolicyBucket, key = PolicyKey }),
                 });
                 JsonDocument result;
                 try { result = JsonDocument.Parse(inv.Payload); }
@@ -287,9 +286,7 @@ public class Function
             // ---- employees ----
             if (method == "GET" && seg[0] == "employees" && seg.Length == 1)
             {
-                var (items, bands) = await Task.WhenAll(
-                    Ddb.Scan(TblEmp),
-                    Task.FromResult<List<Dictionary<string, object?>>>([]));
+                var items = await Ddb.Scan(TblEmp);
                 var bandsList = await PolicyLevels();
                 var active = items.Where(e =>
                 {
@@ -790,8 +787,8 @@ public class Function
             if (method == "GET" && seg[0] == "infra" && seg.Length > 1 && seg[1] == "metrics")
             {
                 if (!admin && apiKeySource != "MCP") return ErrResp(403, "FORBIDDEN", "Admin or MCP key required", corsHeaders);
-                int.TryParse(request.QueryStringParameters?.GetValueOrDefault("range_min"), out var rangeMin);
-                int.TryParse(request.QueryStringParameters?.GetValueOrDefault("period_min"), out var periodMin);
+                int.TryParse(QS(request, "range_min"), out var rangeMin);
+                int.TryParse(QS(request, "period_min"), out var periodMin);
                 if (rangeMin <= 0) rangeMin = 1440;
                 if (periodMin <= 0) periodMin = 60;
                 try
@@ -1405,12 +1402,20 @@ public class Function
         ["SK"] = new AttributeValue { S = sk },
     };
 
+    private static string? QS(APIGatewayHttpApiV2ProxyRequest req, string key)
+        => req.QueryStringParameters != null && req.QueryStringParameters.TryGetValue(key, out var v) ? v : null;
+
     private static string? Str(Dictionary<string, object?>? d, string key)
         => d?.TryGetValue(key, out var v) == true ? v?.ToString() : null;
     private static double Dbl(Dictionary<string, object?>? d, string key)
         => d != null && d.TryGetValue(key, out var v) && double.TryParse(v?.ToString(), out var r) ? r : 0;
     private static bool BoolVal(Dictionary<string, object?>? d, string key)
-        => d != null && d.TryGetValue(key, out var v) && v is bool b ? b : (v?.ToString() == "True" || v?.ToString() == "true");
+    {
+        if (d == null || !d.TryGetValue(key, out var v)) return false;
+        if (v is bool b) return b;
+        var s = v?.ToString();
+        return s == "True" || s == "true";
+    }
     private static Dictionary<string, object?>? GetObj(Dictionary<string, object?>? d, string key)
         => d != null && d.TryGetValue(key, out var v) && v is Dictionary<string, object?> obj ? obj : null;
 

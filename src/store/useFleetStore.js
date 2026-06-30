@@ -40,6 +40,11 @@ export const useFleetStore = create((set, get) => ({
   ready: false, error: null, initialized: false,
   trafficMode: 'auto', // auto | clear | moderate | heavy | gridlock (demo control)
   policyConfig: {}, // operational policy params from the backend (set by the policy-sync agent)
+  clearedIds: new Set(JSON.parse(sessionStorage.getItem('psiog_db_cleared') || '[]')),
+  setClearedIds: (set_) => {
+    sessionStorage.setItem('psiog_db_cleared', JSON.stringify([...set_]))
+    set({ clearedIds: new Set(set_) })
+  },
 
   // Load the active operational policy from the backend (/health echoes it).
   async loadPolicy() {

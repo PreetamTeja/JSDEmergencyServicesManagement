@@ -26,8 +26,9 @@ export default function DashboardPage() {
   const emergencies = useFleetStore((s) => s.emergencies)
   const vehicles = useFleetStore((s) => s.vehicles)
   const hospitals = useFleetStore((s) => s.hospitals)
+  const clearedIds = useFleetStore((s) => s.clearedIds)
 
-  const m = useMemo(() => buildMetrics(emergencies, vehicles, hospitals), [emergencies, vehicles, hospitals])
+  const m = useMemo(() => buildMetrics(emergencies.filter((e) => !clearedIds.has(e.id)), vehicles, hospitals), [emergencies, clearedIds, vehicles, hospitals])
 
   // Secure Power BI embed (App-owns-data) — preferred for production.
   if (import.meta.env.VITE_POWERBI_SECURE === 'true') return <PowerBIReport />

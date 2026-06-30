@@ -160,7 +160,7 @@ function Console({ session, onSignOut }) {
             <div className="flex items-center gap-2.5 min-w-0">
               <div className="h-9 w-9 rounded-lg bg-cta grid place-items-center text-accent font-bold text-[15px] shrink-0">TS</div>
               <div className="leading-tight truncate">
-                <div className="font-semibold text-[15px] truncate">Emergency Ops</div>
+                <div className="font-semibold text-[15px] truncate">JSD Emergency Services</div>
                 <div className="text-[11px] text-white/70 truncate">Tata Steel · Jamshedpur</div>
               </div>
             </div>

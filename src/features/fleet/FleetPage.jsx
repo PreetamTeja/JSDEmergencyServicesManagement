@@ -62,6 +62,8 @@ function Vehicles() {
   const amb = fleet.filter((v) => v.type === 'ambulance')
   const fire = fleet.filter((v) => v.type === 'firetruck')
   const idle = (l) => l.filter((v) => v.status === 'idle').length
+  const respondingIds = new Set(emergencies.filter((e) => e.state === 'EN_ROUTE' && e.ambulanceId).map((e) => e.ambulanceId))
+  const responding = fleet.filter((v) => respondingIds.has(v.id)).length
   const crewAvail = drivers.filter((d) => new Set(fleet.map((v) => v.driverId)).has(d.id) && d.status === 'available').length
   const lowFuel = fleet.filter((v) => v.fuel < 25).length
   const svcDue = fleet.filter((v) => serviceInfo(v.odometer).due).length
@@ -87,7 +89,7 @@ function Vehicles() {
       <div className="grid grid-cols-2 lg:grid-cols-6 gap-3">
         <Kpi label="Ambulances" value={`${idle(amb)}/${amb.length}`} sub="available" accent="#07514D" />
         <Kpi label="Fire trucks" value={`${idle(fire)}/${fire.length}`} sub="available" accent="#ea580c" />
-        <Kpi label="Responding" value={fleet.filter((v) => v.status === 'enroute').length} sub="en route" accent="#16a34a" />
+        <Kpi label="Responding" value={responding} sub="en route" accent="#16a34a" />
         <Kpi label="Crews free" value={crewAvail} sub="available" accent="#0B6A64" />
         <Kpi label="Low fuel" value={lowFuel} sub="< 25%" accent={lowFuel ? '#dc2626' : '#64748b'} />
         <Kpi label="Service due" value={svcDue} sub={`≤ ${DUE_SOON_KM} km`} accent={svcDue ? '#d97706' : '#64748b'} />

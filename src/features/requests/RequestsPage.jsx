@@ -72,15 +72,15 @@ export default function DispatchBoard() {
   const [override, setOverride] = useState(null)
   const [menuId, setMenuId] = useState(null)
   const [showCleared, setShowCleared] = useState(false)
-  const [cleared, setCleared] = useState(() => new Set(JSON.parse(localStorage.getItem('psiog_db_cleared') || '[]')))
-  const persistCleared = (set) => { localStorage.setItem('psiog_db_cleared', JSON.stringify([...set])); setCleared(new Set(set)) }
+  const cleared = useFleetStore((s) => s.clearedIds)
+  const setClearedIds = useFleetStore((s) => s.setClearedIds)
+  const persistCleared = (set) => setClearedIds(set)
 
   const [bulkBusy, setBulkBusy] = useState(false)
   const clearableNow = emergencies.filter((e) => FINISHED.includes(e.state) && !cleared.has(e.id))
   const noFacility = emergencies.filter((e) => NO_FACILITY.includes(e.state) && !cleared.has(e.id))
   function clearCompleted() { const n = new Set(cleared); clearableNow.forEach((e) => n.add(e.id)); persistCleared(n) }
   function restoreCleared() { persistCleared(new Set()) }
-  // Cancel every "no facility" incident (frees their unit) and hide them in one click.
   async function clearNoFacility() {
     if (!noFacility.length) return
     setBulkBusy(true)
@@ -253,7 +253,7 @@ function Kpi({ value, label, color, icon }) {
       <div className="h-9 w-9 grid place-items-center" style={{ background: `${color}1a`, color }}><Icon name={icon} size={18} /></div>
       <div>
         <div className="text-2xl font-bold leading-none" style={{ color }}>{value}</div>
-        <div className="text-[11px] text-cmd-muted mt-1 flex items-center gap-1"><span className="h-1.5 w-1.5" style={{ background: color }} />{label}</div>
+        <div className="text-[11px] text-cmd-muted mt-1 flex items-center gap-1 min-h-[2em]"><span className="h-1.5 w-1.5 shrink-0" style={{ background: color }} />{label}</div>
       </div>
     </div>
   )

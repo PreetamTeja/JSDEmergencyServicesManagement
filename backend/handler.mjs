@@ -72,6 +72,7 @@ const SCOPES = {
   ADMIN: ['requests'],
   HR: ['bookings'],
   FUEL: ['fleet'],
+  MCP: ['infra'],
 }
 const canPost = (source, resource) => {
   const allow = SCOPES[source]
@@ -1026,9 +1027,9 @@ export const handler = async (event) => {
       return ok({ id, status: 'EN_ROUTE', zone: found.zone.name, fare, etaMin: Math.round((distKm / 28) * 60) }, 201)
     }
 
-    // ---- infra metrics (admin only — proxies CloudWatch so browser needs no AWS creds) ----
+    // ---- infra metrics (admin JWT or MCP API key) ----
     if (method === 'GET' && seg[0] === 'infra' && seg[1] === 'metrics') {
-      if (!admin) return err(403, 'FORBIDDEN', 'Admin only')
+      if (!admin && apiKeySource !== 'MCP') return err(403, 'FORBIDDEN', 'Admin or MCP key required')
       const rangeMin = Number(event.queryStringParameters?.range_min) || 1440
       const periodMin = Number(event.queryStringParameters?.period_min) || 60
       const end = new Date()

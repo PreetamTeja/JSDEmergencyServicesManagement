@@ -1,0 +1,89 @@
+MCP SECURITY, INTEGRATION, AND ADMIN CHATBOT OPTIONS
+JSD TATA Emergency Services Platform
+Prepared: 30 June 2026
+
+
+SECTION 1. WHAT MCP IS AND HOW IT WORKS IN OUR SYSTEM.
+
+MCP stands for Model Context Protocol. It is an open standard developed to allow AI assistants, specifically large language models, to call external tools in a structured and controlled way. Instead of the AI guessing at information or generating it from memory, it can invoke a defined tool, receive a real result, and use that result to answer accurately.
+
+In our system, the MCP server is a Node.js script located at infra/mcp/cloudwatch-server.mjs. It is not a web server that runs permanently. It is a process that Claude Code, the AI development tool, spawns on demand when a developer asks a question that requires live infrastructure data. The process communicates with Claude Code through standard input and standard output, which is a pipe between two processes on the same machine. There is no open network port, no daemon running in the background, and no persistent connection of any kind.
+
+The registration of this server is defined in a file called .mcp.json at the root of the project. This file tells Claude Code where to find the server script, what command to run it with, and what environment variables to pass to it. When a developer opens Claude Code and asks a question such as how many errors occurred in the last hour, Claude Code reads the .mcp.json registration, spawns the MCP process, sends a JSON request through the pipe, receives the JSON response, and then uses that data to form a human-readable answer.
+
+The five tools exposed by our MCP server are get_lambda_metrics, get_recent_errors, query_logs, get_infra_summary, and get_infra_metrics. Each tool maps to a single HTTP call to our backend API at the /infra/metrics endpoint. The MCP server does not call AWS directly. It calls our own Lambda function, which already has the correct AWS permissions to query CloudWatch. This is an important design decision explained in full in Section 3.
+
+The data returned by the tools includes invocation counts, error rates, average and p99 duration, throttle counts, cold start counts, and recent error and warning log lines from the Lambda CloudWatch log group. This data is returned as structured JSON to Claude Code, which then presents it to the developer in plain language.
+
+
+SECTION 2. THE AUTHENTICATION CHAIN FROM DEVELOPER TO AWS.
+
+Authentication in our MCP integration works in three layers.
+
+The first layer is the developer's identity. The developer signs into the Jamshedpur SSO portal using their Tata Steel Cognito account. The SSO portal opens the Emergency Services app and passes two tokens on the URL, the access token and the ID token. The app captures these tokens and stores them in the browser's session storage under the keys sso_token and sso_id_token. These are standard RS256 signed JSON Web Tokens issued by the Cognito user pool eu-central-1_74er6Yfnf.
+
+The second layer is the MCP server's use of that token. The developer copies the sso_token value from the browser's session storage and pastes it into the API_TOKEN field of .mcp.json. When the MCP server is spawned and a tool is called, it takes this token and sends it in the Authorization header as a Bearer token to the backend API. The backend Lambda verifies the token's RS256 signature against the Cognito JWKS endpoint, checks the expiry claim, reads the cognito:groups claim, and confirms the caller is a member of the transport-admin group before returning any data. If any of these checks fail, the Lambda returns 403 Forbidden and the MCP tool reports the error clearly to the developer.
+
+The third layer is the Lambda's own AWS identity. The Lambda function runs under an IAM role called psiog-transport-api-role. This role has a policy named cloudwatch-read that allows only the actions cloudwatch:GetMetricData, cloudwatch:GetMetricStatistics, logs:FilterLogEvents, logs:GetLogEvents, and logs:DescribeLogGroups. All of these actions are read-only. The role has no write permissions on any AWS service. This means that even if someone obtained a valid admin JWT and called /infra/metrics, the maximum data they could retrieve is metric numbers and log text. They could not modify any resource, invoke any function, access DynamoDB, or touch S3.
+
+
+SECTION 3. WHY WE PROXY THROUGH THE BACKEND INSTEAD OF CALLING AWS DIRECTLY.
+
+The original design of the MCP server called AWS CloudWatch directly using the AWS SDK. This required the developer to have AWS credentials configured on their local machine, typically through the AWS CLI and a credentials file at the location HOME/.aws/credentials. In our environment, developers do not have individual AWS CLI permissions. Access to AWS is controlled and limited to deployment pipelines and specific service accounts.
+
+Rather than granting local AWS credentials to every developer who needs to use the MCP tools, we redesigned the MCP server to call the backend API instead. The backend Lambda already has the necessary CloudWatch permissions through its IAM role. By routing the request through the Lambda, we achieve several things at once.
+
+First, we reuse the same authentication mechanism that the React application already uses. The developer uses the same Cognito token they already have from signing in through the SSO portal. No additional credentials of any kind need to be provisioned, stored, or rotated.
+
+Second, we ensure that the CloudWatch access is always mediated by the Lambda's own narrowly scoped IAM role. No developer machine ever holds AWS credentials. The blast radius of a compromised developer token is limited to what the Lambda role can do, which is read CloudWatch data only.
+
+Third, the backend API endpoint is already protected by the admin role check. Any attempt to call /infra/metrics without a valid admin JWT returns a 403 response before any CloudWatch call is ever made.
+
+Fourth, this architecture means that if we ever need to change what data is returned, add rate limiting, or audit who is querying infrastructure data, we do it in one place in the Lambda handler, and all clients including the React dashboard and the MCP server benefit automatically.
+
+
+SECTION 4. WHAT CANNOT HAPPEN THROUGH THE MCP SERVER.
+
+Because the MCP server is a read-only proxy over a read-only AWS policy, there is a clear and hard boundary on what is possible through it.
+
+The MCP server cannot write to DynamoDB, because the Lambda role has no DynamoDB permissions at all.
+
+The MCP server cannot invoke other Lambda functions, because the Lambda role has no lambda:InvokeFunction permission scoped to other functions.
+
+The MCP server cannot modify API Gateway routes or settings, because the Lambda role has no apigateway write permissions.
+
+The MCP server cannot access S3 buckets, because the Lambda role has no S3 permissions.
+
+The MCP server cannot create or delete CloudWatch alarms, because the role has no cloudwatch:PutMetricAlarm or related write actions.
+
+The MCP server cannot exfiltrate user data, because CloudWatch metrics and log lines from the Lambda do not contain personally identifiable information. The Lambda logs contain request IDs, status codes, function durations, and error messages, none of which include employee names, employee IDs, medical details, or contact information.
+
+The MCP server cannot bypass the token expiry, because the Lambda verifies the JWT expiry on every single request. A token older than one hour is rejected.
+
+
+SECTION 5. RISKS THAT ARE ACCEPTED AND HOW THEY ARE MANAGED.
+
+There are two residual risks that are acknowledged and managed.
+
+The first is token storage. The Cognito access token is stored in plain text inside .mcp.json on the developer's machine. If the machine is compromised, the token could be extracted. This risk is mitigated by three factors. The token expires after one hour, so the window of exposure is narrow. The token is an admin-scoped read-only access token, so the maximum damage is read access to CloudWatch data for one hour. The .mcp.json file must be kept out of version control, which is enforced by adding it to .gitignore.
+
+The second is prompt injection through log content. CloudWatch log lines are returned verbatim to Claude Code. A malicious actor who could write to the Lambda's log group could craft a log message containing instructions intended to manipulate the AI assistant. This is a known category of attack against LLM systems. The risk is mitigated by the fact that only the Lambda function itself writes to its log group, so an attacker would need to first compromise the Lambda, at which point the log injection would be the least of the concerns. Additionally, Claude Code treats tool results as data and not as instructions, and each log line is truncated at 500 characters, limiting the payload size for any injection attempt.
+
+
+SECTION 6. OPTION 2. A DIRECT CHATBOT IN THE ADMIN INFRA HEALTH PAGE.
+
+Rather than using the MCP server through Claude Code, we can embed an AI chatbot directly into the Infra Health page of the React application. This chatbot would live in the /admin/infra route, sitting alongside the existing KPI strip, charts, and error log.
+
+The chatbot works as follows. The developer types a question in natural language into a chat input, for example, why are there so many cold starts this afternoon, or show me all timeout errors from the last two hours, or is the error rate trending up or down today. The React frontend sends this question to a new backend endpoint, for example POST /infra/chat. The Lambda handler at this endpoint calls the same CloudWatch data it already fetches for /infra/metrics, assembles the metrics and log lines as context, and then calls Amazon Bedrock Nova Lite, which is the same model already used by the voice agent, with the developer's question and the CloudWatch context as the prompt. Bedrock returns a plain language answer, which the Lambda sends back to the frontend, where it appears in the chat panel.
+
+This approach has several advantages over the MCP approach. It requires no local setup at all. The developer does not need to install anything, configure .mcp.json, paste tokens, or restart Claude Code. It works from any browser, including on a mobile device or a colleague's machine. It is accessible to non-developers such as operations managers or IT administrators who need to understand the platform's health without using a developer tool. It uses the same Cognito admin JWT already in the browser session, so there is no additional authentication step. The chatbot can also trigger fixes or actions, for example it could offer to redeploy the Lambda if it detects a sustained error spike, or it could send an alert email if the p99 latency exceeds a threshold.
+
+The chatbot would also support follow-up questions within a session. If the developer asks how many errors occurred today and then follows up with which ones are timeouts, the chatbot retains the conversation context within the browser session and can answer correctly without the developer re-stating all the context.
+
+The limitation of this approach compared to MCP is that the chatbot is scoped to the data our backend already fetches. The MCP server, when used through Claude Code, allows the AI to interact with the full repository, including code files, configuration, and git history, alongside the CloudWatch data. For debugging a specific bug in the code while simultaneously checking whether it caused an error spike in production, the MCP approach gives a more complete picture. For operations monitoring and incident response by team members who are not using Claude Code, the embedded chatbot is the better experience.
+
+The two options are not mutually exclusive. We can have both, the MCP server for developer use through Claude Code, and the embedded chatbot in the Infra Health page for operational use by the wider team.
+
+If Option 2 is chosen, the changes required are as follows. First, a new endpoint POST /infra/chat is added to handler.mjs. This endpoint is admin-gated, accepts a messages array and a data_window_min parameter, fetches the current CloudWatch metrics, and calls Bedrock with the assembled context. Second, the Lambda role receives a new IAM policy granting bedrock:InvokeModel for the Nova Lite model ARN in eu-west-1. Third, a ChatPanel component is added to the InfraHealthPage.jsx, consisting of a scrollable message list, a text input, and a send button. The panel renders the conversation history and handles streaming or polling for the response. Fourth, a new api.chatInfra method is added to services/api.js to call the endpoint.
+
+No new infrastructure is required. No new AWS services beyond the Bedrock call are needed. The entire feature fits within the existing Lambda, IAM role, and React application.

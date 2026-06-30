@@ -11,3 +11,6 @@ Thumbs.db
 
 # documents / generated PDFs (kept local, not pushed)
 *.pdf
+
+# MCP config contains API keys — never commit
+.mcp.json

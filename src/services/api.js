@@ -48,6 +48,13 @@ export const api = {
   uploadPolicy: (content_base64, filename) => req('/policy', { method: 'POST', body: { content_base64, filename } }),
   reassignEmergency: (id, payload) => req(`/emergencies/${id}/reassign`, { method: 'POST', body: payload }),
   writeRoute: (id, payload) => req(`/emergencies/${id}/route`, { method: 'POST', body: payload }),
+  // admin: infra health (proxies CloudWatch — admin JWT required)
+  getInfraMetrics: (params = {}) => {
+    const qs = new URLSearchParams()
+    if (params.range_min) qs.set('range_min', params.range_min)
+    if (params.period_min) qs.set('period_min', params.period_min)
+    return req(`/infra/metrics?${qs}`)
+  },
 }
 
 // Normalize DynamoDB fleet items (snake_case keys) to the shape the UI uses.

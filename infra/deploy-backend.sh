@@ -54,6 +54,10 @@ aws iam put-role-policy --role-name "$ROLE" --policy-name policy-upload \
 aws iam put-role-policy --role-name "$ROLE" --policy-name notifications \
   --policy-document '{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Action":["sns:Publish","ses:SendEmail"],"Resource":"*"}]}'
 
+# CloudWatch read access for /infra/metrics (admin dashboard only — no write permissions).
+aws iam put-role-policy --role-name "$ROLE" --policy-name cloudwatch-read \
+  --policy-document '{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Action":["cloudwatch:GetMetricData","cloudwatch:GetMetricStatistics","logs:FilterLogEvents","logs:GetLogEvents","logs:DescribeLogGroups"],"Resource":"*"}]}'
+
 # ---- 2) package ----
 echo "Packaging..."
 rm -f /tmp/fn.zip

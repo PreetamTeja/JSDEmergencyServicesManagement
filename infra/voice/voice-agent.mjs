@@ -8,6 +8,25 @@
    ===================================================================== */
 import { BedrockRuntimeClient, ConverseCommand } from '@aws-sdk/client-bedrock-runtime'
 import crypto from 'crypto'
+import { readFileSync, readdirSync } from 'fs'
+import { join, dirname } from 'path'
+import { fileURLToPath } from 'url'
+
+const __dir = dirname(fileURLToPath(import.meta.url))
+// OKF knowledge bundle — loaded once at cold start
+const OKF_DIR = join(__dir, '..', 'knowledge')
+function loadOKF() {
+  try {
+    const sections = ['emergency-types/index.md', 'vehicles/index.md']
+    const locFiles = readdirSync(join(OKF_DIR, 'locations'))
+      .filter((f) => f !== 'index.md' && f.endsWith('.md'))
+      .map((f) => `locations/${f}`)
+    return [...sections, ...locFiles]
+      .map((p) => { try { return readFileSync(join(OKF_DIR, p), 'utf8') } catch { return '' } })
+      .join('\n\n---\n\n')
+  } catch { return '' }
+}
+const OKF_KNOWLEDGE = loadOKF()
 
 const bedrock = new BedrockRuntimeClient({})
 const MODEL = process.env.BEDROCK_MODEL_ID || 'eu.amazon.nova-lite-v1:0'
@@ -138,11 +157,22 @@ async function doDispatch(s, requestedBy, locs) {
 
 /* ---------- slot extraction from the transcript ---------- */
 async function extractSlots(transcript, locs) {
+  // OKF knowledge bundle gives the model rich aliases, zone context, and
+  // emergency-type guidance — far more than a flat id=name list.
+  // Fallback to flat list if bundle failed to load (e.g. local dev without files).
+  const locationContext = OKF_KNOWLEDGE
+    ? `Use the Open Knowledge Format bundle below to resolve locations and emergency types.\n\n${OKF_KNOWLEDGE}`
+    : `Locations (id=name): ` + locs.map((l) => `${l.id}=${l.name}`).join('; ')
+
   const sys = [{ text:
     `You read an emergency phone call transcript and extract structured fields. Output ONLY minified JSON, nothing else:\n` +
     `{"kind":"medical|fire|","pickup_id":"a location id from the list or empty","pickup_text":"the place the caller said or empty","case_type":"Cardiac|Trauma|General|Maternity|Pediatric|","severity":"Critical|Urgent|Normal|","patients":0}\n` +
-    `Rules: kind=fire for any fire/smoke/blaze, otherwise medical if it's a medical/health emergency, else empty. Map the spoken place to the closest location id; also copy the spoken place into pickup_text. "patients" = number of people affected/injured (integer); use 0 if unknown. A bomb blast, explosion, building collapse, stampede, gas leak, or "many/multiple people injured" is a MASS CASUALTY — set case_type to Trauma, severity to Critical, and patients to the stated count (estimate generously if they say "many"). Leave a field "" or 0 ONLY if the caller truly has not indicated it. Do not invent values that weren't implied.\n` +
-    `Locations (id=name): ` + locs.map((l) => `${l.id}=${l.name}`).join('; ') }]
+    `Rules: kind=fire for any fire/smoke/blaze, otherwise medical if it's a medical/health emergency, else empty. ` +
+    `Map the spoken place to the closest location id using the aliases and context in the knowledge bundle; also copy the spoken place into pickup_text. ` +
+    `"patients" = number of people affected/injured (integer); use 0 if unknown. ` +
+    `A bomb blast, explosion, building collapse, stampede, gas leak, or "many/multiple people injured" is a MASS CASUALTY — set case_type to Trauma, severity to Critical, and patients to the stated count (estimate generously if they say "many"). ` +
+    `Leave a field "" or 0 ONLY if the caller truly has not indicated it. Do not invent values that weren't implied.\n\n` +
+    locationContext }]
   const out = await bedrock.send(new ConverseCommand({ modelId: MODEL, system: sys, messages: [{ role: 'user', content: [{ text: transcript || '(no input yet)' }] }] }))
   const raw = out.output.message.content.find((c) => c.text)?.text || ''
   const m = raw.match(/\{[\s\S]*\}/)

@@ -3,6 +3,8 @@
    AWS SDK v3 is preinstalled in the nodejs20.x runtime.
    Tables (env overridable): TransportRequests, Fleet, ShuttleCards, ReferenceData
    ===================================================================== */
+import { CloudWatchClient, GetMetricDataCommand } from '@aws-sdk/client-cloudwatch'
+import { CloudWatchLogsClient, FilterLogEventsCommand } from '@aws-sdk/client-cloudwatch-logs'
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb'
 import {
   DynamoDBDocumentClient, QueryCommand, ScanCommand, GetCommand,
@@ -14,6 +16,10 @@ import { LambdaClient, InvokeCommand } from '@aws-sdk/client-lambda'
 import { SNSClient, PublishCommand } from '@aws-sdk/client-sns'
 import { SESClient, SendEmailCommand } from '@aws-sdk/client-ses'
 import { randomUUID } from 'crypto'
+
+const cw = new CloudWatchClient({})
+const cwl = new CloudWatchLogsClient({})
+const FN_NAME = process.env.AWS_LAMBDA_FUNCTION_NAME || 'psiog-transport-api'
 
 const ddb = DynamoDBDocumentClient.from(new DynamoDBClient({}), {
   marshallOptions: { removeUndefinedValues: true },
@@ -990,7 +996,7 @@ export const handler = async (event) => {
       const card = (await ddb.send(new GetCommand({ TableName: TBL.cards, Key: { PK: `CARD#${body.card_id}`, SK: 'META' } }))).Item
       if (!card) return err(404, 'NOT_FOUND', 'card not found')
       const levels = await policyLevels()
-      const band = (levels || []).find((b) => b.id === card.grade) || bandForLevel(levels, card.job_level)
+      const band = (levels || []).find((b) => b.id === card.grade) || bandForBand(levels, card.employee_band ?? 0)
       const cap = band?.shuttle_rides ?? 0
       const month = now().slice(0, 7)
       const pt = resolvePickup(ref, body.pickup)
@@ -1018,6 +1024,68 @@ export const handler = async (event) => {
       await setVehicleStatus(found.vehicle, 'enroute')
       if (found.vehicle.driver_id) await setDriverStatus(found.vehicle.driver_id, 'on-trip', id)
       return ok({ id, status: 'EN_ROUTE', zone: found.zone.name, fare, etaMin: Math.round((distKm / 28) * 60) }, 201)
+    }
+
+    // ---- infra metrics (admin only — proxies CloudWatch so browser needs no AWS creds) ----
+    if (method === 'GET' && seg[0] === 'infra' && seg[1] === 'metrics') {
+      if (!admin) return err(403, 'FORBIDDEN', 'Admin only')
+      const rangeMin = Number(event.queryStringParameters?.range_min) || 1440
+      const periodMin = Number(event.queryStringParameters?.period_min) || 60
+      const end = new Date()
+      const start = new Date(Date.now() - rangeMin * 60_000)
+      const period = periodMin * 60
+      const dim = (fn) => [{ Name: 'FunctionName', Value: fn }]
+      const queries = [
+        { Id: 'inv',   MetricStat: { Metric: { Namespace: 'AWS/Lambda', MetricName: 'Invocations',          Dimensions: dim(FN_NAME) }, Period: period, Stat: 'Sum' } },
+        { Id: 'err',   MetricStat: { Metric: { Namespace: 'AWS/Lambda', MetricName: 'Errors',               Dimensions: dim(FN_NAME) }, Period: period, Stat: 'Sum' } },
+        { Id: 'thr',   MetricStat: { Metric: { Namespace: 'AWS/Lambda', MetricName: 'Throttles',            Dimensions: dim(FN_NAME) }, Period: period, Stat: 'Sum' } },
+        { Id: 'durA',  MetricStat: { Metric: { Namespace: 'AWS/Lambda', MetricName: 'Duration',             Dimensions: dim(FN_NAME) }, Period: period, Stat: 'Average' } },
+        { Id: 'durP',  MetricStat: { Metric: { Namespace: 'AWS/Lambda', MetricName: 'Duration',             Dimensions: dim(FN_NAME) }, Period: period, Stat: 'p99' } },
+        { Id: 'cold',  MetricStat: { Metric: { Namespace: 'AWS/Lambda', MetricName: 'InitDuration',         Dimensions: dim(FN_NAME) }, Period: period, Stat: 'SampleCount' } },
+        { Id: 'conc',  MetricStat: { Metric: { Namespace: 'AWS/Lambda', MetricName: 'ConcurrentExecutions', Dimensions: dim(FN_NAME) }, Period: period, Stat: 'Maximum' } },
+      ]
+      let cwResult = null
+      try { cwResult = await cw.send(new GetMetricDataCommand({ MetricDataQueries: queries, StartTime: start, EndTime: end })) } catch (e) { return err(500, 'CW_ERROR', e.message) }
+      const byId = Object.fromEntries((cwResult.MetricDataResults || []).map((m) => [m.Id, m]))
+      const sum = (id) => (byId[id]?.Values || []).reduce((a, v) => a + v, 0)
+      const avg = (id) => { const vs = byId[id]?.Values || []; return vs.length ? vs.reduce((a, v) => a + v, 0) / vs.length : 0 }
+      const max = (id) => Math.max(0, ...(byId[id]?.Values || [0]))
+      const series = (id) => (byId[id]?.Timestamps || [])
+        .map((t, i) => ({ t: new Date(t).toISOString(), v: +(byId[id].Values[i] || 0).toFixed(2) }))
+        .sort((a, b) => a.t.localeCompare(b.t))
+      const invocations = sum('inv')
+      const errors = sum('err')
+      // Recent errors from CloudWatch Logs (best-effort — empty if no log group yet)
+      let recentErrors = []
+      try {
+        const le = await cwl.send(new FilterLogEventsCommand({
+          logGroupName: `/aws/lambda/${FN_NAME}`,
+          startTime: Date.now() - Math.min(rangeMin, 60) * 60_000,
+          filterPattern: '?ERROR ?Error ?WARN',
+          limit: 15,
+        }))
+        recentErrors = (le.events || []).map((e) => ({ timestamp: new Date(e.timestamp).toISOString(), message: (e.message || '').trim().slice(0, 400) }))
+      } catch {}
+      return ok({
+        function_name: FN_NAME,
+        range_min: rangeMin,
+        period_min: periodMin,
+        invocations,
+        errors,
+        error_rate_pct: invocations > 0 ? +((errors / invocations) * 100).toFixed(2) : 0,
+        throttles: sum('thr'),
+        duration_avg_ms: +avg('durA').toFixed(1),
+        duration_p99_ms: +avg('durP').toFixed(1),
+        cold_starts: sum('cold'),
+        max_concurrent: max('conc'),
+        series: {
+          invocations: series('inv'),
+          errors: series('err'),
+          duration_avg: series('durA'),
+        },
+        recent_errors: recentErrors,
+        generated_at: now(),
+      })
     }
 
     return err(404, 'NO_ROUTE', `No handler for ${method} ${path}`)

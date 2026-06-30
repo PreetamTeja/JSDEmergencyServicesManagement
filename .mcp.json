@@ -1,0 +1,14 @@
+{
+  "mcpServers": {
+    "jsd-cloudwatch": {
+      "command": "node",
+      "args": ["infra/mcp/cloudwatch-server.mjs", "--stdio"],
+      "env": {
+        "AWS_REGION": "eu-west-1",
+        "LAMBDA_FUNCTION_NAME": "psiog-transport-api",
+        "VOICE_FUNCTION_NAME": "psiog-voice-agent",
+        "API_GATEWAY_ID": ""
+      }
+    }
+  }
+}

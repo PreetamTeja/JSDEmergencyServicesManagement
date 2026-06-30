@@ -11,6 +11,7 @@ import DispatchBoard from './features/requests/RequestsPage'
 import UserPortal from './portal/UserPortal'
 import PolicyControls from './components/common/PolicyControls'
 import TrackPage from './features/track/TrackPage'
+import InfraHealthPage from './features/admin/InfraHealthPage'
 
 // Public shareable tracking links bypass auth + the authed data load entirely.
 const IS_TRACK = typeof window !== 'undefined' && window.location.pathname.startsWith('/track/')
@@ -23,6 +24,7 @@ const ICONS = {
   emergency: '<path d="M3 8h10v7H3z"/><path d="M13 10h4l3 3v2h-7z"/><circle cx="7" cy="17.5" r="1.6"/><circle cx="17" cy="17.5" r="1.6"/><path d="M6 11h3M7.5 9.5v3"/>',
   requests: '<path d="M9 5h10M9 12h10M9 19h10"/><path d="M4.5 5h.01M4.5 12h.01M4.5 19h.01"/>',
   powerbi: '<path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/>',
+  infra: '<path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>',
 }
 
 const SECTIONS = [
@@ -37,6 +39,9 @@ const SECTIONS = [
   ] },
   { title: 'Analytics', items: [
     { to: '/powerbi', label: 'Power BI', icon: 'powerbi' },
+  ] },
+  { title: 'Admin', items: [
+    { to: '/admin/infra', label: 'Infra Health', icon: 'infra' },
   ] },
 ]
 
@@ -237,6 +242,7 @@ function Console({ session, onSignOut }) {
           <Route path="/map" element={<LiveMapPage />} />
           <Route path="/fleet" element={<FleetPage />} />
           <Route path="/powerbi" element={<PowerBIPage />} />
+          <Route path="/admin/infra" element={<InfraHealthPage />} />
         </Routes>
       </main>
     </div>

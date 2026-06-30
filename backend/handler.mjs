@@ -13,8 +13,6 @@ import {
 import { verifyJwt, isAdminClaims, identityOf, JWT_ENABLED } from './auth.mjs'
 import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3'
 import { LambdaClient, InvokeCommand } from '@aws-sdk/client-lambda'
-import { SNSClient, PublishCommand } from '@aws-sdk/client-sns'
-import { SESClient, SendEmailCommand } from '@aws-sdk/client-ses'
 import { randomUUID } from 'crypto'
 
 const cw = new CloudWatchClient({})
@@ -100,11 +98,7 @@ function validateEmergency(b) {
   if (b.blood_bank_id != null && !str(b.blood_bank_id, 80)) return 'invalid blood_bank_id'
   if (b.note != null && !str(b.note, 500)) return 'note too long'
   if (b.requested_by != null && !str(b.requested_by, 120)) return 'invalid requested_by'
-  if (b.contact != null) {
-    if (typeof b.contact !== 'object') return 'invalid contact'
-    if (b.contact.phone != null && !/^\+[1-9]\d{6,14}$/.test(String(b.contact.phone))) return 'phone must be E.164 (e.g. +9198…)'
-    if (b.contact.email != null && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(String(b.contact.email))) return 'invalid email'
-  }
+
   return null
 }
 
@@ -314,10 +308,6 @@ async function completeOp(item) {
   }
   if (item.assigned_driver_id) await setDriverStatus(item.assigned_driver_id, 'available', null)
   await patchOpsStatus(item, 'COMPLETED')
-  if (item.entity === 'EMG' && item.contact) {
-    const what = item.kind === 'fire' ? 'Fire response' : item.kind === 'blood' ? 'Blood delivery' : 'Ambulance response'
-    await notify(item.contact, `${item.id} completed`, `${what} ${item.id} is complete. Thank you.`)
-  }
 }
 // Server-side auto-complete: free trips whose ETA passed (and heal legacy stuck rows).
 async function sweepDue() {
@@ -346,31 +336,9 @@ const POLICY_KEY = process.env.POLICY_KEY || 'policy.pdf'
 const etaComplete = (mins) => Math.floor(Date.now() / 1000) + Math.max(120, Math.round(mins * 60))
 const SPEED_KMH = Number(POLICY.speed_kmh) || 28
 
-/* ---------- requester notifications (SMS via SNS, email via SES) ----------
-   Best-effort and non-blocking: a notification failure never fails a dispatch.
-   Configure SES_FROM (a verified SES sender) to enable email; SMS needs only a
-   valid E.164 phone on the request. */
-const sns = new SNSClient({})
-const ses = new SESClient({})
-const SES_FROM = process.env.SES_FROM
 // Public base URL of the SPA, used to build shareable tracking links.
 const APP_BASE_URL = (process.env.APP_BASE_URL || '').replace(/\/+$/, '')
 const trackUrl = (rec) => (APP_BASE_URL && rec.track_token) ? `${APP_BASE_URL}/track/${rec.id}?t=${rec.track_token}` : null
-async function notify(contact, subject, message) {
-  if (!contact || (!contact.phone && !contact.email)) return
-  if (contact.phone) {
-    try { await sns.send(new PublishCommand({ PhoneNumber: contact.phone, Message: message })) }
-    catch (e) { console.error('NOTIFY_SMS', e?.name) }
-  }
-  if (contact.email && SES_FROM) {
-    try {
-      await ses.send(new SendEmailCommand({
-        Source: SES_FROM, Destination: { ToAddresses: [contact.email] },
-        Message: { Subject: { Data: subject }, Body: { Text: { Data: message } } },
-      }))
-    } catch (e) { console.error('NOTIFY_EMAIL', e?.name) }
-  }
-}
 
 /* ---------- road routing + simulated traffic (server-side ETA) ----------
    So the API response carries a realistic, traffic-aware ETA even when no dispatcher
@@ -969,23 +937,6 @@ export const handler = async (event) => {
           : r.status === 'NO_HOSPITAL' ? `No facility with ${r.case_type} + capacity`
           : r.status === 'NO_BLOODBANK' ? 'No blood bank configured' : undefined,
       })
-      // Notify the requester once (best-effort, after dispatch is decided).
-      if (body.contact) {
-        const what = kind === 'fire' ? 'Fire truck' : kind === 'blood' ? 'Blood delivery' : 'Ambulance'
-        const dispatched = records.filter((r) => r.status === 'EN_ROUTE').length
-        let msg
-        if (units > 1) {
-          msg = dispatched > 0 ? `${dispatched} of ${units} units dispatched for incident ${incidentId}. Help is on the way.`
-            : `Your emergency ${incidentId} is received; all units are busy and you are in the queue.`
-        } else {
-          const r0 = records[0]
-          const link = trackUrl(r0)
-          msg = r0.status === 'EN_ROUTE'
-            ? `Help is on the way. ${what} dispatched for ${r0.id}, ETA ~${Math.round(r0.eta_to_pickup_min || 0)} min.${link ? ` Track live: ${link}` : ''}`
-            : `Your request ${r0.id} is received; all units are busy and you are in the queue.`
-        }
-        await notify(body.contact, 'JSD TATA Emergency Services', msg)
-      }
       if (units === 1) return ok(resp(records[0]), 201)
       return ok({ incident_id: incidentId, units, dispatched: records.filter((r) => r.status === 'EN_ROUTE').length, results: records.map(resp) }, 201)
     }

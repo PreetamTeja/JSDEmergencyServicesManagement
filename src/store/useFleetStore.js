@@ -191,14 +191,14 @@ export const useFleetStore = create((set, get) => ({
 
   // ---------- emergency ----------
   // units > 1 = mass-casualty (multiple ambulances to one incident); patients = multi-patient count.
-  async createEmergency({ kind = 'medical', pickup, pickupPoint, bloodBank, caseType, severity = 'Urgent', note, requestedBy, units = 1, patients = 1, contact }) {
+  async createEmergency({ kind = 'medical', pickup, pickupPoint, bloodBank, caseType, severity = 'Urgent', note, requestedBy, units = 1, patients = 1 }) {
     try {
       // Blood requests carry the requesting hospital's coordinates as the pickup
       // plus a destination blood bank; medical/fire use a Location ref.
       const pickupPayload = kind === 'blood' ? pickupPoint : { ref: pickup }
       const r = await api.createEmergency({ external_ref: 'UI-' + Date.now(), kind, source: kind === 'fire' ? 'FIRE' : 'HOSPITAL',
         pickup: pickupPayload, case_type: kind === 'fire' ? 'Fire' : kind === 'blood' ? 'Blood' : caseType,
-        blood_bank_id: bloodBank, severity, requested_by: requestedBy, note, units, patients, contact })
+        blood_bank_id: bloodBank, severity, requested_by: requestedBy, note, units, patients })
       await get().refreshFromApi(); await get().hydrateLive()
       if (r.incident_id) {
         // mass-casualty summary

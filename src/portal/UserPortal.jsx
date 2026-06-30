@@ -40,8 +40,6 @@ export default function UserPortal({ session, onSignOut }) {
   const [reqTab, setReqTab] = useState('live') // live | completed
   const [mass, setMass] = useState(false)
   const [patients, setPatients] = useState(5)
-  const [phone, setPhone] = useState('')
-  const [email, setEmail] = useState('')
   const isFire = kind === 'fire'
   // Preview only — the backend decides the real count from the active policy.
   const per = Number(policy?.patients_per_ambulance) || 4
@@ -60,12 +58,9 @@ export default function UserPortal({ session, onSignOut }) {
   const completedMine = mine.filter((e) => !LIVE_STATES.includes(e.state))
   const shownReqs = reqTab === 'live' ? activeMine : completedMine
 
-  const contact = (phone.trim() || email.trim())
-    ? { phone: phone.trim() || undefined, email: email.trim() || undefined } : undefined
-
   async function submit() {
     setBusy(true)
-    const r = await createEmergency({ kind, pickup, caseType, severity, requestedBy: myId, contact,
+    const r = await createEmergency({ kind, pickup, caseType, severity, requestedBy: myId,
       units: 1, patients: (!isFire && mass) ? (Number(patients) || 2) : 1 })
     setBusy(false); setResult(r)
   }
@@ -149,17 +144,6 @@ export default function UserPortal({ session, onSignOut }) {
                   </div>
                 </Field>
 
-                <Field label="Notify me (optional)">
-                  <div className="grid grid-cols-2 gap-2">
-                    <input type="tel" inputMode="tel" value={phone} onChange={(e) => setPhone(e.target.value)}
-                      placeholder="+91 98XXXXXXXX"
-                      className="bg-white border border-cmd-border rounded-md px-3 py-1.5 w-full text-[13px]" />
-                    <input type="email" value={email} onChange={(e) => setEmail(e.target.value)}
-                      placeholder="you@email.com"
-                      className="bg-white border border-cmd-border rounded-md px-3 py-1.5 w-full text-[13px]" />
-                  </div>
-                  <div className="mt-1 text-[11px] text-cmd-muted">We'll text/email you when a unit is dispatched and on completion.</div>
-                </Field>
 
                 {result && (
                   <div className={`rounded-lg p-3 text-[13px] mt-1 flex items-start gap-2 ${result.ok ? 'bg-green-50 text-status-enroute' : 'bg-red-50 text-status-danger'}`}>

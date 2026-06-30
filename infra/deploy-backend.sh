@@ -50,9 +50,6 @@ aws iam put-role-policy --role-name "$ROLE" --policy-name ddb-access \
 aws iam put-role-policy --role-name "$ROLE" --policy-name policy-upload \
   --policy-document "{\"Version\":\"2012-10-17\",\"Statement\":[{\"Effect\":\"Allow\",\"Action\":[\"s3:PutObject\"],\"Resource\":\"arn:aws:s3:::${POLICY_BUCKET}/*\"},{\"Effect\":\"Allow\",\"Action\":[\"lambda:InvokeFunction\"],\"Resource\":\"arn:aws:lambda:${REGION}:${ACCOUNT}:function:${POLICY_SYNC_FUNCTION}\"}]}"
 
-# Requester notifications: SMS via SNS, email via SES.
-aws iam put-role-policy --role-name "$ROLE" --policy-name notifications \
-  --policy-document '{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Action":["sns:Publish","ses:SendEmail"],"Resource":"*"}]}'
 
 # CloudWatch read access for /infra/metrics (admin dashboard only — no write permissions).
 aws iam put-role-policy --role-name "$ROLE" --policy-name cloudwatch-read \

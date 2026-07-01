@@ -147,53 +147,88 @@ function Console({ session, onSignOut }) {
   }, [menuOpen])
 
   const linkClass = ({ isActive }) =>
-    `flex items-center gap-3 ${collapsed ? 'justify-center px-0' : 'px-3'} h-10 rounded-lg transition-colors relative ${
-      isActive ? 'bg-white/15 text-white font-medium' : 'text-white/70 hover:text-white hover:bg-white/10'}`
+    `flex items-center gap-3 ${collapsed ? 'justify-center px-0' : 'px-3'} h-10 rounded-xl transition-all duration-150 relative select-none ${
+      isActive
+        ? 'font-semibold text-[#07514D]'
+        : 'text-white/65 hover:text-white hover:bg-white/8 font-medium'
+    }`
 
   const initials = (session?.name || 'EC').split(' ').map((p) => p[0]).join('').slice(0, 2).toUpperCase()
 
   return (
-    <div className="flex h-screen overflow-hidden bg-cmd-bg text-cmd-text">
-      <aside className={`relative z-[1000] shrink-0 flex flex-col bg-accent text-white transition-all duration-200 ${collapsed ? 'w-16' : 'w-60'}`}>
-        <div className={`h-16 flex items-center ${collapsed ? 'justify-center' : 'justify-between px-3'} shrink-0 border-b border-white/10`}>
+    <div className="flex h-screen overflow-hidden bg-[#F5F6F8] text-cmd-text">
+      {/* ── Glassmorphism Sidebar ─────────────────────────────────── */}
+      <aside
+        className={`relative z-[1000] shrink-0 flex flex-col text-white transition-all duration-200 ${collapsed ? 'w-[68px]' : 'w-[240px]'}`}
+        style={{
+          background: 'rgba(7,81,77,0.93)',
+          backdropFilter: 'blur(20px)',
+          WebkitBackdropFilter: 'blur(20px)',
+          boxShadow: '4px 0 32px rgba(0,0,0,0.22), inset -1px 0 0 rgba(255,255,255,0.07)',
+        }}
+      >
+        {/* ── Logo / header ── */}
+        <div className={`h-16 flex items-center shrink-0 ${collapsed ? 'justify-center' : 'justify-between px-4'}`}
+          style={{ borderBottom: '1px solid rgba(255,255,255,0.09)' }}>
           {!collapsed && (
-            <div className="flex items-center gap-2.5 min-w-0">
-              <div className="h-9 w-9 rounded-lg bg-cta grid place-items-center text-accent font-bold text-[15px] shrink-0">TS</div>
-              <div className="leading-tight truncate">
-                <div className="font-semibold text-[15px] truncate">JSD Emergency Services</div>
-                <div className="text-[11px] text-white/70 truncate">Tata Steel · Jamshedpur</div>
-              </div>
+            <div className="leading-tight min-w-0">
+              <div className="font-bold text-[15px] text-white tracking-tight truncate">JSD Emergency</div>
+              <div className="text-[11px] truncate" style={{ color: 'rgba(214,223,39,0.75)' }}>Tata Steel · Jamshedpur</div>
             </div>
           )}
           <button onClick={toggle} title={collapsed ? 'Expand' : 'Collapse'} aria-label="Toggle navigation"
-            className="h-9 w-9 grid place-items-center rounded-lg text-white/80 hover:text-white hover:bg-white/10 shrink-0">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
+            className="h-8 w-8 grid place-items-center rounded-lg transition-colors shrink-0"
+            style={{ color: 'rgba(255,255,255,0.55)' }}
+            onMouseEnter={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.08)'; e.currentTarget.style.color = '#fff' }}
+            onMouseLeave={e => { e.currentTarget.style.background = ''; e.currentTarget.style.color = 'rgba(255,255,255,0.55)' }}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2"
               strokeLinecap="round" strokeLinejoin="round" className={`transition-transform ${collapsed ? 'rotate-180' : ''}`}>
               <path d="M15 18l-6-6 6-6" />
             </svg>
           </button>
         </div>
 
-        <div className="p-3">
-          <button onClick={() => navigate('/emergency?new=1')} title="New Emergency"
-            className={`btn-cta w-full flex items-center justify-center gap-1.5 ${collapsed ? 'px-0' : ''}`}>
-            <span className="text-[16px] leading-none">+</span>{!collapsed && 'New Emergency'}
+        {/* ── CTA button ── */}
+        <div className={`px-3 pt-3 pb-2`}>
+          <button
+            onClick={() => navigate('/emergency?new=1')}
+            title="New Emergency"
+            className={`w-full flex items-center justify-center gap-1.5 h-9 rounded-xl font-semibold text-[13px] transition-all duration-150 ${collapsed ? 'px-0' : 'px-3'}`}
+            style={{
+              background: '#D6DF27',
+              color: '#07514D',
+              boxShadow: '0 2px 12px rgba(214,223,39,0.35)',
+            }}
+            onMouseEnter={e => { e.currentTarget.style.filter = 'brightness(1.06)'; e.currentTarget.style.boxShadow = '0 4px 18px rgba(214,223,39,0.5)' }}
+            onMouseLeave={e => { e.currentTarget.style.filter = ''; e.currentTarget.style.boxShadow = '0 2px 12px rgba(214,223,39,0.35)' }}
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M12 5v14M5 12h14"/></svg>
+            {!collapsed && 'New Emergency'}
           </button>
         </div>
 
-        <nav className="flex-1 overflow-y-auto overflow-x-hidden px-2 pb-3 space-y-4 no-scrollbar">
+        {/* ── Nav links ── */}
+        <nav className="flex-1 overflow-y-auto overflow-x-hidden px-2 pb-3 space-y-4 no-scrollbar mt-1">
           {SECTIONS.map((sec) => (
             <div key={sec.title}>
-              {!collapsed && <div className="px-2 mb-1 text-[11px] uppercase tracking-wide text-white/45 font-semibold">{sec.title}</div>}
-              {collapsed && <div className="mx-2 my-2 border-t border-white/10" />}
+              {!collapsed && (
+                <div className="px-2 mb-1.5 text-[10px] uppercase tracking-widest font-semibold"
+                  style={{ color: 'rgba(255,255,255,0.35)' }}>{sec.title}</div>
+              )}
+              {collapsed && <div className="mx-3 my-2" style={{ borderTop: '1px solid rgba(255,255,255,0.09)' }} />}
               <div className="space-y-0.5">
                 {sec.items.map((n) => (
                   <NavLink key={n.to} to={n.to} className={linkClass} title={n.label}>
                     {({ isActive }) => (
                       <>
-                        {isActive && <span className="absolute left-0 top-1.5 bottom-1.5 w-1 rounded-r bg-cta" />}
-                        <Glyph name={n.icon} size={18} />
-                        {!collapsed && <span className="text-[14px]">{n.label}</span>}
+                        {isActive && (
+                          <span
+                            className="absolute inset-0 rounded-xl -z-10"
+                            style={{ background: '#D6DF27', boxShadow: '0 2px 12px rgba(214,223,39,0.3)' }}
+                          />
+                        )}
+                        <Glyph name={n.icon} size={17} />
+                        {!collapsed && <span className="text-[13.5px]">{n.label}</span>}
                       </>
                     )}
                   </NavLink>
@@ -203,17 +238,22 @@ function Console({ session, onSignOut }) {
           ))}
         </nav>
 
-        <div ref={menuRef} className="mt-auto border-t border-white/10 p-3 relative">
-          {/* expandable profile menu: active policy + sign out */}
+        {/* ── User / profile footer ── */}
+        <div ref={menuRef} className="mt-auto p-3 relative" style={{ borderTop: '1px solid rgba(255,255,255,0.09)' }}>
           {menuOpen && (
-            <div className="absolute bottom-full mb-2 left-2 w-72 bg-white text-cmd-text rounded-xl shadow-card p-3 z-[1100]">
-              <div className="pb-2 mb-2 border-b border-cmd-border">
+            <div className="absolute bottom-full mb-2 left-2 w-72 bg-white text-cmd-text rounded-2xl p-3 z-[1100]"
+              style={{ boxShadow: '0 8px 32px rgba(0,0,0,0.18), 0 1px 3px rgba(0,0,0,0.1)', border: '1px solid rgba(0,0,0,0.06)' }}>
+              <div className="pb-2 mb-2" style={{ borderBottom: '1px solid #E5E7EB' }}>
                 <div className="text-[13px] font-semibold truncate">{session?.name || 'Dispatcher'}</div>
                 <div className="text-[11px] text-cmd-muted">Control Room · admin</div>
               </div>
               <PolicyControls />
-              <button onClick={onSignOut} className="mt-3 w-full h-9 rounded-lg border border-cmd-border text-[13px] font-medium hover:bg-cmd-panel2 flex items-center justify-center gap-2">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+              <button onClick={onSignOut}
+                className="mt-3 w-full h-9 rounded-xl text-[13px] font-medium flex items-center justify-center gap-2 transition-colors"
+                style={{ border: '1px solid #E5E7EB', color: '#475467' }}
+                onMouseEnter={e => e.currentTarget.style.background = '#F5F6F8'}
+                onMouseLeave={e => e.currentTarget.style.background = ''}>
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9" />
                 </svg>
                 Sign out
@@ -221,18 +261,28 @@ function Console({ session, onSignOut }) {
             </div>
           )}
           <button onClick={() => setMenuOpen((o) => !o)} title="Profile"
-            className={`w-full flex items-center ${collapsed ? 'justify-center' : 'gap-2'} rounded-lg p-1 hover:bg-white/10`}>
-            <div className="h-9 w-9 rounded-full bg-white/15 grid place-items-center text-[12px] font-semibold shrink-0">{initials}</div>
+            className={`w-full flex items-center ${collapsed ? 'justify-center' : 'gap-2.5'} rounded-xl p-1.5 transition-colors`}
+            onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.08)'}
+            onMouseLeave={e => e.currentTarget.style.background = ''}>
+            <div className="h-8 w-8 rounded-full grid place-items-center text-[12px] font-bold shrink-0"
+              style={{ background: '#D6DF27', color: '#07514D' }}>{initials}</div>
             {!collapsed && (
               <>
-                <div className="text-[13px] leading-tight flex-1 truncate text-left"><div className="font-medium truncate">{session?.name || 'Dispatcher'}</div><div className="text-[11px] text-white/60">Control Room · admin</div></div>
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={`text-white/70 transition-transform ${menuOpen ? 'rotate-180' : ''}`}><path d="M6 15l6-6 6 6" /></svg>
+                <div className="text-[12.5px] leading-tight flex-1 truncate text-left">
+                  <div className="font-medium text-white truncate">{session?.name || 'Dispatcher'}</div>
+                  <div className="text-[10.5px]" style={{ color: 'rgba(255,255,255,0.5)' }}>Control Room · admin</div>
+                </div>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"
+                  className={`transition-transform shrink-0`} style={{ color: 'rgba(255,255,255,0.45)' }}>
+                  <path d={menuOpen ? 'M6 15l6-6 6 6' : 'M6 9l6 6 6-6'} />
+                </svg>
               </>
             )}
           </button>
         </div>
       </aside>
 
+      {/* ── Main content ── */}
       <main className="flex-1 overflow-hidden">
         <Routes>
           <Route path="/" element={<Navigate to="/dashboard" replace />} />

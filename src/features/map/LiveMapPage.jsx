@@ -145,52 +145,70 @@ export default function LiveMapPage() {
         })}
       </MapContainer>
 
-      {/* bottom-right toggles: Fleet panel + Legend (panels expand above the buttons) */}
-      <div className="absolute bottom-4 right-4 z-[500] flex flex-col items-end gap-2">
+      {/* ── Floating top header ── */}
+      <div className="absolute top-4 left-4 z-[500] flex items-center gap-3">
+        <div className="px-4 py-2.5 rounded-2xl flex items-center gap-4"
+          style={{ background: 'rgba(255,255,255,0.88)', backdropFilter: 'blur(18px)', WebkitBackdropFilter: 'blur(18px)', boxShadow: '0 4px 24px rgba(0,0,0,0.10)', border: '1px solid rgba(255,255,255,0.6)' }}>
+          <div>
+            <div className="text-[14px] font-bold text-[#0C1322]">Live Map</div>
+            <div className="text-[11px] text-[#6B7280]">Jamshedpur · real-time fleet</div>
+          </div>
+          <div className="flex items-center gap-3">
+            <StatBadge color="#16a34a" label="En route" n={totals.enroute} />
+            <StatBadge color="#07514D" label="Idle" n={totals.idle} />
+            <StatBadge color="#d97706" label="Maint." n={totals.maintenance} />
+          </div>
+          <label className="flex items-center gap-1.5 text-[12px] font-medium text-[#6B7280] cursor-pointer">
+            <input type="checkbox" checked={showZones} onChange={(e) => setShowZones(e.target.checked)} className="rounded" />
+            Zones
+          </label>
+        </div>
+      </div>
+
+      {/* ── Floating fleet panel (bottom-right) ── */}
+      <div className="absolute bottom-4 right-4 z-[500] flex flex-col items-end gap-3">
         {showFleet && (
-          <div className="panel bg-white/95 text-black w-80 max-h-[70vh] flex flex-col overflow-hidden">
-            <div className="px-4 py-3 border-b border-cmd-border">
-              <div className="label mb-2">Live Fleet · Jamshedpur</div>
-              <div className="flex gap-4 text-sm">
-                <Legend color={STATUS_COLORS.enroute} label="En route" n={totals.enroute} />
-                <Legend color={STATUS_COLORS.idle} label="Idle" n={totals.idle} />
-                <Legend color={STATUS_COLORS.maintenance} label="Maint." n={totals.maintenance} />
-              </div>
-              <label className="mt-2.5 flex items-center gap-1.5 text-xs text-cmd-muted cursor-pointer">
-                <input type="checkbox" checked={showZones} onChange={(e) => setShowZones(e.target.checked)} /> Show zones
-              </label>
+          <div className="w-80 max-h-[70vh] flex flex-col overflow-hidden"
+            style={{ background: 'rgba(255,255,255,0.93)', backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)', borderRadius: '20px', boxShadow: '0 8px 32px rgba(0,0,0,0.14)', border: '1px solid rgba(255,255,255,0.6)' }}>
+            <div className="px-4 py-3.5 shrink-0" style={{ borderBottom: '1px solid rgba(0,0,0,0.06)' }}>
+              <div className="text-[13px] font-bold text-[#0C1322] mb-2.5">Zone Fleet Pools</div>
             </div>
-            <div className="px-4 pt-2.5 pb-1 label">Zone Fleet Pools</div>
-            <div className="flex-1 overflow-auto px-2 pb-2">
+            <div className="flex-1 overflow-auto px-2 py-2 no-scrollbar">
               {counts.map(({ zone, byType, idleCount }) => {
                 const open = expanded.has(zone.id)
                 const pool = (vehiclesByZone[zone.id] || []).slice().sort((a, b) => a.type.localeCompare(b.type))
                 return (
                   <div key={zone.id} onMouseEnter={() => setHoveredZone(zone.id)} onMouseLeave={() => setHoveredZone(null)}>
                     <button onClick={() => toggleZone(zone.id)}
-                      className="w-full flex items-center gap-2 px-2 py-2 rounded-md hover:bg-cmd-panel2 transition-colors text-left">
+                      className="w-full flex items-center gap-2 px-3 py-2 rounded-xl transition-all text-left"
+                      onMouseEnter={ev => ev.currentTarget.style.background = 'rgba(0,0,0,0.04)'}
+                      onMouseLeave={ev => ev.currentTarget.style.background = ''}>
                       <span className="h-3 w-3 rounded-sm shrink-0" style={{ background: zone.color }} />
-                      <span className="font-medium text-[13px] flex-1">{zone.name}</span>
-                      <span className="flex items-center gap-1.5 text-cmd-muted">
+                      <span className="font-semibold text-[13px] text-[#0C1322] flex-1">{zone.name}</span>
+                      <span className="flex items-center gap-2 text-[#6B7280]">
                         {TYPE_ORDER.filter((t) => byType[t]).map((t) => (
-                          <span key={t} className="inline-flex items-center gap-0.5" title={TYPE_SHORT[t]}>
-                            <VehicleIcon type={t} size={13} /><span className="text-[11px]">{byType[t]}</span>
+                          <span key={t} className="inline-flex items-center gap-0.5 text-[11px]">
+                            <VehicleIcon type={t} size={12} />{byType[t]}
                           </span>
                         ))}
-                        {idleCount === 0 && <span className="text-[11px]">none free</span>}
+                        {idleCount === 0 && <span className="text-[11px] text-[#9CA3AF]">none free</span>}
                       </span>
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
-                        className={`text-cmd-muted transition-transform ${open ? 'rotate-90' : ''}`}><path d="M9 6l6 6-6 6" /></svg>
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2"
+                        className={`text-[#9CA3AF] transition-transform ${open ? 'rotate-90' : ''}`}><path d="M9 6l6 6-6 6"/></svg>
                     </button>
                     {open && (
-                      <div className="ml-3 pl-3 border-l border-cmd-border space-y-0.5 pb-1.5">
+                      <div className="ml-4 pl-3 pb-1.5 space-y-0.5" style={{ borderLeft: '2px solid rgba(0,0,0,0.07)' }}>
                         {pool.map((v) => (
                           <button key={v.id} onClick={() => setSelectedId(v.id)}
-                            className="w-full flex items-center gap-2 px-2 py-1 rounded text-[12px] hover:bg-cmd-panel2 text-left">
+                            className="w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-[12px] text-left transition-all"
+                            onMouseEnter={ev => ev.currentTarget.style.background = 'rgba(0,0,0,0.04)'}
+                            onMouseLeave={ev => ev.currentTarget.style.background = ''}>
                             <span className="h-2 w-2 rounded-full shrink-0" style={{ background: STATUS_COLORS[v.status] }} />
-                            <span className="text-accent"><VehicleIcon type={v.type} size={13} /></span>
-                            <span className="font-mono flex-1 truncate">{v.reg}</span>
-                            <span className="text-cmd-muted capitalize">{v.status === 'enroute' ? 'en route' : v.status}</span>
+                            <span style={{ color: '#07514D' }}><VehicleIcon type={v.type} size={12} /></span>
+                            <span className="font-mono font-semibold text-[#0C1322] flex-1 truncate">{v.reg}</span>
+                            <span className="capitalize text-[11px]" style={{ color: STATUS_COLORS[v.status] }}>
+                              {v.status === 'enroute' ? 'en route' : v.status}
+                            </span>
                           </button>
                         ))}
                       </div>
@@ -201,10 +219,12 @@ export default function LiveMapPage() {
             </div>
           </div>
         )}
+
         {showLegend && (
-          <div className="panel bg-white/95 text-black px-4 py-3 w-56">
-            <div className="label mb-2">Legend</div>
-            <div className="space-y-1.5 text-xs">
+          <div className="px-4 py-3.5 w-52"
+            style={{ background: 'rgba(255,255,255,0.93)', backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)', borderRadius: '16px', boxShadow: '0 8px 24px rgba(0,0,0,0.1)' }}>
+            <div className="text-[11px] font-bold text-[#0C1322] mb-2.5 uppercase tracking-widest">Legend</div>
+            <div className="space-y-2">
               <Key dot="#16a34a" label="Unit · responding" />
               <Key dot="#64748b" label="Unit · idle" />
               <Key dot="#d97706" label="Unit · maintenance" />
@@ -212,25 +232,26 @@ export default function LiveMapPage() {
               <Key sq="#dc2626" label="Hospital" />
               <Key sq="#ea580c" label="Fire station" />
               <Key ring="#07514D" label="Location" />
-              <div className="pt-1.5 mt-1.5 border-t border-cmd-border label">Zones</div>
+              <div className="pt-2 mt-2 text-[10px] font-bold uppercase tracking-widest text-[#9CA3AF]" style={{ borderTop: '1px solid rgba(0,0,0,0.06)' }}>Zones</div>
               {ZONES.map((z) => <Key key={z.id} sq={z.color} label={z.name} />)}
             </div>
           </div>
         )}
+
         <div className="flex items-center gap-2">
           <button onClick={() => setShowFleet((v) => !v)}
-            title={showFleet ? 'Hide Live Fleet' : 'Show Live Fleet'} aria-label="Toggle live fleet panel"
-            className={`h-10 px-3 inline-flex items-center gap-1.5 rounded-full shadow-lg text-[13px] font-medium transition-colors ${
-              showFleet ? 'bg-accent text-white hover:bg-accent-glow' : 'bg-white text-cmd-text border border-cmd-border hover:bg-cmd-panel2'}`}>
-            <VehicleIcon type="ambulance" size={16} /> Live Fleet
+            className="h-10 px-4 inline-flex items-center gap-2 rounded-2xl text-[13px] font-semibold transition-all"
+            style={showFleet
+              ? { background: '#07514D', color: '#fff', boxShadow: '0 4px 16px rgba(7,81,77,0.3)' }
+              : { background: 'rgba(255,255,255,0.9)', color: '#07514D', backdropFilter: 'blur(12px)', boxShadow: '0 4px 16px rgba(0,0,0,0.1)' }}>
+            <VehicleIcon type="ambulance" size={15} /> Fleet
           </button>
           <button onClick={() => setShowLegend((v) => !v)}
-            title="Legend" aria-label="Toggle legend"
-            className="h-10 w-10 grid place-items-center rounded-full bg-accent text-white shadow-lg hover:bg-accent-glow">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2"
-              strokeLinecap="round" strokeLinejoin="round" className={`transition-transform ${showLegend ? 'rotate-180' : ''}`}>
-              <path d="M6 9l6 6 6-6" />
-            </svg>
+            className="h-10 w-10 grid place-items-center rounded-2xl transition-all"
+            style={showLegend
+              ? { background: '#07514D', color: '#fff', boxShadow: '0 4px 16px rgba(7,81,77,0.3)' }
+              : { background: 'rgba(255,255,255,0.9)', color: '#07514D', backdropFilter: 'blur(12px)', boxShadow: '0 4px 16px rgba(0,0,0,0.1)' }}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 8h.01M11 12h1v4h1"/></svg>
           </button>
         </div>
       </div>
@@ -240,6 +261,16 @@ export default function LiveMapPage() {
           <VehiclePanel vehicle={selected} onClose={() => setSelectedId(null)} />
         </div>
       )}
+    </div>
+  )
+}
+
+function StatBadge({ color, label, n }) {
+  return (
+    <div className="flex items-center gap-1.5 text-[12px]">
+      <span className="h-2 w-2 rounded-full" style={{ background: color }} />
+      <span style={{ color: '#6B7280' }}>{label}</span>
+      <span className="font-bold" style={{ color }}>{n}</span>
     </div>
   )
 }
@@ -254,29 +285,19 @@ function FlyTo({ pos }) {
 function Info({ k, v, cap }) {
   return (
     <div className="flex justify-between gap-3 text-[12px] leading-5">
-      <span className="text-cmd-muted">{k}</span>
-      <span className={`text-cmd-text text-right ${cap ? 'capitalize' : ''}`}>{v}</span>
+      <span style={{ color: '#9CA3AF' }}>{k}</span>
+      <span className={`text-[#0C1322] font-medium text-right ${cap ? 'capitalize' : ''}`}>{v}</span>
     </div>
   )
 }
 
 function Key({ dot, sq, ring, label }) {
   return (
-    <div className="flex items-center gap-2">
-      {dot && <span className="h-3 w-3 rounded-full shrink-0" style={{ background: dot }} />}
-      {sq && <span className="h-3 w-3 rounded-sm shrink-0" style={{ background: sq }} />}
-      {ring && <span className="h-3 w-3 rounded-full bg-white shrink-0" style={{ border: `2px solid ${ring}` }} />}
-      <span className="text-cmd-muted">{label}</span>
-    </div>
-  )
-}
-
-function Legend({ color, label, n }) {
-  return (
-    <div className="flex items-center gap-1.5">
-      <span className="h-2.5 w-2.5 rounded-full" style={{ background: color }} />
-      <span className="text-cmd-muted">{label}</span>
-      <span className="font-semibold">{n}</span>
+    <div className="flex items-center gap-2 text-[12px]" style={{ color: '#6B7280' }}>
+      {dot && <span className="h-2.5 w-2.5 rounded-full shrink-0" style={{ background: dot }} />}
+      {sq && <span className="h-2.5 w-2.5 rounded-sm shrink-0" style={{ background: sq }} />}
+      {ring && <span className="h-2.5 w-2.5 rounded-full bg-white shrink-0" style={{ border: `2px solid ${ring}` }} />}
+      {label}
     </div>
   )
 }

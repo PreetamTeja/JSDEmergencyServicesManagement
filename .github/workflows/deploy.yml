@@ -1,12 +1,12 @@
-name: Deploy Emergency App to S3 + CloudFront
+name: CI/CD — Test, Build & Deploy
 
-# Builds the Vite SPA and deploys it on every push to main.
-# Auth to AWS uses GitHub OIDC (no long-lived keys stored in GitHub).
+# Runs on every push to main (or manually from the Actions tab).
+# Flow: test → build frontend → deploy frontend + both Lambdas in parallel
 
 on:
   push:
     branches: [main]
-  workflow_dispatch: {}   # allow manual runs from the Actions tab
+  workflow_dispatch: {}
 
 permissions:
   id-token: write   # required for OIDC
@@ -16,23 +16,60 @@ concurrency:
   group: deploy-emergency
   cancel-in-progress: true
 
+# ─────────────────────────────────────────────────────────────────
+# JOB 1 — Tests (Vitest + Jest + C# xUnit)
+# ─────────────────────────────────────────────────────────────────
 jobs:
-  deploy:
+  test:
+    name: Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Install JS dependencies
+        run: npm ci
+
+      - name: Vitest (services + backend handler)
+        run: npx vitest run --reporter=verbose
+
+      - name: Jest (React components)
+        run: npx jest --config jest.config.cjs --forceExit
+
+      - name: C# xUnit (DynamoService)
+        run: dotnet test lambda/TransportApi.Tests/TransportApi.Tests.csproj --logger "console;verbosity=normal"
+
+# ─────────────────────────────────────────────────────────────────
+# JOB 2 — Deploy Frontend (S3 + CloudFront)
+# ─────────────────────────────────────────────────────────────────
+  deploy-frontend:
+    name: Deploy Frontend
+    needs: test
     runs-on: ubuntu-latest
     environment: production
     env:
       AWS_REGION: ${{ vars.AWS_REGION }}
       S3_BUCKET: ${{ vars.S3_BUCKET }}
       CLOUDFRONT_DISTRIBUTION_ID: ${{ vars.CLOUDFRONT_DISTRIBUTION_ID }}
-      # Vite env (baked in at build time)
+      # Vite env vars — baked into the bundle at build time
       VITE_API_URL: ${{ vars.VITE_API_URL }}
-      VITE_API_KEY: ${{ secrets.VITE_API_KEY }}
+      VITE_APP_URL: ${{ vars.VITE_APP_URL }}
       VITE_MAIN_APP_URL: ${{ vars.VITE_MAIN_APP_URL }}
+      VITE_VOICE_URL: ${{ vars.VITE_VOICE_URL }}
       VITE_COGNITO_REGION: ${{ vars.VITE_COGNITO_REGION }}
       VITE_COGNITO_USER_POOL_ID: ${{ vars.VITE_COGNITO_USER_POOL_ID }}
       VITE_COGNITO_CLIENT_ID: ${{ vars.VITE_COGNITO_CLIENT_ID }}
       VITE_COGNITO_DOMAIN: ${{ vars.VITE_COGNITO_DOMAIN }}
       VITE_ADMIN_GROUPS: ${{ vars.VITE_ADMIN_GROUPS }}
+      VITE_API_KEY: ${{ secrets.VITE_API_KEY }}
 
     steps:
       - uses: actions/checkout@v4
@@ -42,8 +79,11 @@ jobs:
           node-version: 20
           cache: npm
 
-      - run: npm ci
-      - run: npm run build
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build Vite SPA
+        run: npm run build
 
       - name: Configure AWS credentials (OIDC)
         uses: aws-actions/configure-aws-credentials@v4
@@ -53,12 +93,80 @@ jobs:
 
       - name: Sync to S3
         run: |
-          # hashed assets: long cache; index.html: no-cache so updates show immediately
+          # Hashed assets: long-lived cache; index.html: no-cache so users pick up new versions immediately
           aws s3 sync dist/ "s3://${S3_BUCKET}/" --delete \
             --cache-control "public,max-age=31536000,immutable" --exclude "index.html"
-          aws s3 cp dist/index.html "s3://${S3_BUCKET}/index.html" --cache-control "no-cache"
+          aws s3 cp dist/index.html "s3://${S3_BUCKET}/index.html" \
+            --cache-control "no-cache"
 
-      - name: Invalidate CloudFront
+      - name: Invalidate CloudFront cache
         run: |
           aws cloudfront create-invalidation \
             --distribution-id "$CLOUDFRONT_DISTRIBUTION_ID" --paths "/*"
+
+# ─────────────────────────────────────────────────────────────────
+# JOB 3 — Deploy Lambda functions (TransportApi + VoiceAgent)
+# ─────────────────────────────────────────────────────────────────
+  deploy-lambdas:
+    name: Deploy Lambdas
+    needs: test
+    runs-on: ubuntu-latest
+    environment: production
+    env:
+      AWS_REGION: ${{ vars.AWS_REGION }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Install Amazon.Lambda.Tools
+        run: dotnet tool install -g Amazon.Lambda.Tools
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      # ── TransportApi ──────────────────────────────────────────
+      - name: Build TransportApi
+        run: |
+          cd lambda/TransportApi
+          dotnet lambda package -o /tmp/transport-api.zip
+
+      - name: Deploy TransportApi
+        run: |
+          aws lambda update-function-code \
+            --function-name psiog-transport-api \
+            --zip-file fileb:///tmp/transport-api.zip \
+            --output text
+          aws lambda wait function-updated --function-name psiog-transport-api
+          aws lambda update-function-configuration \
+            --function-name psiog-transport-api \
+            --runtime dotnet8 \
+            --handler "TransportApi::TransportApi.Function::FunctionHandler" \
+            --output text
+          aws lambda wait function-updated --function-name psiog-transport-api
+
+      # ── VoiceAgent ────────────────────────────────────────────
+      - name: Build VoiceAgent
+        run: |
+          cd lambda/VoiceAgent
+          dotnet lambda package -o /tmp/voice-agent.zip
+
+      - name: Deploy VoiceAgent
+        run: |
+          aws lambda update-function-code \
+            --function-name psiog-voice-agent \
+            --zip-file fileb:///tmp/voice-agent.zip \
+            --output text
+          aws lambda wait function-updated --function-name psiog-voice-agent
+          aws lambda update-function-configuration \
+            --function-name psiog-voice-agent \
+            --runtime dotnet8 \
+            --handler "VoiceAgent::VoiceAgent.Function::FunctionHandler" \
+            --output text
+          aws lambda wait function-updated --function-name psiog-voice-agent

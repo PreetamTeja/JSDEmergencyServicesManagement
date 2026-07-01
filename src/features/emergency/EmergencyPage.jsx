@@ -5,8 +5,6 @@ import { useFleetStore } from '../../store/useFleetStore'
 import { JAMSHEDPUR_CENTER, LOCATIONS, locById, bloodBanks, bloodBankById, pickupLabel, fmtPt } from '../../data/locations'
 import { hospitalById, CASE_TYPES, SEVERITIES, SEVERITY_META } from '../../data/hospitals'
 import { makeVehicleIcon, makeHospitalIcon, makeFirestationIcon } from '../map/vehicleIcon'
-import PageHeader from '../../components/common/PageHeader'
-import { Modal } from '../../components/common/ui.jsx'
 import LiveEta from '../../components/common/LiveEta'
 import AlertsPanel from './AlertsPanel'
 import { useNow } from '../../hooks/useNow'
@@ -49,35 +47,77 @@ export default function EmergencyPage() {
   }, [emergencies, filter])
 
   return (
-    <div className="flex flex-col h-full">
-      <PageHeader title="Emergency Dispatch" subtitle="Ambulance + fire response · automatic nearest-unit dispatch">
-        <TrafficControl />
-        <button className="btn-primary" onClick={() => setOpen(true)}>+ New Emergency</button>
-      </PageHeader>
+    <div className="relative h-full overflow-hidden">
+      {/* ── Full-screen map ── */}
+      <EmergencyMap emergencies={emergencies} />
 
-      <div className="flex-1 grid grid-cols-1 lg:grid-cols-[1fr_380px] overflow-hidden">
-        <EmergencyMap emergencies={emergencies} />
-        <div className="overflow-auto border-l border-cmd-border p-4 order-first lg:order-none">
+      {/* ── Floating top header strip ── */}
+      <div className="absolute top-4 left-4 right-4 z-[400] flex items-center gap-3">
+        <div className="flex-1 min-w-0 px-4 py-2.5 rounded-2xl flex items-center gap-3"
+          style={{ background: 'rgba(255,255,255,0.88)', backdropFilter: 'blur(18px)', WebkitBackdropFilter: 'blur(18px)', boxShadow: '0 4px 24px rgba(0,0,0,0.10)', border: '1px solid rgba(255,255,255,0.6)' }}>
+          <div className="flex-1 min-w-0">
+            <div className="text-[15px] font-bold text-[#0C1322] leading-tight">Emergency Dispatch</div>
+            <div className="text-[11px] text-[#6B7280]">Automatic nearest-unit dispatch · live</div>
+          </div>
+          <div className="flex items-center gap-2">
+            <TrafficControl />
+            {counts.active > 0 && (
+              <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold"
+                style={{ background: 'rgba(220,38,38,0.1)', color: '#dc2626' }}>
+                <span className="h-1.5 w-1.5 rounded-full bg-[#dc2626] animate-pulse" />
+                {counts.active} active
+              </span>
+            )}
+          </div>
+        </div>
+        <button onClick={() => setOpen(true)}
+          className="h-10 px-4 rounded-2xl text-[13px] font-semibold flex items-center gap-2 shrink-0 transition-all"
+          style={{ background: '#D6DF27', color: '#07514D', boxShadow: '0 4px 16px rgba(214,223,39,0.4)' }}
+          onMouseEnter={e => e.currentTarget.style.filter = 'brightness(1.05)'}
+          onMouseLeave={e => e.currentTarget.style.filter = ''}>
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M12 5v14M5 12h14"/></svg>
+          New Emergency
+        </button>
+      </div>
+
+      {/* ── Floating emergency list panel (left) ── */}
+      <div className="absolute left-4 top-[72px] bottom-4 z-[400] w-[340px] flex flex-col gap-3 overflow-hidden"
+        style={{ marginTop: '16px' }}>
+        {/* Alerts */}
+        <div className="rounded-2xl overflow-hidden"
+          style={{ background: 'rgba(255,255,255,0.88)', backdropFilter: 'blur(18px)', WebkitBackdropFilter: 'blur(18px)', boxShadow: '0 4px 24px rgba(0,0,0,0.10)', border: '1px solid rgba(255,255,255,0.6)' }}>
           <AlertsPanel />
-          <div className="flex flex-wrap gap-1.5 mb-2">
+        </div>
+
+        {/* Filter + list */}
+        <div className="flex-1 rounded-2xl flex flex-col min-h-0"
+          style={{ background: 'rgba(255,255,255,0.88)', backdropFilter: 'blur(18px)', WebkitBackdropFilter: 'blur(18px)', boxShadow: '0 4px 24px rgba(0,0,0,0.10)', border: '1px solid rgba(255,255,255,0.6)' }}>
+          {/* Filter tabs */}
+          <div className="flex gap-1.5 p-3 shrink-0" style={{ borderBottom: '1px solid rgba(0,0,0,0.06)' }}>
             {FILTERS.map((f) => {
-              const active = filter === f.key
+              const isActive = filter === f.key
               return (
                 <button key={f.key} onClick={() => setFilter(f.key)}
-                  className={`px-2.5 py-1 rounded-lg text-[12px] border transition-colors ${
-                    active ? 'bg-accent text-white border-accent' : 'bg-white border-cmd-border text-cmd-text hover:bg-cmd-panel2'}`}>
-                  {f.label}<span className={`ml-1 ${active ? 'text-white/80' : 'text-cmd-muted'}`}>{counts[f.key] || 0}</span>
+                  className="flex-1 py-1.5 rounded-xl text-[12px] font-semibold transition-all"
+                  style={isActive
+                    ? { background: '#07514D', color: '#fff', boxShadow: '0 2px 8px rgba(7,81,77,0.25)' }
+                    : { background: 'rgba(0,0,0,0.04)', color: '#6B7280' }}>
+                  {f.label} <span style={{ opacity: 0.75 }}>{counts[f.key] || 0}</span>
                 </button>
               )
             })}
           </div>
-          <div className="divide-y divide-cmd-border">
-            {shown.map((e) => <EmergencyCard key={e.id} em={e} />)}
+          {/* List */}
+          <div className="flex-1 overflow-auto px-3 py-2 space-y-2 no-scrollbar">
+            {shown.length === 0
+              ? <div className="text-[13px] text-[#9CA3AF] text-center py-8">No emergencies in this view.</div>
+              : shown.map((e) => <EmergencyCard key={e.id} em={e} />)}
           </div>
         </div>
       </div>
 
-      {open && <NewEmergencyModal onClose={() => setOpen(false)} />}
+      {/* ── Slide-in drawer for new emergency ── */}
+      {open && <NewEmergencyDrawer onClose={() => setOpen(false)} />}
     </div>
   )
 }
@@ -113,41 +153,69 @@ function EmergencyCard({ em }) {
   const bank = bloodBankById(em.bloodBankId)
   const pickupName = pickupLabel(em)
   const accent = isFire ? '#ea580c' : isBlood ? '#b91c1c' : sev?.color
+
   return (
-    <div className="py-3 first:pt-0">
-      <div className="flex items-center justify-between">
-        <span className="font-semibold text-sm flex items-center gap-2"><span className="h-2 w-2 rounded-full" style={{ background: accent }} />{em.id}</span>
-        <div className="flex items-center gap-1">
-          {em.incidentId && <span className="chip" style={{ background: '#fde8e8', color: '#dc2626' }}>MCI</span>}
-          {em.patientsCount > 1 && !isBlood && <span className="chip" style={{ background: '#eef2ff', color: '#4338ca' }}>{em.patientsCount} pax</span>}
+    <div className="rounded-xl p-3"
+      style={{ background: 'rgba(255,255,255,0.7)', border: '1px solid rgba(0,0,0,0.06)', backdropFilter: 'blur(8px)' }}>
+      {/* Top row */}
+      <div className="flex items-center justify-between gap-2">
+        <span className="font-bold text-[13px] text-[#0C1322] flex items-center gap-1.5">
+          <span className="h-2 w-2 rounded-full shrink-0" style={{ background: accent }} />
+          {em.id}
+        </span>
+        <div className="flex items-center gap-1 flex-wrap justify-end">
+          {em.incidentId && <Badge bg="#fde8e8" color="#dc2626">MCI</Badge>}
+          {em.patientsCount > 1 && !isBlood && <Badge bg="#eef2ff" color="#4338ca">{em.patientsCount} pax</Badge>}
           {sla.kind !== 'none' && (
-            <span className="chip" title={`SLA ${sla.target}m · ${SLA_LABEL[sla.state]}`}
-              style={{ background: `${SLA_COLOR[sla.state]}1a`, color: SLA_COLOR[sla.state] }}>{slaText(sla)}</span>
+            <Badge bg={`${SLA_COLOR[sla.state]}18`} color={SLA_COLOR[sla.state]} title={`SLA ${sla.target}m`}>{slaText(sla)}</Badge>
           )}
-          <span className="chip" style={{ background: `${accent}1a`, color: accent }}>{isFire ? 'Fire' : isBlood ? 'Blood' : em.severity}</span>
+          <Badge bg={`${accent}18`} color={accent}>{isFire ? 'Fire' : isBlood ? 'Blood' : em.severity}</Badge>
         </div>
       </div>
-      <div className="mt-1 text-xs text-cmd-muted">
-        <span className="text-cmd-text font-medium">{isFire ? 'Fire incident' : isBlood ? 'Blood supply' : em.caseType}</span> · {isBlood ? 'from' : 'pickup'} {pickupName}
+
+      {/* Details */}
+      <div className="mt-1.5 text-[12px] text-[#6B7280]">
+        <span className="text-[#374151] font-medium">{isFire ? 'Fire incident' : isBlood ? 'Blood supply' : em.caseType}</span>
+        {' · '}{isBlood ? 'from' : 'pickup'} {pickupName}
       </div>
+
       <StateLine em={em} isFire={isFire} isBlood={isBlood} />
+
+      {/* EN_ROUTE detail box */}
       {em.state === 'EN_ROUTE' && (
-        <div className="mt-2 panel-2 p-2 space-y-1 text-xs">
-          <div className="flex justify-between gap-2"><span className="text-cmd-muted">{isFire ? 'Fire truck' : 'Ambulance'}</span>
-            <span className="text-cmd-text text-right">{veh?.reg || '—'} · ETA <LiveEta etaComplete={em.etaComplete} fallbackMin={em.etaToPickupMin} className="font-medium" /></span></div>
-          {isBlood ? <Line k="Blood bank" v={bank ? bank.name : '—'} /> : !isFire && <Line k="Hospital" v={hosp ? `${hosp.name}` : '—'} />}
+        <div className="mt-2 rounded-lg p-2.5 space-y-1.5 text-[12px]"
+          style={{ background: 'rgba(7,81,77,0.05)', border: '1px solid rgba(7,81,77,0.08)' }}>
+          <div className="flex justify-between gap-2">
+            <span className="text-[#6B7280]">{isFire ? 'Fire truck' : 'Ambulance'}</span>
+            <span className="text-[#0C1322] font-medium text-right">
+              {veh?.reg || '—'} · ETA <LiveEta etaComplete={em.etaComplete} fallbackMin={em.etaToPickupMin} className="font-semibold" />
+            </span>
+          </div>
+          {isBlood
+            ? <Line k="Blood bank" v={bank?.name || '—'} />
+            : !isFire && <Line k="Hospital" v={hosp?.name || '—'} />}
           {em.traffic && (
-            <div className="flex justify-between gap-2"><span className="text-cmd-muted">Traffic</span>
-              <span className="text-right font-medium" style={{ color: em.traffic.color }}>
-                {em.traffic.label}{em.trafficFactor > 1.05 ? ` · +${Math.round((em.trafficFactor - 1) * 100)}%` : ''}
-              </span></div>
+            <div className="flex justify-between gap-2">
+              <span className="text-[#6B7280]">Traffic</span>
+              <span className="font-medium text-right" style={{ color: em.traffic.color }}>
+                {em.traffic.label}{em.trafficFactor > 1.05 ? ` ·+${Math.round((em.trafficFactor - 1) * 100)}%` : ''}
+              </span>
+            </div>
           )}
-          <Line k="Total" v={`${em.totalDistanceKm.toFixed(1)} km · ${Math.round(em.totalEtaMin)} min`} accent />
+          <div className="flex justify-between gap-2">
+            <span className="text-[#6B7280]">Total</span>
+            <span className="font-semibold text-[#07514D] text-right">{em.totalDistanceKm.toFixed(1)} km · {Math.round(em.totalEtaMin)} min</span>
+          </div>
         </div>
       )}
     </div>
   )
 }
+
+const Badge = ({ bg, color, children, title }) => (
+  <span title={title} className="px-2 py-0.5 rounded-full text-[10.5px] font-semibold"
+    style={{ background: bg, color }}>{children}</span>
+)
 
 function StateLine({ em, isFire, isBlood }) {
   const map = {
@@ -174,7 +242,7 @@ function EmergencyMap({ emergencies }) {
   const active = emergencies.filter((e) => e.state === 'EN_ROUTE')
 
   return (
-    <MapContainer center={[JAMSHEDPUR_CENTER.lat, JAMSHEDPUR_CENTER.lng]} zoom={13} zoomControl={false} className="h-full w-full">
+    <MapContainer center={[JAMSHEDPUR_CENTER.lat, JAMSHEDPUR_CENTER.lng]} zoom={14} zoomControl={false} className="h-full w-full absolute inset-0 z-0">
       <TileLayer url={LIGHT_TILES} attribution='&copy; OpenStreetMap &copy; CARTO' />
 
       {hospitals.map((h) => (
@@ -226,7 +294,7 @@ function EmergencyMap({ emergencies }) {
   )
 }
 
-function NewEmergencyModal({ onClose }) {
+function NewEmergencyDrawer({ onClose }) {
   const createEmergency = useFleetStore((s) => s.createEmergency)
   const hospitals = useFleetStore((s) => s.hospitals)
   const banks = bloodBanks()
@@ -261,107 +329,169 @@ function NewEmergencyModal({ onClose }) {
   }
 
   return (
-    <Modal open title="New Emergency" onClose={onClose}>
-      <p className="text-xs text-cmd-muted mb-3">
-        No approval needed — the nearest available unit is dispatched automatically.
-        {isFire ? ' Fire trucks respond from the closest fire station.'
-          : isBlood ? ' An ambulance runs a round trip: hospital → blood bank → back to the hospital.'
-          : ' Ambulances are routed to the nearest hospital with the right specialty and a free bed.'}
-      </p>
+    <div className="absolute inset-0 z-[500] flex justify-end" style={{ pointerEvents: 'none' }}>
+      {/* Dim overlay */}
+      <div className="absolute inset-0" style={{ background: 'rgba(0,0,0,0.25)', pointerEvents: 'auto' }} onClick={onClose} />
 
-      <div className="grid grid-cols-3 gap-2 mb-3">
-        <TypeBtn active={!isFire && !isBlood} onClick={() => setKind('medical')} label="Ambulance" color="#07514D" />
-        <TypeBtn active={isFire} onClick={() => setKind('fire')} label="Fire" color="#ea580c" />
-        <TypeBtn active={isBlood} onClick={() => setKind('blood')} label="Blood" color="#b91c1c" />
-      </div>
+      {/* Drawer */}
+      <div className="relative flex flex-col w-[380px] h-full overflow-auto drawer-panel"
+        style={{ background: 'rgba(255,255,255,0.95)', backdropFilter: 'blur(24px)', WebkitBackdropFilter: 'blur(24px)', boxShadow: '-8px 0 40px rgba(0,0,0,0.18)', pointerEvents: 'auto' }}>
 
-      <div className="space-y-3 text-sm">
-        {isBlood ? (
-          <>
-            <Field label="Requesting hospital (pickup)">
-              <Select value={pickupHosp} onChange={setPickupHosp} options={hospitals.map((h) => h.id)}
-                labels={Object.fromEntries(hospitals.map((h) => [h.id, h.name]))} />
-            </Field>
-            <Field label="Destination blood bank">
-              {banks.length === 0
-                ? <div className="text-xs text-status-danger">No blood banks configured. Add Locations with type=bloodbank.</div>
-                : <Select value={bloodBank} onChange={setBloodBank} options={banks.map((b) => b.id)}
-                    labels={Object.fromEntries(banks.map((b) => [b.id, b.name]))} />}
-            </Field>
-          </>
-        ) : (
-          <Field label={isFire ? 'Incident location' : 'Pickup location (quarters / pinned)'}>
-            <Select value={pickup} onChange={setPickup} options={LOCATIONS.map((l) => l.id)}
-              labels={Object.fromEntries(LOCATIONS.map((l) => [l.id, l.name]))} />
-          </Field>
-        )}
-        {!isFire && !isBlood && (
-          <Field label="Medical emergency type">
-            <Select value={caseType} onChange={setCaseType} options={CASE_TYPES} />
-          </Field>
-        )}
-        {!isFire && !isBlood && (
-          <div className="grid grid-cols-2 gap-3">
-            <Field label="Patients on scene">
-              <input type="number" min={1} max={200} value={patients} onChange={(e) => setPatients(e.target.value)}
-                className="bg-white border border-cmd-border rounded-md px-3 py-1.5 w-full" />
-            </Field>
-            <Field label="Mass casualty">
-              <label className="flex items-center gap-2 h-[34px] text-[13px] cursor-pointer">
-                <input type="checkbox" checked={massCasualty} onChange={(e) => setMassCasualty(e.target.checked)} />
-                Dispatch multiple ambulances
-              </label>
-            </Field>
+        {/* Drawer header */}
+        <div className="flex items-center justify-between px-5 py-4 shrink-0"
+          style={{ borderBottom: '1px solid rgba(0,0,0,0.07)' }}>
+          <div>
+            <div className="text-[16px] font-bold text-[#0C1322]">New Emergency</div>
+            <div className="text-[11px] text-[#6B7280] mt-0.5">Nearest unit dispatched automatically</div>
           </div>
-        )}
-        {!isFire && !isBlood && massCasualty && (
-          <Field label="Ambulances to dispatch">
-            <input type="number" min={2} max={10} value={units} onChange={(e) => setUnits(e.target.value)}
-              className="bg-white border border-cmd-border rounded-md px-3 py-1.5 w-full" />
-          </Field>
-        )}
-        <Field label={isBlood ? 'Priority' : 'Severity'}>
-          <div className="flex gap-2">
-            {SEVERITIES.map((s) => (
-              <button key={s} onClick={() => setSeverity(s)}
-                className={`btn flex-1 border text-[13px] ${severity === s ? 'text-white' : 'text-cmd-text border-cmd-border bg-white'}`}
-                style={severity === s ? { background: s === 'Critical' ? '#dc2626' : s === 'Urgent' ? '#d97706' : '#2563eb', borderColor: 'transparent' } : {}}>{s}</button>
-            ))}
+          <button onClick={onClose} className="h-8 w-8 rounded-xl grid place-items-center text-[#9CA3AF] transition-colors"
+            onMouseEnter={e => { e.currentTarget.style.background = '#F3F4F6'; e.currentTarget.style.color = '#374151' }}
+            onMouseLeave={e => { e.currentTarget.style.background = ''; e.currentTarget.style.color = '#9CA3AF' }}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+          </button>
+        </div>
+
+        <div className="flex-1 px-5 py-4 space-y-4 overflow-auto">
+          {/* Type selector */}
+          <div>
+            <div className="text-[11px] font-semibold uppercase tracking-widest text-[#9CA3AF] mb-2">Emergency type</div>
+            <div className="grid grid-cols-3 gap-2">
+              <TypeBtn active={!isFire && !isBlood} onClick={() => setKind('medical')} label="🚑 Ambulance" color="#07514D" />
+              <TypeBtn active={isFire} onClick={() => setKind('fire')} label="🔥 Fire" color="#ea580c" />
+              <TypeBtn active={isBlood} onClick={() => setKind('blood')} label="🩸 Blood" color="#b91c1c" />
+            </div>
           </div>
-        </Field>
-        {result && (
-          <div className={`panel-2 p-2.5 text-xs ${result.ok ? 'text-status-enroute' : 'text-status-danger'}`}>
-            {result.ok
-              ? (result.mass
-                ? `Incident ${result.id} — ${result.dispatched}/${result.units} ambulances dispatched`
-                : `Dispatched ${result.id} — ${result.vehicle}${result.hospital ? ' → ' + result.hospital : ''}${result.bloodBank ? ' → ' + result.bloodBank : ''}`)
-              : result.reason}
+
+          {/* Context hint */}
+          <div className="text-[12px] rounded-xl px-3 py-2.5"
+            style={{ background: 'rgba(7,81,77,0.05)', color: '#374151' }}>
+            {isFire ? 'Fire trucks respond from the closest fire station.'
+              : isBlood ? 'Ambulance runs: hospital → blood bank → hospital.'
+              : 'Routed to nearest hospital with matching specialty and free bed.'}
           </div>
-        )}
+
+          {/* Location fields */}
+          {isBlood ? (
+            <>
+              <DrawerField label="Requesting hospital">
+                <DrawerSelect value={pickupHosp} onChange={setPickupHosp} options={hospitals.map((h) => h.id)}
+                  labels={Object.fromEntries(hospitals.map((h) => [h.id, h.name]))} />
+              </DrawerField>
+              <DrawerField label="Destination blood bank">
+                {banks.length === 0
+                  ? <div className="text-[12px] text-red-600">No blood banks configured.</div>
+                  : <DrawerSelect value={bloodBank} onChange={setBloodBank} options={banks.map((b) => b.id)}
+                      labels={Object.fromEntries(banks.map((b) => [b.id, b.name]))} />}
+              </DrawerField>
+            </>
+          ) : (
+            <DrawerField label={isFire ? 'Incident location' : 'Pickup location'}>
+              <DrawerSelect value={pickup} onChange={setPickup} options={LOCATIONS.map((l) => l.id)}
+                labels={Object.fromEntries(LOCATIONS.map((l) => [l.id, l.name]))} />
+            </DrawerField>
+          )}
+
+          {!isFire && !isBlood && (
+            <DrawerField label="Medical type">
+              <DrawerSelect value={caseType} onChange={setCaseType} options={CASE_TYPES} />
+            </DrawerField>
+          )}
+
+          {!isFire && !isBlood && (
+            <div className="grid grid-cols-2 gap-3">
+              <DrawerField label="Patients on scene">
+                <input type="number" min={1} max={200} value={patients} onChange={(e) => setPatients(e.target.value)}
+                  className="w-full rounded-xl px-3 py-2 text-[13px] text-[#0C1322]"
+                  style={{ background: '#F5F6F8', border: '1px solid #E5E7EB' }} />
+              </DrawerField>
+              <DrawerField label="Mass casualty">
+                <label className="flex items-center gap-2 h-[38px] text-[13px] text-[#374151] cursor-pointer">
+                  <input type="checkbox" checked={massCasualty} onChange={(e) => setMassCasualty(e.target.checked)} className="rounded" />
+                  Multi-ambulance
+                </label>
+              </DrawerField>
+            </div>
+          )}
+
+          {!isFire && !isBlood && massCasualty && (
+            <DrawerField label="Ambulances to dispatch">
+              <input type="number" min={2} max={10} value={units} onChange={(e) => setUnits(e.target.value)}
+                className="w-full rounded-xl px-3 py-2 text-[13px] text-[#0C1322]"
+                style={{ background: '#F5F6F8', border: '1px solid #E5E7EB' }} />
+            </DrawerField>
+          )}
+
+          {/* Severity */}
+          <DrawerField label={isBlood ? 'Priority' : 'Severity'}>
+            <div className="flex gap-2">
+              {SEVERITIES.map((s) => {
+                const activeColor = s === 'Critical' ? '#dc2626' : s === 'Urgent' ? '#d97706' : '#2563eb'
+                const isActive = severity === s
+                return (
+                  <button key={s} onClick={() => setSeverity(s)}
+                    className="flex-1 h-9 rounded-xl text-[13px] font-semibold transition-all"
+                    style={isActive
+                      ? { background: activeColor, color: '#fff', boxShadow: `0 2px 10px ${activeColor}40` }
+                      : { background: '#F5F6F8', color: '#6B7280' }}>
+                    {s}
+                  </button>
+                )
+              })}
+            </div>
+          </DrawerField>
+
+          {/* Result feedback */}
+          {result && (
+            <div className="rounded-xl p-3 text-[12px] font-medium"
+              style={{ background: result.ok ? 'rgba(22,163,74,0.08)' : 'rgba(220,38,38,0.08)', color: result.ok ? '#16a34a' : '#dc2626' }}>
+              {result.ok
+                ? (result.mass
+                  ? `Incident ${result.id} — ${result.dispatched}/${result.units} ambulances dispatched`
+                  : `Dispatched ${result.id} — ${result.vehicle}${result.hospital ? ' → ' + result.hospital : ''}${result.bloodBank ? ' → ' + result.bloodBank : ''}`)
+                : result.reason}
+            </div>
+          )}
+        </div>
+
+        {/* Drawer footer */}
+        <div className="px-5 py-4 shrink-0 flex gap-2" style={{ borderTop: '1px solid rgba(0,0,0,0.07)' }}>
+          <button onClick={onClose}
+            className="flex-1 h-10 rounded-xl text-[13px] font-medium text-[#6B7280] transition-colors"
+            style={{ background: '#F5F6F8' }}
+            onMouseEnter={e => e.currentTarget.style.background = '#EAECEF'}
+            onMouseLeave={e => e.currentTarget.style.background = '#F5F6F8'}>
+            Cancel
+          </button>
+          <button onClick={submit} disabled={busy || (isBlood && banks.length === 0)}
+            className="flex-1 h-10 rounded-xl text-[13px] font-semibold transition-all disabled:opacity-50"
+            style={{ background: '#D6DF27', color: '#07514D', boxShadow: '0 2px 12px rgba(214,223,39,0.35)' }}>
+            {busy ? 'Routing…' : isFire ? 'Dispatch fire truck' : isBlood ? 'Dispatch blood run' : useUnits > 1 ? `Dispatch ${useUnits} ambulances` : 'Dispatch ambulance'}
+          </button>
+        </div>
       </div>
-      <div className="mt-4 flex justify-end gap-2">
-        <button className="btn-ghost" onClick={onClose}>Close</button>
-        <button className="btn-primary disabled:opacity-50" disabled={busy || (isBlood && banks.length === 0)} onClick={submit}>
-          {busy ? 'Routing…' : isFire ? 'Dispatch fire truck →' : isBlood ? 'Dispatch blood run →' : useUnits > 1 ? `Dispatch ${useUnits} ambulances →` : 'Dispatch ambulance →'}
-        </button>
-      </div>
-    </Modal>
+    </div>
   )
 }
 
-const Field = ({ label, children }) => (
-  <div><div className="label mb-1">{label}</div>{children}</div>
+const DrawerField = ({ label, children }) => (
+  <div>
+    <div className="text-[11px] font-semibold uppercase tracking-widest text-[#9CA3AF] mb-1.5">{label}</div>
+    {children}
+  </div>
 )
-const Select = ({ value, onChange, options, labels }) => (
+const DrawerSelect = ({ value, onChange, options, labels }) => (
   <select value={value} onChange={(e) => onChange(e.target.value)}
-    className="bg-white border border-cmd-border rounded-md px-3 py-1.5 w-full">
+    className="w-full rounded-xl px-3 py-2 text-[13px] text-[#0C1322]"
+    style={{ background: '#F5F6F8', border: '1px solid #E5E7EB' }}>
     {options.map((o) => <option key={o} value={o}>{labels ? labels[o] : o}</option>)}
   </select>
 )
 const TypeBtn = ({ active, onClick, label, color }) => (
   <button onClick={onClick}
-    className={`h-11 rounded-lg border-2 font-medium text-[14px] transition-colors ${active ? 'text-white' : 'bg-white text-cmd-text border-cmd-border'}`}
-    style={active ? { background: color, borderColor: color } : {}}>
+    className="h-10 rounded-xl text-[13px] font-semibold transition-all"
+    style={active
+      ? { background: color, color: '#fff', boxShadow: `0 2px 10px ${color}40` }
+      : { background: '#F5F6F8', color: '#6B7280' }}>
     {label}
   </button>
 )

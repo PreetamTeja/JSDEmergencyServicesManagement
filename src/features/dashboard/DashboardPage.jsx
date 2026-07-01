@@ -40,35 +40,53 @@ export default function DashboardPage() {
     )
   }
 
+  const now = new Date()
+  const dateLabel = now.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })
+
   return (
-    <div className="h-full overflow-auto bg-cmd-bg">
-      {/* page header */}
-      <div className="px-6 pt-6 pb-4">
-        <h1 className="text-[22px] font-semibold tracking-tight text-cmd-text">Operations Overview</h1>
-        <p className="text-[13px] text-cmd-muted">Emergency response analytics · live from dispatch</p>
+    <div className="h-full overflow-auto" style={{ background: '#F5F6F8' }}>
+      {/* ── Page header ── */}
+      <div className="px-7 pt-7 pb-5 flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-[22px] font-bold tracking-tight" style={{ color: '#0C1322' }}>Operations Overview</h1>
+          <p className="text-[13px] mt-0.5" style={{ color: '#6B7280' }}>Emergency response analytics · live from dispatch</p>
+        </div>
+        <div className="flex items-center gap-2 shrink-0 mt-1">
+          {m.active > 0 && (
+            <span className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[12px] font-semibold"
+              style={{ background: 'rgba(22,163,74,0.1)', color: '#16a34a' }}>
+              <span className="h-1.5 w-1.5 rounded-full bg-[#16a34a] animate-pulse" />
+              {m.active} active
+            </span>
+          )}
+          <span className="px-3 py-1.5 rounded-full text-[12px] font-medium"
+            style={{ background: 'rgba(7,81,77,0.08)', color: '#07514D' }}>
+            {dateLabel}
+          </span>
+        </div>
       </div>
 
-      <div className="px-6 pb-8 space-y-4">
-        {/* KPI strip */}
-        <div className="grid grid-cols-2 lg:grid-cols-5 border border-cmd-border bg-white divide-x divide-cmd-border">
-          <Kpi icon="activity" label="Total responses" value={m.total} sub={`${m.todayCount} today`} />
-          <Kpi icon="pulse" label="Active now" value={m.active} sub={`${m.queued} queued`} accent="#16a34a" />
-          <Kpi icon="clock" label="Avg response" value={`${m.avgResp.toFixed(1)}m`} sub="to scene" />
-          <Kpi icon="route" label="Avg trip" value={`${m.avgTrip.toFixed(1)}m`} sub="end to end" />
-          <Kpi icon="truck" label="Fleet in use" value={`${m.utilPct}%`} sub={`${m.enroute}/${m.fleetTotal} units`} accent="#d97706" />
+      <div className="px-7 pb-8 space-y-5">
+        {/* ── KPI cards (neomorphic) ── */}
+        <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
+          <NeoKpi icon="activity" label="Total responses" value={m.total} sub={`${m.todayCount} today`} />
+          <NeoKpi icon="pulse" label="Active now" value={m.active} sub={`${m.queued} queued`} accentColor="#16a34a" />
+          <NeoKpi icon="clock" label="Avg response" value={`${m.avgResp.toFixed(1)}m`} sub="to scene" />
+          <NeoKpi icon="route" label="Avg trip" value={`${m.avgTrip.toFixed(1)}m`} sub="end to end" />
+          <NeoKpi icon="truck" label="Fleet in use" value={`${m.utilPct}%`} sub={`${m.enroute}/${m.fleetTotal} units`} accentColor="#d97706" />
         </div>
 
-        {/* Row 1 — mix */}
+        {/* ── Row 1 ── */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-          <Card title="Responses by type"><Donut data={m.byKind} /></Card>
-          <Card title="Responses by severity"><Bars data={m.bySeverity} /></Card>
-          <Card title="Medical cases by type"><Bars data={m.byCase} color={RAMP[0]} /></Card>
+          <NeoCard title="Responses by type"><Donut data={m.byKind} /></NeoCard>
+          <NeoCard title="Responses by severity"><Bars data={m.bySeverity} /></NeoCard>
+          <NeoCard title="Medical cases by type"><Bars data={m.byCase} color={RAMP[0]} /></NeoCard>
         </div>
 
-        {/* Row 2 — geography + time */}
+        {/* ── Row 2 ── */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-          <Card title="Responses by zone"><Bars data={m.byZone} color={RAMP[1]} /></Card>
-          <Card title="Responses over time · 14 days">
+          <NeoCard title="Responses by zone"><Bars data={m.byZone} color={RAMP[1]} /></NeoCard>
+          <NeoCard title="Responses over time · 14 days">
             <ResponsiveContainer width="100%" height={210}>
               <LineChart data={m.overTime} margin={{ left: -20, top: 6, right: 6 }}>
                 <CartesianGrid stroke={GRID} vertical={false} />
@@ -80,37 +98,37 @@ export default function DashboardPage() {
                 <Legend wrapperStyle={{ fontSize: 11 }} iconType="plainline" />
               </LineChart>
             </ResponsiveContainer>
-          </Card>
-          <Card title="Avg response time by severity · min"><Bars data={m.respBySeverity} /></Card>
+          </NeoCard>
+          <NeoCard title="Avg response time by severity · min"><Bars data={m.respBySeverity} /></NeoCard>
         </div>
 
-        {/* Row 3 — resources */}
+        {/* ── Row 3 ── */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-          <Card title="Fleet availability">
+          <NeoCard title="Fleet availability">
             <ResponsiveContainer width="100%" height={210}>
               <BarChart data={m.fleetAvail} margin={{ left: -20, top: 6 }} barCategoryGap="35%">
                 <CartesianGrid stroke={GRID} vertical={false} />
                 <XAxis dataKey="name" tickLine={false} axisLine={{ stroke: GRID }} tick={{ fontSize: 12, fill: AXIS }} />
                 <YAxis allowDecimals={false} tickLine={false} axisLine={false} tick={{ fontSize: 12, fill: AXIS }} />
                 <Tooltip {...TIP} />
-                <Bar dataKey="idle" stackId="a" fill="#CBD5D3" />
+                <Bar dataKey="idle" stackId="a" fill="#CBD5D3" radius={[0,0,4,4]} />
                 <Bar dataKey="enroute" stackId="a" fill="#16a34a" />
-                <Bar dataKey="maintenance" stackId="a" fill="#d97706" />
+                <Bar dataKey="maintenance" stackId="a" fill="#d97706" radius={[4,4,0,0]} />
                 <Legend wrapperStyle={{ fontSize: 11 }} iconType="square" />
               </BarChart>
             </ResponsiveContainer>
-          </Card>
-          <Card title="Top receiving hospitals" className="lg:col-span-2">
+          </NeoCard>
+          <NeoCard title="Top receiving hospitals" className="lg:col-span-2">
             <Bars data={m.topHospitals} color={RAMP[2]} vertical />
-          </Card>
+          </NeoCard>
         </div>
 
-        {/* Active table */}
-        <Card title={`Active responses · ${m.active}`}>
+        {/* ── Active table ── */}
+        <NeoCard title={`Active responses · ${m.active}`}>
           {m.active === 0 ? <Empty msg="No active emergencies." /> : (
             <table className="w-full text-[13px]">
               <thead>
-                <tr className="text-cmd-muted text-[11px] uppercase tracking-wide border-b border-cmd-border">
+                <tr className="text-[11px] uppercase tracking-wide" style={{ color: '#9CA3AF', borderBottom: '1px solid #E9EAEC' }}>
                   <Th>ID</Th><Th>Type</Th><Th>Severity</Th><Th>Zone</Th><Th>Vehicle</Th><Th>Destination</Th>
                 </tr>
               </thead>
@@ -119,20 +137,22 @@ export default function DashboardPage() {
                   const isFire = e.kind === 'fire'
                   const veh = vehicles.find((v) => v.id === e.ambulanceId)
                   return (
-                    <tr key={e.id} className="border-b border-cmd-border/60 hover:bg-cmd-panel2">
-                      <td className="py-2 font-medium text-cmd-text">{e.id}</td>
-                      <td><span className="px-2 py-0.5 text-[11px] font-medium" style={{ background: isFire ? '#FBEDE2' : '#E4EEEC', color: isFire ? KIND.fire : KIND.medical }}>{isFire ? 'Fire' : e.caseType || 'Medical'}</span></td>
-                      <td className="text-cmd-text">{e.severity}</td>
-                      <td className="text-cmd-text">{zoneById(locById(e.pickup)?.zone_id)?.name || '—'}</td>
-                      <td className="font-mono text-[12px] text-cmd-text">{veh?.reg || '—'}</td>
-                      <td className="text-cmd-text">{isFire ? (locById(e.pickup)?.name || '—') : (hospitalById(e.hospitalId)?.name || '—')}</td>
+                    <tr key={e.id} className="transition-colors" style={{ borderBottom: '1px solid rgba(0,0,0,0.04)' }}
+                      onMouseEnter={ev => ev.currentTarget.style.background = 'rgba(7,81,77,0.03)'}
+                      onMouseLeave={ev => ev.currentTarget.style.background = ''}>
+                      <td className="py-2.5 font-semibold text-[#0C1322]">{e.id}</td>
+                      <td><span className="px-2.5 py-1 rounded-full text-[11px] font-semibold" style={{ background: isFire ? '#FEF0E6' : '#E6F0EE', color: isFire ? KIND.fire : KIND.medical }}>{isFire ? 'Fire' : e.caseType || 'Medical'}</span></td>
+                      <td className="text-[#374151]">{e.severity}</td>
+                      <td className="text-[#374151]">{zoneById(locById(e.pickup)?.zone_id)?.name || '—'}</td>
+                      <td className="font-mono text-[12px] text-[#374151]">{veh?.reg || '—'}</td>
+                      <td className="text-[#374151]">{isFire ? (locById(e.pickup)?.name || '—') : (hospitalById(e.hospitalId)?.name || '—')}</td>
                     </tr>
                   )
                 })}
               </tbody>
             </table>
           )}
-        </Card>
+        </NeoCard>
       </div>
     </div>
   )
@@ -219,22 +239,31 @@ function Glyph({ name, className = '' }) {
       strokeLinecap="round" strokeLinejoin="round" className={className} dangerouslySetInnerHTML={{ __html: ICONS[name] }} />
   )
 }
-function Kpi({ icon, label, value, sub, accent }) {
+const NEO = {
+  background: '#F5F6F8',
+  boxShadow: '8px 8px 20px rgba(0,0,0,0.07), -8px -8px 20px rgba(255,255,255,0.95)',
+  borderRadius: '16px',
+}
+
+function NeoKpi({ icon, label, value, sub, accentColor }) {
   return (
-    <div className="p-4">
-      <div className="flex items-center gap-2 text-cmd-muted">
-        <Glyph name={icon} />
-        <span className="text-[11px] uppercase tracking-wide">{label}</span>
+    <div className="p-5 flex flex-col gap-3" style={NEO}>
+      <div className="flex items-center justify-between">
+        <span className="text-[11px] uppercase tracking-widest font-semibold" style={{ color: '#9CA3AF' }}>{label}</span>
+        <div className="h-8 w-8 rounded-xl grid place-items-center"
+          style={{ background: accentColor ? `${accentColor}18` : 'rgba(7,81,77,0.08)' }}>
+          <Glyph name={icon} className="" style={{ color: accentColor || '#07514D' }} />
+        </div>
       </div>
-      <div className="text-[30px] font-semibold mt-1.5 text-cmd-text leading-none">{value}</div>
-      <div className="text-[12px] mt-1.5" style={{ color: accent || '#6B7672' }}>{sub}</div>
+      <div className="text-[32px] font-bold leading-none tracking-tight" style={{ color: '#0C1322' }}>{value}</div>
+      <div className="text-[12px] font-medium" style={{ color: accentColor || '#6B7280' }}>{sub}</div>
     </div>
   )
 }
-function Card({ title, children, className = '' }) {
+function NeoCard({ title, children, className = '' }) {
   return (
-    <div className={`bg-white border border-cmd-border p-4 ${className}`}>
-      <div className="text-[12px] uppercase tracking-wide font-semibold text-cmd-muted mb-3">{title}</div>
+    <div className={`p-5 ${className}`} style={NEO}>
+      <div className="text-[11px] uppercase tracking-widest font-semibold mb-4" style={{ color: '#9CA3AF' }}>{title}</div>
       {children}
     </div>
   )

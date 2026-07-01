@@ -2,8 +2,6 @@ import React, { useState, useMemo, useEffect, useRef } from 'react'
 import { useFleetStore } from '../../store/useFleetStore'
 import { locById, pickupLabel } from '../../data/locations'
 import { hospitalById, SEVERITY_META } from '../../data/hospitals'
-import PageHeader from '../../components/common/PageHeader'
-import { Modal } from '../../components/common/ui.jsx'
 import LiveEta from '../../components/common/LiveEta'
 import { useNow } from '../../hooks/useNow'
 
@@ -125,72 +123,105 @@ export default function DispatchBoard() {
 
   async function onCancel(id) { setMenuId(null); setBusy(id); try { await cancelRequest(id) } finally { setBusy(null) } }
 
-  const chip = (active) => `px-3 py-1 text-[12px] border transition-colors ${
-    active ? 'bg-accent text-white border-accent' : 'bg-white border-slate-200 text-cmd-text hover:bg-slate-50'}`
-
   return (
-    <div className="flex flex-col h-full bg-cmd-bg">
-      <PageHeader title="Dispatch Board" subtitle="Every ambulance & fire dispatch · live, queued and historical">
-        <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search by ID, location, unit, hospital…"
-          className="bg-white border border-slate-200 px-3 py-1.5 text-[13px] w-72" />
-      </PageHeader>
+    <div className="flex flex-col h-full" style={{ background: '#F5F6F8' }}>
 
-      {/* Filters + clear controls */}
-      <div className="px-6 pt-4">
-        <div className="flex flex-wrap items-center gap-1.5">
-          {FILTERS.map((f) => (
-            <button key={f.key} onClick={() => setFilter(f.key)} className={chip(filter === f.key)}>
-              <span className="inline-flex items-center gap-1">
-                {f.key === 'fire' && <Icon name="flame" size={13} />}
-                {f.key === 'medical' && <Icon name="medical" size={13} />}
-                {f.label}
-              </span>
-            </button>
-          ))}
-          <div className="ml-auto flex items-center gap-3">
-            <label className="flex items-center gap-1.5 text-[12px] text-cmd-muted cursor-pointer">
-              <input type="checkbox" checked={showCleared} onChange={(e) => setShowCleared(e.target.checked)} /> Show cleared ({cleared.size})
-            </label>
-            {noFacility.length > 0 && (
-              <button onClick={clearNoFacility} disabled={bulkBusy}
-                className="px-3 py-1 text-[12px] border border-amber-300 bg-white text-amber-700 hover:bg-amber-50 disabled:opacity-40 inline-flex items-center gap-1">
-                <Icon name="alert" size={13} />{bulkBusy ? 'Clearing…' : `Clear no-facility (${noFacility.length})`}
-              </button>
-            )}
-            <button onClick={restoreCleared} className="px-3 py-1 text-[12px] border border-slate-200 bg-white hover:bg-slate-50">Restore</button>
-            <button onClick={clearCompleted} disabled={clearableNow.length === 0}
-              className="px-3 py-1 text-[12px] border border-slate-200 bg-white text-status-danger hover:bg-red-50 disabled:opacity-40 inline-flex items-center gap-1">
-              <Icon name="trash" size={13} />Clear completed{clearableNow.length ? ` (${clearableNow.length})` : ''}
-            </button>
+      {/* ── Page header ── */}
+      <div className="px-6 pt-6 pb-4 flex items-center gap-4">
+        <div className="flex-1 min-w-0">
+          <h1 className="text-[22px] font-bold tracking-tight text-[#0C1322]">Dispatch Board</h1>
+          <p className="text-[13px] text-[#6B7280] mt-0.5">Every ambulance & fire dispatch · live, queued, historical</p>
+        </div>
+        <div className="flex items-center gap-2 shrink-0">
+          <div className="relative">
+            <svg className="absolute left-3 top-1/2 -translate-y-1/2 text-[#9CA3AF]" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+            <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search ID, location, unit…"
+              className="pl-9 pr-4 py-2 rounded-xl text-[13px] text-[#0C1322] w-64"
+              style={{ background: 'rgba(255,255,255,0.9)', border: '1px solid rgba(0,0,0,0.08)' }} />
           </div>
         </div>
       </div>
 
-      {/* KPI strip */}
-      <div className="px-6 pt-4">
-        <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
-          <Kpi value={kpis.active} label="Active" color="#16a34a" icon="activity" />
-          <Kpi value={kpis.queued} label="Queued" color="#d97706" icon="clock" />
-          <Kpi value={kpis.completedToday} label="Completed today" color="#4f46e5" icon="check" />
-          <Kpi value={kpis.fire} label="Fire incidents" color="#dc2626" icon="flame" />
-          <Kpi value={kpis.medical} label="Medical incidents" color="#2563eb" icon="medical" />
+      {/* ── KPI strip (neomorphic) ── */}
+      <div className="px-6 pb-4 grid grid-cols-2 lg:grid-cols-5 gap-3">
+        {[
+          { value: kpis.active, label: 'Active', color: '#16a34a', icon: 'activity' },
+          { value: kpis.queued, label: 'Queued', color: '#d97706', icon: 'clock' },
+          { value: kpis.completedToday, label: 'Completed today', color: '#4f46e5', icon: 'check' },
+          { value: kpis.fire, label: 'Fire incidents', color: '#dc2626', icon: 'flame' },
+          { value: kpis.medical, label: 'Medical', color: '#2563eb', icon: 'medical' },
+        ].map((k) => (
+          <div key={k.label} className="px-4 py-3.5 flex items-center gap-3"
+            style={{ background: '#F5F6F8', borderRadius: '16px', boxShadow: '7px 7px 18px rgba(0,0,0,0.07), -7px -7px 18px rgba(255,255,255,0.95)' }}>
+            <div className="h-9 w-9 rounded-xl grid place-items-center shrink-0" style={{ background: `${k.color}15`, color: k.color }}>
+              <Icon name={k.icon} size={17} />
+            </div>
+            <div>
+              <div className="text-[24px] font-bold leading-none" style={{ color: k.color }}>{k.value}</div>
+              <div className="text-[11px] text-[#9CA3AF] mt-0.5 leading-tight">{k.label}</div>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* ── Filters + board controls ── */}
+      <div className="px-6 pb-3 flex flex-wrap items-center gap-2">
+        <div className="flex gap-1.5 flex-wrap">
+          {FILTERS.map((f) => {
+            const isActive = filter === f.key
+            return (
+              <button key={f.key} onClick={() => setFilter(f.key)}
+                className="px-3 py-1.5 rounded-xl text-[12px] font-semibold transition-all flex items-center gap-1.5"
+                style={isActive
+                  ? { background: '#07514D', color: '#fff', boxShadow: '0 2px 8px rgba(7,81,77,0.25)' }
+                  : { background: 'rgba(255,255,255,0.85)', color: '#6B7280' }}>
+                {f.key === 'fire' && <Icon name="flame" size={12} />}
+                {f.key === 'medical' && <Icon name="medical" size={12} />}
+                {f.label}
+              </button>
+            )
+          })}
+        </div>
+        <div className="ml-auto flex items-center gap-2">
+          <label className="flex items-center gap-1.5 text-[12px] text-[#9CA3AF] cursor-pointer">
+            <input type="checkbox" checked={showCleared} onChange={(e) => setShowCleared(e.target.checked)} className="rounded" />
+            Show cleared ({cleared.size})
+          </label>
+          {noFacility.length > 0 && (
+            <button onClick={clearNoFacility} disabled={bulkBusy}
+              className="px-3 py-1.5 rounded-xl text-[12px] font-semibold flex items-center gap-1.5 disabled:opacity-40 transition-all"
+              style={{ background: 'rgba(217,119,6,0.1)', color: '#d97706' }}>
+              <Icon name="alert" size={12} />{bulkBusy ? 'Clearing…' : `No-facility (${noFacility.length})`}
+            </button>
+          )}
+          <button onClick={restoreCleared}
+            className="px-3 py-1.5 rounded-xl text-[12px] font-semibold transition-all"
+            style={{ background: 'rgba(255,255,255,0.85)', color: '#6B7280' }}>
+            Restore
+          </button>
+          <button onClick={clearCompleted} disabled={clearableNow.length === 0}
+            className="px-3 py-1.5 rounded-xl text-[12px] font-semibold flex items-center gap-1.5 disabled:opacity-40 transition-all"
+            style={{ background: 'rgba(220,38,38,0.08)', color: '#dc2626' }}>
+            <Icon name="trash" size={12} />Clear{clearableNow.length ? ` (${clearableNow.length})` : ''}
+          </button>
         </div>
       </div>
 
-      {/* Table */}
-      <div className="flex-1 overflow-auto px-6 py-4">
-        <div className="bg-white border border-slate-200">
-          <table className="w-full text-sm">
+      {/* ── Dense table ── */}
+      <div className="flex-1 overflow-auto px-6 pb-6">
+        <div className="overflow-hidden" style={{ background: 'rgba(255,255,255,0.92)', borderRadius: '20px', boxShadow: '0 4px 24px rgba(0,0,0,0.07)', border: '1px solid rgba(0,0,0,0.05)' }}>
+          <table className="w-full text-[13px]">
             <thead>
-              <tr className="text-cmd-muted text-[11px] uppercase tracking-wide border-b border-slate-200">
-                {['ID', 'Type', 'Severity', 'Pickup', 'Unit', 'Destination', 'Progress', 'ETA', 'Status', ''].map((h) => (
-                  <th key={h} className="text-left font-medium px-4 py-3">{h}</th>
+              <tr style={{ borderBottom: '1px solid rgba(0,0,0,0.06)' }}>
+                {['ID / Time', 'Type', 'Severity', 'Pickup', 'Unit', 'Destination', 'Progress', 'ETA', 'Status', ''].map((h) => (
+                  <th key={h} className="text-left font-semibold px-4 py-3"
+                    style={{ fontSize: '10.5px', letterSpacing: '0.06em', color: '#9CA3AF', textTransform: 'uppercase' }}>{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
               {rows.length === 0 && (
-                <tr><td colSpan={10} className="px-4 py-12 text-center text-cmd-muted">No responses match.</td></tr>
+                <tr><td colSpan={10} className="px-4 py-12 text-center text-[13px]" style={{ color: '#9CA3AF' }}>No responses match this filter.</td></tr>
               )}
               {rows.map((e) => {
                 const isFire = e.kind === 'fire'
@@ -200,33 +231,55 @@ export default function DispatchBoard() {
                 const sev = SEVERITY_META[e.severity]
                 const t = new Date(e.createdAt)
                 const time = isNaN(t) ? '' : t.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
+                const typeColor = isFire ? '#ea580c' : isBlood ? '#b91c1c' : '#2563eb'
                 return (
-                  <tr key={e.id} className="hover:bg-slate-50 align-middle">
+                  <tr key={e.id} className="align-middle group" style={{ borderBottom: '1px solid rgba(0,0,0,0.04)' }}
+                    onMouseEnter={ev => ev.currentTarget.style.boxShadow = '0 2px 8px rgba(0,0,0,0.06)'}
+                    onMouseLeave={ev => ev.currentTarget.style.boxShadow = ''}>
                     <td className="px-4 py-3">
-                      <div className="font-semibold text-cmd-text flex items-center gap-1.5">
+                      <div className="font-bold text-[#0C1322] flex items-center gap-1.5">
                         {e.id}
-                        {e.incidentId && <span className="text-[10px] px-1 py-0.5 bg-red-50 text-red-600">MCI</span>}
-                        {e.patientsCount > 1 && <span className="text-[10px] px-1 py-0.5 bg-indigo-50 text-indigo-600">{e.patientsCount}p</span>}
+                        {e.incidentId && <span className="px-1.5 py-0.5 rounded-full text-[9.5px] font-bold" style={{ background: '#fee2e2', color: '#dc2626' }}>MCI</span>}
+                        {e.patientsCount > 1 && !isBlood && <span className="px-1.5 py-0.5 rounded-full text-[9.5px] font-bold" style={{ background: '#eef2ff', color: '#4338ca' }}>{e.patientsCount}p</span>}
                       </div>
-                      <div className="text-[11px] text-cmd-muted mt-0.5">Today, {time}</div>
+                      <div className="text-[11px] mt-0.5" style={{ color: '#9CA3AF' }}>{time}</div>
                     </td>
                     <td className="px-4 py-3">
-                      <span className="px-2 py-0.5 text-[12px] font-medium inline-flex items-center gap-1"
-                        style={{ background: isFire ? '#fff1e8' : isBlood ? '#fee2e2' : '#e8eefb', color: isFire ? '#ea580c' : isBlood ? '#b91c1c' : '#2563eb' }}>
-                        <Icon name={isFire ? 'flame' : isBlood ? 'droplet' : 'medical'} size={13} />
+                      <span className="px-2.5 py-1 rounded-full text-[11px] font-semibold inline-flex items-center gap-1.5"
+                        style={{ background: `${typeColor}12`, color: typeColor }}>
+                        <Icon name={isFire ? 'flame' : isBlood ? 'droplet' : 'medical'} size={12} />
                         {isFire ? 'Fire' : isBlood ? 'Blood' : 'Medical'}
                       </span>
                     </td>
-                    <td className="px-4 py-3"><span className="inline-flex items-center gap-1.5 text-cmd-text"><span className="h-2 w-2" style={{ background: sev?.color }} />{e.severity}</span></td>
-                    <td className="px-4 py-3 text-cmd-text">{pickupLabel(e)}</td>
-                    <td className="px-4 py-3 font-mono text-[13px] text-cmd-text">{veh?.reg || '—'}</td>
-                    <td className="px-4 py-3 text-cmd-text">{isFire ? '—' : (hosp?.name || '—')}</td>
+                    <td className="px-4 py-3">
+                      <span className="inline-flex items-center gap-1.5 text-[13px] font-medium" style={{ color: sev?.color || '#6B7280' }}>
+                        <span className="h-2 w-2 rounded-full shrink-0" style={{ background: sev?.color }} />
+                        {e.severity}
+                        {e.caseType && !isFire && !isBlood && <span className="font-normal text-[#9CA3AF] text-[12px]">· {e.caseType}</span>}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 text-[#374151] max-w-[140px] truncate">{pickupLabel(e)}</td>
+                    <td className="px-4 py-3">
+                      {veh ? (
+                        <span className="inline-flex items-center gap-1.5">
+                          <span className="h-6 w-6 rounded-lg grid place-items-center" style={{ background: `${typeColor}12` }}>
+                            <Icon name={isFire ? 'flame' : isBlood ? 'droplet' : 'medical'} size={11} />
+                          </span>
+                          <span className="font-mono text-[12px] font-semibold text-[#0C1322]">{veh.reg}</span>
+                        </span>
+                      ) : <span className="text-[#9CA3AF]">—</span>}
+                    </td>
+                    <td className="px-4 py-3 text-[#374151] max-w-[150px] truncate">{isFire ? '—' : (hosp?.name || '—')}</td>
                     <td className="px-4 py-3 w-44"><ProgressBar e={e} now={now} /></td>
-                    <td className="px-4 py-3 text-cmd-text">{e.state === 'EN_ROUTE' ? <LiveEta etaComplete={e.etaComplete} fallbackMin={e.etaToPickupMin} /> : '—'}</td>
+                    <td className="px-4 py-3 font-semibold text-[13px]" style={{ color: '#07514D' }}>
+                      {e.state === 'EN_ROUTE' ? <LiveEta etaComplete={e.etaComplete} fallbackMin={e.etaToPickupMin} /> : <span className="text-[#9CA3AF] font-normal">—</span>}
+                    </td>
                     <td className="px-4 py-3"><StatusChip state={e.state} /></td>
                     <td className="px-4 py-3 relative">
                       <button onClick={() => setMenuId(menuId === e.id ? null : e.id)}
-                        className="h-7 w-7 grid place-items-center text-cmd-muted hover:bg-slate-100">⋮</button>
+                        className="h-7 w-7 rounded-lg grid place-items-center text-[#9CA3AF] transition-colors"
+                        onMouseEnter={ev => ev.currentTarget.style.background = '#F5F6F8'}
+                        onMouseLeave={ev => ev.currentTarget.style.background = ''}>⋮</button>
                       {menuId === e.id && (
                         <RowMenu e={e} busy={busy === e.id}
                           onOverride={() => { setMenuId(null); setOverride(e) }}
@@ -239,22 +292,10 @@ export default function DispatchBoard() {
             </tbody>
           </table>
         </div>
-        <div className="text-[12px] text-cmd-muted mt-3">Showing {rows.length} {filter === 'all' ? '' : filter + ' '}responses</div>
+        <div className="text-[12px] mt-3 px-1" style={{ color: '#9CA3AF' }}>Showing {rows.length} {filter !== 'all' ? filter + ' ' : ''}responses</div>
       </div>
 
       {override && <OverrideModal em={override} onClose={() => setOverride(null)} />}
-    </div>
-  )
-}
-
-function Kpi({ value, label, color, icon }) {
-  return (
-    <div className="bg-white border border-slate-200 px-4 py-3 flex items-center gap-3">
-      <div className="h-9 w-9 grid place-items-center" style={{ background: `${color}1a`, color }}><Icon name={icon} size={18} /></div>
-      <div>
-        <div className="text-2xl font-bold leading-none" style={{ color }}>{value}</div>
-        <div className="text-[11px] text-cmd-muted mt-1 flex items-center gap-1 min-h-[2em]"><span className="h-1.5 w-1.5 shrink-0" style={{ background: color }} />{label}</div>
-      </div>
     </div>
   )
 }
@@ -265,15 +306,15 @@ function ProgressBar({ e, now }) {
   const done = e.state === 'COMPLETED'
   const cancelled = e.state === 'CANCELLED'
   const queued = ATTENTION.includes(e.state)
-  const color = cancelled ? '#94a3b8' : done ? '#16a34a' : queued ? '#d97706' : (isFire ? '#ea580c' : '#07514D')
+  const color = cancelled ? '#CBD5E1' : done ? '#16a34a' : queued ? '#d97706' : (isFire ? '#ea580c' : '#07514D')
   return (
-    <div className="min-w-[140px]">
-      <div className="flex items-center justify-between mb-1">
-        <span className="text-[11px] font-medium" style={{ color }}>{stageLabel(e)}</span>
-        {!cancelled && <span className="text-[11px] text-cmd-muted">{pct}%</span>}
+    <div className="min-w-[130px]">
+      <div className="flex items-center justify-between mb-1.5">
+        <span className="text-[11px] font-semibold" style={{ color }}>{stageLabel(e)}</span>
+        {!cancelled && <span className="text-[11px]" style={{ color: '#9CA3AF' }}>{pct}%</span>}
       </div>
-      <div className="h-1.5 bg-slate-200 overflow-hidden">
-        <div className={`h-full transition-all duration-700 ease-out ${queued ? 'animate-pulse' : ''}`}
+      <div className="h-1.5 rounded-full overflow-hidden" style={{ background: 'rgba(0,0,0,0.07)' }}>
+        <div className={`h-full rounded-full transition-all duration-700 ease-out ${queued ? 'animate-pulse' : ''}`}
           style={{ width: `${cancelled ? 0 : pct}%`, background: color }} />
       </div>
     </div>
@@ -289,14 +330,24 @@ function RowMenu({ e, busy, onOverride, onCancel, onClose }) {
   }, [onClose])
   const enroute = e.state === 'EN_ROUTE'
   return (
-    <div ref={ref} className="absolute right-4 top-10 z-20 w-40 bg-white border border-slate-200 shadow-card text-[13px]">
+    <div ref={ref} className="absolute right-4 top-10 z-20 w-44 text-[13px] overflow-hidden"
+      style={{ background: 'rgba(255,255,255,0.97)', borderRadius: '14px', boxShadow: '0 8px 32px rgba(0,0,0,0.14)', border: '1px solid rgba(0,0,0,0.06)' }}>
       {enroute ? (
         <>
-          <button onClick={onOverride} className="w-full text-left px-3 py-2 hover:bg-slate-50 text-accent">Override unit</button>
-          <button onClick={onCancel} disabled={busy} className="w-full text-left px-3 py-2 hover:bg-red-50 text-status-danger disabled:opacity-50">{busy ? 'Cancelling…' : 'Cancel'}</button>
+          <button onClick={onOverride} className="w-full text-left px-4 py-2.5 font-medium transition-colors"
+            style={{ color: '#07514D' }}
+            onMouseEnter={ev => ev.currentTarget.style.background = 'rgba(7,81,77,0.05)'}
+            onMouseLeave={ev => ev.currentTarget.style.background = ''}>Override unit</button>
+          <div style={{ borderTop: '1px solid rgba(0,0,0,0.06)' }} />
+          <button onClick={onCancel} disabled={busy} className="w-full text-left px-4 py-2.5 font-medium transition-colors disabled:opacity-50"
+            style={{ color: '#dc2626' }}
+            onMouseEnter={ev => ev.currentTarget.style.background = 'rgba(220,38,38,0.05)'}
+            onMouseLeave={ev => ev.currentTarget.style.background = ''}>
+            {busy ? 'Cancelling…' : 'Cancel dispatch'}
+          </button>
         </>
       ) : (
-        <div className="px-3 py-2 text-cmd-muted">No actions</div>
+        <div className="px-4 py-2.5 text-[#9CA3AF]">No actions available</div>
       )}
     </div>
   )
@@ -326,41 +377,75 @@ function OverrideModal({ em, onClose }) {
   }
 
   return (
-    <Modal open title={`Override ${em.id}`} onClose={onClose}>
-      <p className="text-xs text-cmd-muted mb-3">Manually reassign the {isFire ? 'fire truck' : 'ambulance'}{!isFire && ' or destination hospital'}. The previous unit is freed.</p>
-      <div className="space-y-3 text-sm">
-        <Field label={isFire ? 'Fire truck' : 'Ambulance'}>
-          <select value={vehicleId} onChange={(e) => setVehicleId(e.target.value)} className="bg-white border border-slate-200 px-3 py-1.5 w-full">
-            {free.length === 0 && <option value="">No free units</option>}
-            {free.map((v) => <option key={v.id} value={v.id}>{v.reg}{v.id === em.ambulanceId ? ' (current)' : ' · idle'}</option>)}
-          </select>
-        </Field>
-        {!isFire && (
-          <Field label="Hospital">
-            <select value={hospitalId} onChange={(e) => setHospitalId(e.target.value)} className="bg-white border border-slate-200 px-3 py-1.5 w-full">
-              {hospitals.map((h) => <option key={h.id} value={h.id}>{h.name}{h.id === em.hospitalId ? ' (current)' : ''}</option>)}
+    <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ background: 'rgba(0,0,0,0.25)' }} onClick={onClose}>
+      <div className="w-[380px] rounded-2xl overflow-hidden" style={{ background: 'rgba(255,255,255,0.97)', boxShadow: '0 24px 64px rgba(0,0,0,0.2)' }}
+        onClick={ev => ev.stopPropagation()}>
+        <div className="px-5 py-4 flex items-center justify-between" style={{ borderBottom: '1px solid rgba(0,0,0,0.07)' }}>
+          <div>
+            <div className="text-[15px] font-bold text-[#0C1322]">Override {em.id}</div>
+            <div className="text-[11px] text-[#6B7280]">Manually reassign unit{!isFire && ' or hospital'}. Previous unit is freed.</div>
+          </div>
+          <button onClick={onClose} className="h-8 w-8 rounded-xl grid place-items-center text-[#9CA3AF]"
+            onMouseEnter={e => e.currentTarget.style.background = '#F5F6F8'}
+            onMouseLeave={e => e.currentTarget.style.background = ''}>
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+          </button>
+        </div>
+        <div className="px-5 py-4 space-y-4">
+          <div>
+            <div className="text-[11px] font-semibold uppercase tracking-widest text-[#9CA3AF] mb-1.5">{isFire ? 'Fire truck' : 'Ambulance'}</div>
+            <select value={vehicleId} onChange={(e) => setVehicleId(e.target.value)}
+              className="w-full rounded-xl px-3 py-2 text-[13px] text-[#0C1322]"
+              style={{ background: '#F5F6F8', border: '1px solid #E5E7EB' }}>
+              {free.length === 0 && <option value="">No free units</option>}
+              {free.map((v) => <option key={v.id} value={v.id}>{v.reg}{v.id === em.ambulanceId ? ' (current)' : ' · idle'}</option>)}
             </select>
-          </Field>
-        )}
-        {result && <div className={`p-2.5 text-xs ${result.ok ? 'text-status-enroute' : 'text-status-danger'}`}>{result.ok ? 'Reassigned.' : result.reason}</div>}
+          </div>
+          {!isFire && (
+            <div>
+              <div className="text-[11px] font-semibold uppercase tracking-widest text-[#9CA3AF] mb-1.5">Hospital</div>
+              <select value={hospitalId} onChange={(e) => setHospitalId(e.target.value)}
+                className="w-full rounded-xl px-3 py-2 text-[13px] text-[#0C1322]"
+                style={{ background: '#F5F6F8', border: '1px solid #E5E7EB' }}>
+                {hospitals.map((h) => <option key={h.id} value={h.id}>{h.name}{h.id === em.hospitalId ? ' (current)' : ''}</option>)}
+              </select>
+            </div>
+          )}
+          {result && (
+            <div className="rounded-xl px-3 py-2.5 text-[12px] font-medium"
+              style={{ background: result.ok ? 'rgba(22,163,74,0.08)' : 'rgba(220,38,38,0.08)', color: result.ok ? '#16a34a' : '#dc2626' }}>
+              {result.ok ? 'Reassigned successfully.' : result.reason}
+            </div>
+          )}
+        </div>
+        <div className="px-5 pb-5 flex gap-2">
+          <button onClick={onClose} className="flex-1 h-10 rounded-xl text-[13px] font-medium transition-colors"
+            style={{ background: '#F5F6F8', color: '#6B7280' }}
+            onMouseEnter={e => e.currentTarget.style.background = '#EAECEF'}
+            onMouseLeave={e => e.currentTarget.style.background = '#F5F6F8'}>Cancel</button>
+          <button onClick={submit} disabled={busy} className="flex-1 h-10 rounded-xl text-[13px] font-semibold disabled:opacity-50 transition-all"
+            style={{ background: '#07514D', color: '#fff', boxShadow: '0 2px 10px rgba(7,81,77,0.25)' }}>
+            {busy ? 'Reassigning…' : 'Apply override'}
+          </button>
+        </div>
       </div>
-      <div className="mt-4 flex justify-end gap-2">
-        <button className="btn-ghost" onClick={onClose}>Close</button>
-        <button className="btn-primary disabled:opacity-50" disabled={busy} onClick={submit}>{busy ? 'Reassigning…' : 'Apply override'}</button>
-      </div>
-    </Modal>
+    </div>
   )
 }
 
-const Field = ({ label, children }) => <div><div className="label mb-1">{label}</div>{children}</div>
-
 function StatusChip({ state }) {
   const map = {
-    EN_ROUTE: ['#16a34a', 'En route'], COMPLETED: ['#64748b', 'Completed'],
-    QUEUED: ['#d97706', 'Queued'], PREEMPTED: ['#dc2626', 'Preempted'],
-    NO_HOSPITAL: ['#dc2626', 'No facility'], NO_BLOODBANK: ['#dc2626', 'No blood bank'],
+    EN_ROUTE: ['#16a34a', 'En route'],
+    COMPLETED: ['#64748b', 'Completed'],
+    QUEUED: ['#d97706', 'Queued'],
+    PREEMPTED: ['#dc2626', 'Preempted'],
+    NO_HOSPITAL: ['#dc2626', 'No facility'],
+    NO_BLOODBANK: ['#dc2626', 'No blood bank'],
     CANCELLED: ['#94a3b8', 'Cancelled'],
   }
   const [c, t] = map[state] || ['#64748b', state]
-  return <span className="px-2 py-0.5 text-[12px] font-medium" style={{ background: `${c}1a`, color: c }}>{t}</span>
+  return (
+    <span className="px-2.5 py-1 rounded-full text-[11px] font-semibold whitespace-nowrap"
+      style={{ background: `${c}14`, color: c }}>{t}</span>
+  )
 }

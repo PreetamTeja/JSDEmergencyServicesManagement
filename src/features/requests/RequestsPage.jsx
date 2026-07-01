@@ -152,7 +152,7 @@ export default function DispatchBoard() {
           { value: kpis.medical, label: 'Medical', color: '#2563eb', icon: 'medical' },
         ].map((k) => (
           <div key={k.label} className="px-4 py-3.5 flex items-center gap-3"
-            style={{ background: '#E8E8EE', borderRadius: '16px', boxShadow: '7px 7px 18px rgba(0,0,0,0.12), -7px -7px 18px rgba(255,255,255,0.85)' }}>
+            style={{ background: '#fff', borderRadius: '16px' }}>
             <div className="h-9 w-9 rounded-xl grid place-items-center shrink-0" style={{ background: `${k.color}15`, color: k.color }}>
               <Icon name={k.icon} size={17} />
             </div>

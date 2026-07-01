@@ -44,7 +44,7 @@ export default function DashboardPage() {
   const dateLabel = now.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })
 
   return (
-    <div className="h-full overflow-auto" style={{ background: '#E8E8EE' }}>
+    <div className="h-full overflow-auto" style={{ background: .#fff. }}>
       {/* ── Page header ── */}
       <div className="px-7 pt-7 pb-5 flex items-start justify-between gap-4">
         <div>
@@ -239,15 +239,14 @@ function Glyph({ name, className = '' }) {
       strokeLinecap="round" strokeLinejoin="round" className={className} dangerouslySetInnerHTML={{ __html: ICONS[name] }} />
   )
 }
-const NEO = {
-  background: '#E8E8EE',
-  boxShadow: '8px 8px 20px rgba(0,0,0,0.12), -8px -8px 20px rgba(255,255,255,0.85)',
+const CARD = {
+  background: '#fff',
   borderRadius: '16px',
 }
 
 function NeoKpi({ icon, label, value, sub, accentColor }) {
   return (
-    <div className="p-5 flex flex-col gap-3" style={NEO}>
+    <div className="p-5 flex flex-col gap-3" style={CARD}>
       <div className="flex items-center justify-between">
         <span className="text-[11px] uppercase tracking-widest font-semibold" style={{ color: '#9CA3AF' }}>{label}</span>
         <div className="h-8 w-8 rounded-xl grid place-items-center"
@@ -262,7 +261,7 @@ function NeoKpi({ icon, label, value, sub, accentColor }) {
 }
 function NeoCard({ title, children, className = '' }) {
   return (
-    <div className={`p-5 ${className}`} style={NEO}>
+    <div className={`p-5 ${className}`} style={CARD}>
       <div className="text-[11px] uppercase tracking-widest font-semibold mb-4" style={{ color: '#9CA3AF' }}>{title}</div>
       {children}
     </div>

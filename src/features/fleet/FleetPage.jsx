@@ -145,12 +145,12 @@ function Vehicles() {
 
       {/* Gradient fade when panel is open */}
       {panelOpen && (
-        <div className="absolute left-[420px] top-0 bottom-0 w-32 z-[5] pointer-events-none"
+        <div className="absolute left-[540px] top-0 bottom-0 w-32 z-[5] pointer-events-none"
           style={{ background: 'linear-gradient(to right, rgba(245,246,248,0.4) 0%, transparent 100%)' }} />
       )}
 
       {/* ── Floating vehicle list panel ── */}
-      <div className={`absolute left-4 top-4 bottom-4 z-[400] transition-all duration-300 overflow-hidden flex flex-col ${panelOpen ? 'w-[400px]' : 'w-0 opacity-0'}`}
+      <div className={`absolute left-4 top-4 bottom-4 z-[400] transition-all duration-300 overflow-hidden flex flex-col ${panelOpen ? 'w-[520px]' : 'w-0 opacity-0'}`}
         style={{ borderRadius: '20px', background: panelOpen ? 'rgba(255,255,255,0.93)' : 'transparent', backdropFilter: panelOpen ? 'blur(20px)' : 'none', WebkitBackdropFilter: panelOpen ? 'blur(20px)' : 'none', boxShadow: panelOpen ? '0 4px 32px rgba(0,0,0,0.13)' : 'none' }}>
 
         {panelOpen && (<>
@@ -287,7 +287,7 @@ function Vehicles() {
         className="absolute z-[400] flex items-center gap-2 transition-all"
         style={{
           top: '16px',
-          left: panelOpen ? '432px' : '16px',
+          left: panelOpen ? '552px' : '16px',
           background: 'rgba(255,255,255,0.92)',
           backdropFilter: 'blur(12px)',
           WebkitBackdropFilter: 'blur(12px)',

@@ -70,7 +70,7 @@ export default function UserPortal({ session, onSignOut }) {
       <header className="h-16 bg-accent text-white flex items-center justify-between px-5 shrink-0 sticky top-0 z-40">
         <div className="font-semibold text-[15px]">JSD TATA Emergency Services</div>
         <div className="flex items-center gap-3">
-          <span className="text-[13px] text-white/80 hidden sm:inline">{session?.sub || session?.name}</span>
+          <span className="text-[13px] text-white/80 hidden sm:inline">{session?.name || session?.['cognito:username'] || session?.email || session?.sub}</span>
           <button onClick={onSignOut} className="text-[13px] px-3 h-9 rounded-lg bg-white/10 hover:bg-white/20">Sign out</button>
         </div>
       </header>

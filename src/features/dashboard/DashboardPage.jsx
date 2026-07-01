@@ -44,7 +44,7 @@ export default function DashboardPage() {
   const dateLabel = now.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })
 
   return (
-    <div className="h-full overflow-auto" style={{ background: .#fff. }}>
+    <div className="h-full overflow-auto" style={{ background: '#F9FAFB' }}>
       {/* ── Page header ── */}
       <div className="px-7 pt-7 pb-5 flex items-start justify-between gap-4">
         <div>

@@ -124,7 +124,7 @@ export default function DispatchBoard() {
   async function onCancel(id) { setMenuId(null); setBusy(id); try { await cancelRequest(id) } finally { setBusy(null) } }
 
   return (
-    <div className="flex flex-col h-full" style={{ background: '#F5F6F8' }}>
+    <div className="flex flex-col h-full" style={{ background: '#E8E8EE' }}>
 
       {/* ── Page header ── */}
       <div className="px-6 pt-6 pb-4 flex items-center gap-4">
@@ -152,7 +152,7 @@ export default function DispatchBoard() {
           { value: kpis.medical, label: 'Medical', color: '#2563eb', icon: 'medical' },
         ].map((k) => (
           <div key={k.label} className="px-4 py-3.5 flex items-center gap-3"
-            style={{ background: '#F5F6F8', borderRadius: '16px', boxShadow: '7px 7px 18px rgba(0,0,0,0.07), -7px -7px 18px rgba(255,255,255,0.95)' }}>
+            style={{ background: '#E8E8EE', borderRadius: '16px', boxShadow: '7px 7px 18px rgba(0,0,0,0.12), -7px -7px 18px rgba(255,255,255,0.85)' }}>
             <div className="h-9 w-9 rounded-xl grid place-items-center shrink-0" style={{ background: `${k.color}15`, color: k.color }}>
               <Icon name={k.icon} size={17} />
             </div>
@@ -278,7 +278,7 @@ export default function DispatchBoard() {
                     <td className="px-4 py-3 relative">
                       <button onClick={() => setMenuId(menuId === e.id ? null : e.id)}
                         className="h-7 w-7 rounded-lg grid place-items-center text-[#9CA3AF] transition-colors"
-                        onMouseEnter={ev => ev.currentTarget.style.background = '#F5F6F8'}
+                        onMouseEnter={ev => ev.currentTarget.style.background = '#E8E8EE'}
                         onMouseLeave={ev => ev.currentTarget.style.background = ''}>⋮</button>
                       {menuId === e.id && (
                         <RowMenu e={e} busy={busy === e.id}
@@ -386,7 +386,7 @@ function OverrideModal({ em, onClose }) {
             <div className="text-[11px] text-[#6B7280]">Manually reassign unit{!isFire && ' or hospital'}. Previous unit is freed.</div>
           </div>
           <button onClick={onClose} className="h-8 w-8 rounded-xl grid place-items-center text-[#9CA3AF]"
-            onMouseEnter={e => e.currentTarget.style.background = '#F5F6F8'}
+            onMouseEnter={e => e.currentTarget.style.background = '#E8E8EE'}
             onMouseLeave={e => e.currentTarget.style.background = ''}>
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
           </button>
@@ -396,7 +396,7 @@ function OverrideModal({ em, onClose }) {
             <div className="text-[11px] font-semibold uppercase tracking-widest text-[#9CA3AF] mb-1.5">{isFire ? 'Fire truck' : 'Ambulance'}</div>
             <select value={vehicleId} onChange={(e) => setVehicleId(e.target.value)}
               className="w-full rounded-xl px-3 py-2 text-[13px] text-[#0C1322]"
-              style={{ background: '#F5F6F8', border: '1px solid #E5E7EB' }}>
+              style={{ background: '#E8E8EE', border: '1px solid #E5E7EB' }}>
               {free.length === 0 && <option value="">No free units</option>}
               {free.map((v) => <option key={v.id} value={v.id}>{v.reg}{v.id === em.ambulanceId ? ' (current)' : ' · idle'}</option>)}
             </select>
@@ -406,7 +406,7 @@ function OverrideModal({ em, onClose }) {
               <div className="text-[11px] font-semibold uppercase tracking-widest text-[#9CA3AF] mb-1.5">Hospital</div>
               <select value={hospitalId} onChange={(e) => setHospitalId(e.target.value)}
                 className="w-full rounded-xl px-3 py-2 text-[13px] text-[#0C1322]"
-                style={{ background: '#F5F6F8', border: '1px solid #E5E7EB' }}>
+                style={{ background: '#E8E8EE', border: '1px solid #E5E7EB' }}>
                 {hospitals.map((h) => <option key={h.id} value={h.id}>{h.name}{h.id === em.hospitalId ? ' (current)' : ''}</option>)}
               </select>
             </div>
@@ -420,9 +420,9 @@ function OverrideModal({ em, onClose }) {
         </div>
         <div className="px-5 pb-5 flex gap-2">
           <button onClick={onClose} className="flex-1 h-10 rounded-xl text-[13px] font-medium transition-colors"
-            style={{ background: '#F5F6F8', color: '#6B7280' }}
+            style={{ background: '#E8E8EE', color: '#6B7280' }}
             onMouseEnter={e => e.currentTarget.style.background = '#EAECEF'}
-            onMouseLeave={e => e.currentTarget.style.background = '#F5F6F8'}>Cancel</button>
+            onMouseLeave={e => e.currentTarget.style.background = '#E8E8EE'}>Cancel</button>
           <button onClick={submit} disabled={busy} className="flex-1 h-10 rounded-xl text-[13px] font-semibold disabled:opacity-50 transition-all"
             style={{ background: '#07514D', color: '#fff', boxShadow: '0 2px 10px rgba(7,81,77,0.25)' }}>
             {busy ? 'Reassigning…' : 'Apply override'}

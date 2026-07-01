@@ -9,8 +9,9 @@ const VOICE_URL = import.meta.env.VITE_VOICE_URL || ''
 const SR = typeof window !== 'undefined' ? (window.SpeechRecognition || window.webkitSpeechRecognition) : null
 // strip any <thinking>…</thinking> / stray tags the model may emit
 const clean = (t) => String(t || '').replace(/<thinking>[\s\S]*?<\/thinking>/gi, '').replace(/<\/?[a-z_]+>/gi, '').trim()
-// A booking is confirmed if we got a single unit (id/EN_ROUTE) OR a mass-casualty incident.
-const bookedOk = (b) => !!b && (b.id || b.status === 'EN_ROUTE' || b.incident_id)
+// A booking is confirmed if the server returned a booked object with pickup_id set.
+// booked is null for all question/pending states; only dispatch responses include pickup_id.
+const bookedOk = (b) => b != null && b.pickup_id != null
 
 // Phone-style voice agent: Call -> "Connecting…" -> live call UI with a timer that
 // auto-listens. Browser STT/TTS; AWS (Bedrock Lambda) books via /emergencies.
@@ -116,9 +117,12 @@ export default function VoiceAgent({ session, onClose }) {
 
   // Caller approved -> dispatch the slots we already collected (no re-extraction → no loop).
   function confirmDispatch() {
+    const slots = pendingRef.current
+    console.log('[voice] confirmDispatch slots=', slots)
     const next = [...msgsRef.current]
-    ask(next, false, true, true, pendingRef.current).then((d) => {
+    ask(next, false, true, true, slots).then((d) => {
       if (!d) return
+      console.log('[voice] confirmDispatch response=', d)
       if (bookedOk(d.booked)) { setEnded(true); endingRef.current = true; speak(d.reply, false) }
       else speak(d.reply, true)
     })
@@ -135,7 +139,7 @@ export default function VoiceAgent({ session, onClose }) {
     aliveRef.current = true
     if (VOICE_URL && !greetedRef.current) {
       greetedRef.current = true
-      ask([]).then((d) => { if (d) { setPhase('incall'); speak(d.reply, true) } })
+      ask([]).then((d) => { if (d) { setPhase('incall'); startListening() } })
     }
     return () => { aliveRef.current = false; stopListening(); speechSynthesis.cancel() }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -144,9 +148,11 @@ export default function VoiceAgent({ session, onClose }) {
   useEffect(() => { if (phase !== 'incall') return; const id = setInterval(() => setSeconds((s) => s + 1), 1000); return () => clearInterval(id) }, [phase])
   useEffect(() => { endRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [messages, booked])
 
-  // Hang up: simply ends the call. Never dispatches on its own — a unit is only
-  // sent after the caller explicitly approves the confirmation.
-  function endCall() { close() }
+  // Hang up: if there's a pending confirmed dispatch, submit it first; otherwise close.
+  function endCall() {
+    if (pendingRef.current) { confirmDispatch(); return }
+    close()
+  }
   function close() { aliveRef.current = false; stopListening(); speechSynthesis.cancel(); onClose() }
 
   // dispatch card data (live)
@@ -156,7 +162,7 @@ export default function VoiceAgent({ session, onClose }) {
   const dest = isFire ? (locById(booked?.pickup_id || em?.pickup)?.name) : (booked?.hospital || hospitalById(booked?.hospital_id || em?.hospitalId)?.name)
   const isMass = !!(booked?.incident_id || booked?.mass)
   const massPlace = locById(booked?.pickup_id)?.name
-  const dispatched = booked && (booked.status === 'EN_ROUTE' || em || isMass)
+  const dispatched = bookedOk(booked)
 
   return (
     <div className="fixed inset-0 z-[1000] bg-black/50 grid place-items-center p-4">
@@ -195,16 +201,24 @@ export default function VoiceAgent({ session, onClose }) {
                   {massPlace && <div className="text-cmd-muted">To {massPlace}</div>}
                 </div>
               )}
-              {dispatched && !isMass && (
-                <div className="rounded-xl border-2 p-3 text-[13px]" style={{ borderColor: isFire ? '#ea580c' : '#16a34a', background: isFire ? '#fff7ed' : '#f0fdf4' }}>
-                  <div className="font-semibold flex items-center gap-1.5" style={{ color: isFire ? '#ea580c' : '#16a34a' }}>
-                    ✓ {isFire ? 'Fire truck dispatched' : 'Ambulance dispatched'}
+              {dispatched && !isMass && (() => {
+                const st = em?.state || booked?.status
+                const isEnRoute = st === 'EN_ROUTE'
+                const isQueued = ['QUEUED', 'NO_HOSPITAL', 'NO_BLOODBANK'].includes(st)
+                const color = isEnRoute ? (isFire ? '#ea580c' : '#16a34a') : '#b45309'
+                const bg = isEnRoute ? (isFire ? '#fff7ed' : '#f0fdf4') : '#fffbeb'
+                const label = isEnRoute
+                  ? (isFire ? 'Fire truck dispatched' : 'Ambulance dispatched')
+                  : isQueued ? 'Request queued — waiting for unit' : 'Request submitted'
+                return (
+                  <div className="rounded-xl border-2 p-3 text-[13px]" style={{ borderColor: color, background: bg }}>
+                    <div className="font-semibold flex items-center gap-1.5" style={{ color }}>✓ {label}</div>
+                    {booked.id && <div className="mt-1 text-cmd-text">{booked.id}{reg ? ` · Unit ${reg}` : ''}</div>}
+                    {dest && isEnRoute && <div className="text-cmd-muted">{isFire ? 'To incident' : 'To'} {dest}</div>}
+                    {isEnRoute && em?.state === 'EN_ROUTE' && <div className="mt-0.5">ETA <LiveEta etaComplete={em.etaComplete} fallbackMin={em.etaToPickupMin} className="font-semibold text-accent" /></div>}
                   </div>
-                  <div className="mt-1 text-cmd-text">{booked.id} · Unit {reg || booked.assigned_vehicle_id || '—'}</div>
-                  {dest && <div className="text-cmd-muted">{isFire ? 'To incident' : 'To'} {dest}</div>}
-                  {em?.state === 'EN_ROUTE' && <div className="mt-0.5">ETA <LiveEta etaComplete={em.etaComplete} fallbackMin={em.etaToPickupMin} className="font-semibold text-accent" /></div>}
-                </div>
-              )}
+                )
+              })()}
               {ended && !dispatched && (
                 <div className="rounded-xl border border-red-300 bg-red-50 p-3 text-[13px] text-status-danger">
                   Couldn't dispatch automatically — please use the request form.

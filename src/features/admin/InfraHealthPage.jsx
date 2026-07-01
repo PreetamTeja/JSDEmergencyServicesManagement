@@ -24,8 +24,8 @@ function statusColor(errorRatePct) {
 }
 
 const NEO = {
-  background: '#F5F6F8',
-  boxShadow: '8px 8px 20px rgba(0,0,0,0.07), -8px -8px 20px rgba(255,255,255,0.95)',
+  background: '#E8E8EE',
+  boxShadow: '8px 8px 20px rgba(0,0,0,0.12), -8px -8px 20px rgba(255,255,255,0.85)',
   borderRadius: '16px',
 }
 
@@ -60,7 +60,7 @@ export default function InfraHealthPage() {
   }, [load])
 
   return (
-    <div className="h-full overflow-auto" style={{ background: '#F5F6F8' }}>
+    <div className="h-full overflow-auto" style={{ background: '#E8E8EE' }}>
       {/* ── Page header ── */}
       <div className="px-7 pt-7 pb-5 flex items-center justify-between gap-4">
         <div>

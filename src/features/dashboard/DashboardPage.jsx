@@ -44,7 +44,7 @@ export default function DashboardPage() {
   const dateLabel = now.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })
 
   return (
-    <div className="h-full overflow-auto" style={{ background: '#F5F6F8' }}>
+    <div className="h-full overflow-auto" style={{ background: '#E8E8EE' }}>
       {/* ── Page header ── */}
       <div className="px-7 pt-7 pb-5 flex items-start justify-between gap-4">
         <div>
@@ -240,8 +240,8 @@ function Glyph({ name, className = '' }) {
   )
 }
 const NEO = {
-  background: '#F5F6F8',
-  boxShadow: '8px 8px 20px rgba(0,0,0,0.07), -8px -8px 20px rgba(255,255,255,0.95)',
+  background: '#E8E8EE',
+  boxShadow: '8px 8px 20px rgba(0,0,0,0.12), -8px -8px 20px rgba(255,255,255,0.85)',
   borderRadius: '16px',
 }
 

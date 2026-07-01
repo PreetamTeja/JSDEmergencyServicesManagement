@@ -156,7 +156,7 @@ function Console({ session, onSignOut }) {
   const initials = (session?.name || 'EC').split(' ').map((p) => p[0]).join('').slice(0, 2).toUpperCase()
 
   return (
-    <div className="flex h-screen overflow-hidden bg-[#F5F6F8] text-cmd-text">
+    <div className="flex h-screen overflow-hidden bg-[#E8E8EE] text-cmd-text">
       {/* ── Glassmorphism Sidebar ─────────────────────────────────── */}
       <aside
         className={`relative z-[1000] shrink-0 flex flex-col text-white transition-all duration-200 ${collapsed ? 'w-[68px]' : 'w-[240px]'}`}
@@ -251,7 +251,7 @@ function Console({ session, onSignOut }) {
               <button onClick={onSignOut}
                 className="mt-3 w-full h-9 rounded-xl text-[13px] font-medium flex items-center justify-center gap-2 transition-colors"
                 style={{ border: '1px solid #E5E7EB', color: '#475467' }}
-                onMouseEnter={e => e.currentTarget.style.background = '#F5F6F8'}
+                onMouseEnter={e => e.currentTarget.style.background = '#E8E8EE'}
                 onMouseLeave={e => e.currentTarget.style.background = ''}>
                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9" />

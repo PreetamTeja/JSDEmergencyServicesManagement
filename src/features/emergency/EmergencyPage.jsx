@@ -402,7 +402,7 @@ function NewEmergencyDrawer({ onClose }) {
               <DrawerField label="Patients on scene">
                 <input type="number" min={1} max={200} value={patients} onChange={(e) => setPatients(e.target.value)}
                   className="w-full rounded-xl px-3 py-2 text-[13px] text-[#0C1322]"
-                  style={{ background: '#F5F6F8', border: '1px solid #E5E7EB' }} />
+                  style={{ background: '#E8E8EE', border: '1px solid #E5E7EB' }} />
               </DrawerField>
               <DrawerField label="Mass casualty">
                 <label className="flex items-center gap-2 h-[38px] text-[13px] text-[#374151] cursor-pointer">
@@ -417,7 +417,7 @@ function NewEmergencyDrawer({ onClose }) {
             <DrawerField label="Ambulances to dispatch">
               <input type="number" min={2} max={10} value={units} onChange={(e) => setUnits(e.target.value)}
                 className="w-full rounded-xl px-3 py-2 text-[13px] text-[#0C1322]"
-                style={{ background: '#F5F6F8', border: '1px solid #E5E7EB' }} />
+                style={{ background: '#E8E8EE', border: '1px solid #E5E7EB' }} />
             </DrawerField>
           )}
 
@@ -432,7 +432,7 @@ function NewEmergencyDrawer({ onClose }) {
                     className="flex-1 h-9 rounded-xl text-[13px] font-semibold transition-all"
                     style={isActive
                       ? { background: activeColor, color: '#fff', boxShadow: `0 2px 10px ${activeColor}40` }
-                      : { background: '#F5F6F8', color: '#6B7280' }}>
+                      : { background: '#E8E8EE', color: '#6B7280' }}>
                     {s}
                   </button>
                 )
@@ -457,9 +457,9 @@ function NewEmergencyDrawer({ onClose }) {
         <div className="px-5 py-4 shrink-0 flex gap-2" style={{ borderTop: '1px solid rgba(0,0,0,0.07)' }}>
           <button onClick={onClose}
             className="flex-1 h-10 rounded-xl text-[13px] font-medium text-[#6B7280] transition-colors"
-            style={{ background: '#F5F6F8' }}
+            style={{ background: '#E8E8EE' }}
             onMouseEnter={e => e.currentTarget.style.background = '#EAECEF'}
-            onMouseLeave={e => e.currentTarget.style.background = '#F5F6F8'}>
+            onMouseLeave={e => e.currentTarget.style.background = '#E8E8EE'}>
             Cancel
           </button>
           <button onClick={submit} disabled={busy || (isBlood && banks.length === 0)}
@@ -482,7 +482,7 @@ const DrawerField = ({ label, children }) => (
 const DrawerSelect = ({ value, onChange, options, labels }) => (
   <select value={value} onChange={(e) => onChange(e.target.value)}
     className="w-full rounded-xl px-3 py-2 text-[13px] text-[#0C1322]"
-    style={{ background: '#F5F6F8', border: '1px solid #E5E7EB' }}>
+    style={{ background: '#E8E8EE', border: '1px solid #E5E7EB' }}>
     {options.map((o) => <option key={o} value={o}>{labels ? labels[o] : o}</option>)}
   </select>
 )
@@ -491,7 +491,7 @@ const TypeBtn = ({ active, onClick, label, color }) => (
     className="h-10 rounded-xl text-[13px] font-semibold transition-all"
     style={active
       ? { background: color, color: '#fff', boxShadow: `0 2px 10px ${color}40` }
-      : { background: '#F5F6F8', color: '#6B7280' }}>
+      : { background: '#E8E8EE', color: '#6B7280' }}>
     {label}
   </button>
 )

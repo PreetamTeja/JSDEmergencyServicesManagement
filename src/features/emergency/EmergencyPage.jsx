@@ -58,26 +58,20 @@ export default function EmergencyPage() {
       <EmergencyMap emergencies={emergencies} />
 
       {/* ── Floating top header strip ── */}
-      <div className="absolute top-4 left-4 right-4 z-[400] flex items-center gap-3">
-        <div className="flex-1 min-w-0 px-4 py-2.5 rounded-2xl flex items-center gap-3"
-          style={{ background: 'rgba(255,255,255,0.88)', backdropFilter: 'blur(18px)', WebkitBackdropFilter: 'blur(18px)', boxShadow: '0 4px 24px rgba(0,0,0,0.10)', border: '1px solid rgba(255,255,255,0.6)' }}>
-          <div className="flex-1 min-w-0">
-            <div className="text-[15px] font-bold text-[#0C1322] leading-tight">Emergency Dispatch</div>
-            <div className="text-[11px] text-[#6B7280]">Automatic nearest-unit dispatch · live</div>
-          </div>
-          <div className="flex items-center gap-2">
-            <TrafficControl />
-            {counts.active > 0 && (
-              <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold"
-                style={{ background: 'rgba(220,38,38,0.1)', color: '#dc2626' }}>
-                <span className="h-1.5 w-1.5 rounded-full bg-[#dc2626] animate-pulse" />
-                {counts.active} active
-              </span>
-            )}
-          </div>
-        </div>
+      <div className="absolute top-4 left-4 right-4 z-[400] px-4 py-2.5 rounded-2xl flex items-center gap-3"
+        style={{ background: 'rgba(255,255,255,0.88)', backdropFilter: 'blur(18px)', WebkitBackdropFilter: 'blur(18px)', boxShadow: '0 4px 24px rgba(0,0,0,0.10)', border: '1px solid rgba(255,255,255,0.6)' }}>
+        <div className="text-[15px] font-bold text-[#0C1322] leading-tight shrink-0">Emergency Dispatch</div>
+        <div className="flex-1" />
+        <TrafficControl />
+        {counts.active > 0 && (
+          <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold shrink-0"
+            style={{ background: 'rgba(220,38,38,0.1)', color: '#dc2626' }}>
+            <span className="h-1.5 w-1.5 rounded-full bg-[#dc2626] animate-pulse" />
+            {counts.active} active
+          </span>
+        )}
         <button onClick={() => setOpen(true)}
-          className="h-10 px-4 rounded-2xl text-[13px] font-semibold flex items-center gap-2 shrink-0 transition-all hover:brightness-105"
+          className="h-9 px-4 rounded-xl text-[13px] font-semibold flex items-center gap-2 shrink-0 transition-all hover:brightness-105"
           style={{ background: '#D6DF27', color: '#07514D' }}>
           <Icon name="plus" size={13} strokeWidth={2.5} />
           New Emergency
@@ -141,17 +135,21 @@ function TrafficControl() {
   const mode = useFleetStore((s) => s.trafficMode)
   const setMode = useFleetStore((s) => s.setTrafficMode)
   return (
-    <label className="flex items-center gap-1.5 text-[12px] text-[#6B7280]">
-      <span className="flex items-center gap-1"><Icon name="traffic" size={13} strokeWidth={1.8} /> Traffic</span>
+    <div className="relative flex items-center gap-1.5 shrink-0 text-[12px] font-medium text-[#374151]">
+      <Icon name="traffic" size={13} strokeWidth={1.8} className="text-[#6B7280]" />
       <select value={mode} onChange={(e) => setMode(e.target.value)} aria-label="Traffic mode"
-        className="bg-white border border-cmd-border rounded-md px-2 py-1 text-[12px] text-cmd-text">
+        className="appearance-none bg-transparent border-0 outline-none pr-4 py-1 text-[12px] font-medium text-[#374151] cursor-pointer">
         <option value="auto">Auto</option>
         <option value="clear">Clear</option>
         <option value="moderate">Moderate</option>
         <option value="heavy">Heavy</option>
         <option value="gridlock">Gridlock</option>
       </select>
-    </label>
+      <svg className="pointer-events-none absolute right-0 top-1/2 -translate-y-1/2 text-[#9CA3AF]"
+        width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M6 9l6 6 6-6" />
+      </svg>
+    </div>
   )
 }
 
@@ -355,12 +353,13 @@ function NewEmergencyDrawer({ onClose }) {
   return (
     <div className="absolute inset-0 z-[500] flex justify-end" style={{ pointerEvents: 'none' }}>
       {/* Dim overlay */}
-      <div className="absolute inset-0" style={{ background: 'rgba(0,0,0,0.25)', pointerEvents: 'auto' }} onClick={onClose} />
+      <div className="absolute inset-0 drawer-overlay" style={{ background: 'rgba(0,0,0,0.25)', pointerEvents: 'auto' }} onClick={onClose} />
 
-      {/* Drawer */}
+      {/* Drawer — solid (no backdrop-filter): blurring the live map on every
+          frame of the slide is what caused the animation to stutter. */}
       <div ref={panelRef} tabIndex={-1} role="dialog" aria-modal="true" aria-label="New emergency"
         className="relative flex flex-col w-[380px] max-w-full h-full overflow-auto drawer-panel outline-none"
-        style={{ background: 'rgba(255,255,255,0.95)', backdropFilter: 'blur(24px)', WebkitBackdropFilter: 'blur(24px)', boxShadow: '-8px 0 40px rgba(0,0,0,0.18)', pointerEvents: 'auto' }}>
+        style={{ background: '#fff', boxShadow: '-8px 0 40px rgba(0,0,0,0.18)', pointerEvents: 'auto', willChange: 'transform' }}>
 
         {/* Drawer header */}
         <div className="flex items-center justify-between px-5 py-4 shrink-0"

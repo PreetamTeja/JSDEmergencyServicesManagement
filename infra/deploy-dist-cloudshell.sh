@@ -21,7 +21,10 @@ echo "Region=${REGION}  Bucket=${BUCKET}  Account=${ACCOUNT}"
 [ -f "$ZIP" ] || { echo "ERROR: $ZIP not found. Upload it via Actions -> Upload file."; exit 1; }
 
 # ---- 0) unpack the build ----
-rm -rf dist && mkdir dist && (cd dist && unzip -oq "../${ZIP}")
+# unzip exits 1 for warnings only (e.g. benign "backslashes as path separators"
+# notices from Windows-built zips) — tolerate that, but not real errors (2+).
+rm -rf dist && mkdir dist
+(cd dist && unzip -oq "../${ZIP}") || { code=$?; [ "$code" -le 1 ] || exit "$code"; }
 [ -f dist/index.html ] || { echo "ERROR: dist/index.html missing (zip the CONTENTS of dist, not the folder)"; exit 1; }
 
 # ---- 1) S3 bucket (private; served only via CloudFront) ----

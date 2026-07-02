@@ -90,16 +90,9 @@ export default function App() {
   return <Console session={session} onSignOut={signOut} />
 }
 
-// Branded boot screen shown while live data loads. Picks one of three
-// emergency-services themes per load: EKG trace, fire beacon, or dispatch radar.
-const BOOT_VARIANTS = ['medical', 'fire', 'ops']
+// Branded boot screen shown while live data loads — dispatch radar sweep.
 export function BootScreen({ message = 'Connecting to live operations…' }) {
-  const [variant] = useState(() => BOOT_VARIANTS[Math.floor(Math.random() * BOOT_VARIANTS.length)])
-  const bg = {
-    medical: 'linear-gradient(160deg,#04332F 0%,#07514D 55%,#0B6A64 100%)',
-    fire: 'linear-gradient(160deg,#2A1208 0%,#54290F 45%,#07514D 110%)',
-    ops: 'linear-gradient(160deg,#05201E 0%,#083F3B 55%,#0B5A55 100%)',
-  }[variant]
+  const bg = 'linear-gradient(160deg,#05201E 0%,#083F3B 55%,#0B5A55 100%)'
   return (
     <div className="h-screen w-full grid place-items-center text-white on-dark" style={{ background: bg }}>
       <div className="boot-in flex flex-col items-center text-center px-6">
@@ -108,35 +101,13 @@ export function BootScreen({ message = 'Connecting to live operations…' }) {
         <div className="text-[22px] font-bold tracking-tight">JSD Emergency Services</div>
         <div className="text-[13px] mb-8" style={{ color: 'rgba(214,223,39,0.8)' }}>Tata Steel · Jamshedpur</div>
 
-        {variant === 'medical' && <BootEkg />}
-        {variant === 'fire' && <BootFire />}
-        {variant === 'ops' && <BootRadar />}
+        <BootRadar />
 
         <div className="mt-8 text-[13px] boot-pulse" style={{ color: 'rgba(255,255,255,0.78)' }}>{message}</div>
         <div className="mt-3 h-1 w-44 rounded-full overflow-hidden" style={{ background: 'rgba(255,255,255,0.14)' }}>
           <div className="boot-bar h-full w-2/5 rounded-full" style={{ background: '#D6DF27' }} />
         </div>
       </div>
-    </div>
-  )
-}
-
-function BootEkg() {
-  const beat = 'M0 30 H64 L74 30 L82 10 L90 46 L98 30 H148 L158 30 L166 12 L174 44 L182 30 H260'
-  return (
-    <svg width="260" height="60" viewBox="0 0 260 60" fill="none" aria-hidden="true">
-      <path d={beat} stroke="rgba(255,255,255,0.15)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-      <path d={beat} className="ekg-line" stroke="#D6DF27" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  )
-}
-
-function BootFire() {
-  return (
-    <div className="relative grid place-items-center h-24 w-24">
-      <span className="absolute inset-0 rounded-full boot-pulse"
-        style={{ background: 'radial-gradient(circle, rgba(234,88,12,0.4) 0%, transparent 70%)' }} />
-      <Icon name="flame" size={48} strokeWidth={1.5} className="boot-pulse" style={{ color: '#FBBF24' }} />
     </div>
   )
 }

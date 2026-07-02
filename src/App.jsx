@@ -12,20 +12,10 @@ import UserPortal from './portal/UserPortal'
 import PolicyControls from './components/common/PolicyControls'
 import TrackPage from './features/track/TrackPage'
 import InfraHealthPage from './features/admin/InfraHealthPage'
+import Icon from './components/common/Icon'
 
 // Public shareable tracking links bypass auth + the authed data load entirely.
 const IS_TRACK = typeof window !== 'undefined' && window.location.pathname.startsWith('/track/')
-
-// Minimal line-icon paths (24x24, stroke=currentColor)
-const ICONS = {
-  dashboard: '<rect x="3" y="3" width="7" height="9"/><rect x="14" y="3" width="7" height="5"/><rect x="14" y="12" width="7" height="9"/><rect x="3" y="16" width="7" height="5"/>',
-  map: '<path d="M9 4 4 6v14l5-2 6 2 5-2V4l-5 2-6-2Z"/><path d="M9 4v14M15 6v14"/>',
-  fleet: '<path d="M3 7h11v8H3z"/><path d="M14 9h3.5l3.5 3.5V15h-7z"/><circle cx="7" cy="17" r="1.6"/><circle cx="17" cy="17" r="1.6"/>',
-  emergency: '<path d="M3 8h10v7H3z"/><path d="M13 10h4l3 3v2h-7z"/><circle cx="7" cy="17.5" r="1.6"/><circle cx="17" cy="17.5" r="1.6"/><path d="M6 11h3M7.5 9.5v3"/>',
-  requests: '<path d="M9 5h10M9 12h10M9 19h10"/><path d="M4.5 5h.01M4.5 12h.01M4.5 19h.01"/>',
-  powerbi: '<path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/>',
-  infra: '<path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>',
-}
 
 const SECTIONS = [
   { title: 'Operations', items: [
@@ -44,14 +34,6 @@ const SECTIONS = [
     { to: '/admin/infra', label: 'Infra Health', icon: 'infra' },
   ] },
 ]
-
-function Glyph({ name, size = 20 }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor"
-      strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"
-      dangerouslySetInnerHTML={{ __html: ICONS[name] }} />
-  )
-}
 
 export default function App() {
   const init = useFleetStore((s) => s.init)
@@ -83,26 +65,94 @@ export default function App() {
   if (!session) return <Landing onPick={(role) => { devLogin(role); setSession(getSession()) }} />
 
   // Data is loaded exclusively from the backend (DynamoDB). No mock fallback.
+  const retry = () => {
+    useFleetStore.setState({ initialized: false, error: null })
+    useFleetStore.getState().init()
+  }
   if (error) return (
-    <div className="h-screen grid place-items-center bg-cmd-bg p-6 text-center">
-      <div className="panel p-6 max-w-md">
-        <div className="text-[20px] font-semibold mb-1">Cannot reach backend</div>
-        <p className="text-[14px] text-cmd-muted">{error}</p>
+    <div className="h-screen grid place-items-center p-6 text-center"
+      style={{ background: 'linear-gradient(160deg,#04332F 0%,#07514D 60%,#0B6A64 100%)' }}>
+      <div className="bg-white rounded-2xl p-7 max-w-md w-full boot-in" style={{ boxShadow: '0 24px 64px rgba(0,0,0,0.3)' }}>
+        <div className="h-11 w-11 rounded-xl grid place-items-center mx-auto mb-3"
+          style={{ background: 'rgba(220,38,38,0.1)', color: '#dc2626' }}>
+          <Icon name="alert" size={22} strokeWidth={1.9} />
+        </div>
+        <div className="text-[19px] font-semibold mb-1">Can't reach the service</div>
+        <p className="text-[13px] text-cmd-muted mb-5">{error}</p>
+        <button className="btn-primary w-full h-10" onClick={retry}>Retry connection</button>
       </div>
     </div>
   )
-  if (!ready) return (
-    <div className="h-screen grid place-items-center bg-cmd-bg">
-      <div className="flex items-center gap-3 text-cmd-muted">
-        <span className="h-5 w-5 rounded-full border-2 border-accent border-t-transparent animate-spin" />
-        Loading from DynamoDB...
-      </div>
-    </div>
-  )
+  if (!ready) return <BootScreen />
 
   const signOut = () => { logout(); setSession(getSession()) }
   if (session.role === 'user') return <UserPortal session={session} onSignOut={signOut} />
   return <Console session={session} onSignOut={signOut} />
+}
+
+// Branded boot screen shown while live data loads. Picks one of three
+// emergency-services themes per load: EKG trace, fire beacon, or dispatch radar.
+const BOOT_VARIANTS = ['medical', 'fire', 'ops']
+export function BootScreen({ message = 'Connecting to live operations…' }) {
+  const [variant] = useState(() => BOOT_VARIANTS[Math.floor(Math.random() * BOOT_VARIANTS.length)])
+  const bg = {
+    medical: 'linear-gradient(160deg,#04332F 0%,#07514D 55%,#0B6A64 100%)',
+    fire: 'linear-gradient(160deg,#2A1208 0%,#54290F 45%,#07514D 110%)',
+    ops: 'linear-gradient(160deg,#05201E 0%,#083F3B 55%,#0B5A55 100%)',
+  }[variant]
+  return (
+    <div className="h-screen w-full grid place-items-center text-white on-dark" style={{ background: bg }}>
+      <div className="boot-in flex flex-col items-center text-center px-6">
+        <div className="h-14 w-14 rounded-2xl grid place-items-center font-bold text-[20px] boot-beacon mb-4"
+          style={{ background: '#D6DF27', color: '#07514D' }}>TS</div>
+        <div className="text-[22px] font-bold tracking-tight">JSD Emergency Services</div>
+        <div className="text-[13px] mb-8" style={{ color: 'rgba(214,223,39,0.8)' }}>Tata Steel · Jamshedpur</div>
+
+        {variant === 'medical' && <BootEkg />}
+        {variant === 'fire' && <BootFire />}
+        {variant === 'ops' && <BootRadar />}
+
+        <div className="mt-8 text-[13px] boot-pulse" style={{ color: 'rgba(255,255,255,0.78)' }}>{message}</div>
+        <div className="mt-3 h-1 w-44 rounded-full overflow-hidden" style={{ background: 'rgba(255,255,255,0.14)' }}>
+          <div className="boot-bar h-full w-2/5 rounded-full" style={{ background: '#D6DF27' }} />
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function BootEkg() {
+  const beat = 'M0 30 H64 L74 30 L82 10 L90 46 L98 30 H148 L158 30 L166 12 L174 44 L182 30 H260'
+  return (
+    <svg width="260" height="60" viewBox="0 0 260 60" fill="none" aria-hidden="true">
+      <path d={beat} stroke="rgba(255,255,255,0.15)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+      <path d={beat} className="ekg-line" stroke="#D6DF27" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  )
+}
+
+function BootFire() {
+  return (
+    <div className="relative grid place-items-center h-24 w-24">
+      <span className="absolute inset-0 rounded-full boot-pulse"
+        style={{ background: 'radial-gradient(circle, rgba(234,88,12,0.4) 0%, transparent 70%)' }} />
+      <Icon name="flame" size={48} strokeWidth={1.5} className="boot-pulse" style={{ color: '#FBBF24' }} />
+    </div>
+  )
+}
+
+function BootRadar() {
+  return (
+    <div className="relative h-24 w-24 rounded-full shrink-0" style={{ border: '1px solid rgba(255,255,255,0.3)' }}>
+      <div className="absolute inset-3 rounded-full" style={{ border: '1px solid rgba(255,255,255,0.18)' }} />
+      <div className="absolute inset-6 rounded-full" style={{ border: '1px solid rgba(255,255,255,0.12)' }} />
+      <div className="absolute inset-0 rounded-full radar-sweep"
+        style={{ background: 'conic-gradient(from 0deg, rgba(214,223,39,0.55), transparent 75deg)' }} />
+      <span className="absolute h-1.5 w-1.5 rounded-full" style={{ top: '30%', left: '62%', background: '#D6DF27' }} />
+      <span className="absolute h-1.5 w-1.5 rounded-full" style={{ top: '64%', left: '34%', background: '#D6DF27', opacity: 0.7 }} />
+      <span className="absolute h-1 w-1 rounded-full" style={{ top: '48%', left: '48%', background: '#fff', opacity: 0.8 }} />
+    </div>
+  )
 }
 
 // Reached only when there's no SSO token. Normally users arrive from the
@@ -149,8 +199,8 @@ function Console({ session, onSignOut }) {
   const linkClass = ({ isActive }) =>
     `flex items-center gap-3 ${collapsed ? 'justify-center px-0' : 'px-3'} h-10 rounded-xl transition-all duration-150 relative select-none ${
       isActive
-        ? 'font-semibold text-[#07514D]'
-        : 'text-white/65 hover:text-white hover:bg-white/8 font-medium'
+        ? 'font-semibold text-[#E9F06B]'
+        : 'text-white/65 hover:text-white hover:bg-white/10 font-medium'
     }`
 
   const initials = (session?.name || 'EC').split(' ').map((p) => p[0]).join('').slice(0, 2).toUpperCase()
@@ -177,10 +227,7 @@ function Console({ session, onSignOut }) {
             </div>
           )}
           <button onClick={toggle} title={collapsed ? 'Expand' : 'Collapse'} aria-label="Toggle navigation"
-            className="h-8 w-8 grid place-items-center rounded-lg transition-colors shrink-0"
-            style={{ color: 'rgba(255,255,255,0.55)' }}
-            onMouseEnter={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.08)'; e.currentTarget.style.color = '#fff' }}
-            onMouseLeave={e => { e.currentTarget.style.background = ''; e.currentTarget.style.color = 'rgba(255,255,255,0.55)' }}>
+            className="h-8 w-8 grid place-items-center rounded-lg transition-colors shrink-0 text-white/55 hover:text-white hover:bg-white/10">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2"
               strokeLinecap="round" strokeLinejoin="round" className={`transition-transform ${collapsed ? 'rotate-180' : ''}`}>
               <path d="M15 18l-6-6 6-6" />
@@ -192,17 +239,15 @@ function Console({ session, onSignOut }) {
         <div className={`px-3 pt-3 pb-2`}>
           <button
             onClick={() => navigate('/emergency?new=1')}
-            title="New Emergency"
-            className={`w-full flex items-center justify-center gap-1.5 h-9 rounded-xl font-semibold text-[13px] transition-all duration-150 ${collapsed ? 'px-0' : 'px-3'}`}
+            title="New Emergency" aria-label="New Emergency"
+            className={`w-full flex items-center justify-center gap-1.5 h-9 rounded-xl font-semibold text-[13px] transition-all duration-150 hover:brightness-105 ${collapsed ? 'px-0' : 'px-3'}`}
             style={{
               background: '#D6DF27',
               color: '#07514D',
-              boxShadow: '0 2px 12px rgba(214,223,39,0.35)',
+              boxShadow: '0 2px 10px rgba(214,223,39,0.3)',
             }}
-            onMouseEnter={e => { e.currentTarget.style.filter = 'brightness(1.06)'; e.currentTarget.style.boxShadow = '0 4px 18px rgba(214,223,39,0.5)' }}
-            onMouseLeave={e => { e.currentTarget.style.filter = ''; e.currentTarget.style.boxShadow = '0 2px 12px rgba(214,223,39,0.35)' }}
           >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M12 5v14M5 12h14"/></svg>
+            <Icon name="plus" size={14} strokeWidth={2.5} />
             {!collapsed && 'New Emergency'}
           </button>
         </div>
@@ -213,7 +258,7 @@ function Console({ session, onSignOut }) {
             <div key={sec.title}>
               {!collapsed && (
                 <div className="px-2 mb-1.5 text-[10px] uppercase tracking-widest font-semibold"
-                  style={{ color: 'rgba(255,255,255,0.35)' }}>{sec.title}</div>
+                  style={{ color: 'rgba(255,255,255,0.55)' }}>{sec.title}</div>
               )}
               {collapsed && <div className="mx-3 my-2" style={{ borderTop: '1px solid rgba(255,255,255,0.09)' }} />}
               <div className="space-y-0.5">
@@ -222,12 +267,18 @@ function Console({ session, onSignOut }) {
                     {({ isActive }) => (
                       <>
                         {isActive && (
-                          <span
-                            className="absolute inset-0 rounded-xl -z-10"
-                            style={{ background: '#D6DF27', boxShadow: '0 2px 12px rgba(214,223,39,0.3)' }}
-                          />
+                          <>
+                            <span
+                              className="absolute inset-0 rounded-xl -z-10"
+                              style={{ background: 'rgba(214,223,39,0.16)' }}
+                            />
+                            <span
+                              className="absolute left-0 top-2 bottom-2 w-[3px] rounded-full"
+                              style={{ background: '#D6DF27' }}
+                            />
+                          </>
                         )}
-                        <Glyph name={n.icon} size={17} />
+                        <Icon name={n.icon} size={17} strokeWidth={1.6} />
                         {!collapsed && <span className="text-[13.5px]">{n.label}</span>}
                       </>
                     )}
@@ -249,21 +300,16 @@ function Console({ session, onSignOut }) {
               </div>
               <PolicyControls />
               <button onClick={onSignOut}
-                className="mt-3 w-full h-9 rounded-xl text-[13px] font-medium flex items-center justify-center gap-2 transition-colors"
-                style={{ border: '1px solid #E5E7EB', color: '#475467' }}
-                onMouseEnter={e => e.currentTarget.style.background = '#E8E8EE'}
-                onMouseLeave={e => e.currentTarget.style.background = ''}>
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9" />
-                </svg>
+                className="mt-3 w-full h-9 rounded-xl text-[13px] font-medium flex items-center justify-center gap-2 transition-colors hover:bg-[#EEEFF3]"
+                style={{ border: '1px solid #E5E7EB', color: '#475467' }}>
+                <Icon name="signout" size={15} strokeWidth={1.8} />
                 Sign out
               </button>
             </div>
           )}
-          <button onClick={() => setMenuOpen((o) => !o)} title="Profile"
-            className={`w-full flex items-center ${collapsed ? 'justify-center' : 'gap-2.5'} rounded-xl p-1.5 transition-colors`}
-            onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.08)'}
-            onMouseLeave={e => e.currentTarget.style.background = ''}>
+          <button onClick={() => setMenuOpen((o) => !o)} title="Profile" aria-label="Profile menu"
+            aria-expanded={menuOpen}
+            className={`w-full flex items-center ${collapsed ? 'justify-center' : 'gap-2.5'} rounded-xl p-1.5 transition-colors hover:bg-white/10`}>
             <div className="h-8 w-8 rounded-full grid place-items-center text-[12px] font-bold shrink-0"
               style={{ background: '#D6DF27', color: '#07514D' }}>{initials}</div>
             {!collapsed && (

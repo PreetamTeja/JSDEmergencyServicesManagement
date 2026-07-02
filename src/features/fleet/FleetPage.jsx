@@ -10,7 +10,7 @@ import { makeVehicleIcon } from '../map/vehicleIcon'
 import LiveEta from '../../components/common/LiveEta'
 
 const TABS = ['Vehicles', 'Crews', 'Service Zones']
-const LIGHT_TILES = 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png'
+const LIGHT_TILES = 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png'
 const EMERGENCY_TYPES = ['ambulance', 'firetruck']
 const SERVICE_INTERVAL_KM = 10000   // service every 10,000 km
 const DUE_SOON_KM = 500             // warn within the last 500 km of the cycle
@@ -25,17 +25,17 @@ const serviceInfo = (odometer = 0) => {
 export default function FleetPage() {
   const [tab, setTab] = useState('Vehicles')
   return (
-    <div className="flex flex-col h-full" style={{ background: '#E8E8EE' }}>
+    <div className="flex flex-col h-full page-enter" style={{ background: '#E8E8EE' }}>
       {/* Floating tab header */}
       <div className="px-6 pt-5 pb-4 flex items-center gap-4 shrink-0">
         <div className="flex-1 min-w-0">
           <h1 className="text-[22px] font-bold tracking-tight text-[#0C1322]">Fleet & Crews</h1>
           <p className="text-[13px] text-[#6B7280] mt-0.5">Ambulances · fire trucks · crews · service zones</p>
         </div>
-        <div className="flex gap-1.5 p-1 rounded-2xl shrink-0"
+        <div className="flex gap-1.5 p-1 rounded-2xl shrink-0" role="tablist" aria-label="Fleet views"
           style={{ background: 'rgba(255,255,255,0.85)', backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)', boxShadow: '0 2px 12px rgba(0,0,0,0.07)' }}>
           {TABS.map((t) => (
-            <button key={t} onClick={() => setTab(t)}
+            <button key={t} onClick={() => setTab(t)} role="tab" aria-selected={tab === t}
               className="px-4 py-1.5 rounded-xl text-[13px] font-semibold transition-all"
               style={tab === t
                 ? { background: '#07514D', color: '#fff', boxShadow: '0 2px 8px rgba(7,81,77,0.25)' }
@@ -145,39 +145,39 @@ function Vehicles() {
 
       {/* Gradient fade when panel is open */}
       {panelOpen && (
-        <div className="absolute left-[540px] top-0 bottom-0 w-32 z-[5] pointer-events-none"
+        <div className="absolute left-[540px] top-0 bottom-0 w-32 z-[5] pointer-events-none hidden xl:block"
           style={{ background: 'linear-gradient(to right, rgba(245,246,248,0.4) 0%, transparent 100%)' }} />
       )}
 
       {/* ── Floating vehicle list panel ── */}
-      <div className={`absolute left-4 top-4 bottom-4 z-[400] transition-all duration-300 overflow-hidden flex flex-col ${panelOpen ? 'w-[520px]' : 'w-0 opacity-0'}`}
+      <div className={`absolute left-4 top-4 bottom-4 z-[400] transition-all duration-300 overflow-hidden flex flex-col ${panelOpen ? 'w-[520px] max-w-[calc(100vw-2rem)]' : 'w-0 opacity-0'}`}
         style={{ borderRadius: '20px', background: panelOpen ? 'rgba(255,255,255,0.93)' : 'transparent', backdropFilter: panelOpen ? 'blur(20px)' : 'none', WebkitBackdropFilter: panelOpen ? 'blur(20px)' : 'none', boxShadow: panelOpen ? '0 4px 32px rgba(0,0,0,0.13)' : 'none' }}>
 
         {panelOpen && (<>
           {/* KPIs */}
-          <div className="px-4 pt-4 pb-3 shrink-0" style={{ borderBottom: '1px solid rgba(0,0,0,0.06)' }}>
-            <div className="text-[15px] font-bold text-[#0C1322] mb-3">Fleet Status</div>
-            <div className="grid grid-cols-3 gap-2">
+          <div className="px-4 pt-3 pb-2.5 shrink-0" style={{ borderBottom: '1px solid rgba(0,0,0,0.06)' }}>
+            <div className="text-[14px] font-bold text-[#0C1322] mb-2">Fleet Status</div>
+            <div className="grid grid-cols-6 gap-2">
               {[
-                { label: 'Ambulances', val: `${idleCount(amb)}/${amb.length}`, sub: 'idle', color: '#07514D' },
-                { label: 'Fire trucks', val: `${idleCount(fire)}/${fire.length}`, sub: 'idle', color: '#ea580c' },
-                { label: 'Responding', val: responding, sub: 'en route', color: '#16a34a' },
-                { label: 'Crews free', val: crewAvail, sub: 'available', color: '#0B6A64' },
-                { label: 'Low fuel', val: lowFuel, sub: '< 25%', color: lowFuel ? '#dc2626' : '#9CA3AF' },
-                { label: 'Svc due', val: svcDue, sub: `≤${DUE_SOON_KM}km`, color: svcDue ? '#d97706' : '#9CA3AF' },
+                { label: 'Amb', val: `${idleCount(amb)}/${amb.length}`, color: '#07514D' },
+                { label: 'Fire', val: `${idleCount(fire)}/${fire.length}`, color: '#ea580c' },
+                { label: 'Active', val: responding, color: '#16a34a' },
+                { label: 'Crews', val: crewAvail, color: '#0B6A64' },
+                { label: 'Low fuel', val: lowFuel, color: lowFuel ? '#dc2626' : '#6B7280' },
+                { label: 'Svc due', val: svcDue, color: svcDue ? '#d97706' : '#6B7280' },
               ].map((k) => (
-                <div key={k.label} className="rounded-xl px-3 py-2.5" style={{ background: 'rgba(0,0,0,0.03)' }}>
-                  <div className="text-[20px] font-bold leading-none" style={{ color: k.color }}>{k.val}</div>
-                  <div className="text-[10px] text-[#9CA3AF] mt-0.5 leading-tight">{k.label}</div>
+                <div key={k.label} className="rounded-xl px-2 py-2 text-center" style={{ background: 'rgba(0,0,0,0.03)' }}>
+                  <div className="text-[16px] font-bold leading-none" style={{ color: k.color }}>{k.val}</div>
+                  <div className="text-[9.5px] text-[#6B7280] mt-0.5 leading-tight">{k.label}</div>
                 </div>
               ))}
             </div>
           </div>
 
           {/* Filters */}
-          <div className="px-4 py-2.5 shrink-0 flex gap-2 flex-wrap" style={{ borderBottom: '1px solid rgba(0,0,0,0.06)' }}>
+          <div className="px-4 py-2 shrink-0 flex gap-2 flex-wrap" style={{ borderBottom: '1px solid rgba(0,0,0,0.06)' }}>
             <div className="relative flex-1">
-              <svg className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[#9CA3AF]" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+              <svg className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[#6B7280]" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
               <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search reg or crew…"
                 className="w-full pl-7 pr-3 py-1.5 rounded-xl text-[12px] text-[#0C1322]"
                 style={{ background: 'rgba(0,0,0,0.04)' }} />
@@ -201,11 +201,11 @@ function Vehicles() {
 
           {/* Vehicle table */}
           <div className="flex-1 overflow-auto">
-            <table className="w-full text-[12.5px]">
+            <table className="w-full text-[12px]">
               <thead className="sticky top-0" style={{ background: 'rgba(255,255,255,0.95)', borderBottom: '1px solid rgba(0,0,0,0.06)' }}>
                 <tr>
                   {['Unit', 'Status', 'Driver', 'Fuel', ''].map((h) => (
-                    <th key={h} className="text-left px-4 py-2.5 text-[10px] font-semibold uppercase tracking-widest" style={{ color: '#9CA3AF' }}>{h}</th>
+                    <th key={h} className="text-left px-3 py-2 text-[10px] font-semibold uppercase tracking-widest" style={{ color: '#6B7280' }}>{h}</th>
                   ))}
                 </tr>
               </thead>
@@ -221,49 +221,49 @@ function Vehicles() {
                     <tr key={v.id} style={{ borderBottom: '1px solid rgba(0,0,0,0.04)' }}
                       onMouseEnter={ev => ev.currentTarget.style.background = 'rgba(7,81,77,0.03)'}
                       onMouseLeave={ev => ev.currentTarget.style.background = ''}>
-                      <td className="px-4 py-2.5">
+                      <td className="px-3 py-1.5">
                         <div className="flex items-center gap-2">
-                          <span className="h-7 w-7 rounded-lg grid place-items-center shrink-0" style={{ background: `${typeColor}12`, color: typeColor }}>
-                            <VehicleIcon type={v.type} size={14} />
+                          <span className="h-6 w-6 rounded-lg grid place-items-center shrink-0" style={{ background: `${typeColor}12`, color: typeColor }}>
+                            <VehicleIcon type={v.type} size={12} />
                           </span>
                           <div>
-                            <div className="font-bold text-[#0C1322]">{v.reg}</div>
-                            <div className="text-[10.5px] text-[#9CA3AF] capitalize">{zoneById(v.homeZoneId)?.name || '—'}</div>
+                            <div className="font-bold text-[#0C1322] text-[12px]">{v.reg}</div>
+                            <div className="text-[10px] text-[#6B7280] capitalize">{zoneById(v.homeZoneId)?.name || '—'}</div>
                           </div>
                         </div>
                       </td>
-                      <td className="px-4 py-2.5">
-                        <span className="px-2 py-0.5 rounded-full text-[10.5px] font-semibold capitalize"
+                      <td className="px-3 py-1.5">
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold capitalize"
                           style={{ background: `${statColor}14`, color: statColor }}>
                           {v.status === 'enroute' ? 'En route' : v.status}
                         </span>
-                        {job && <div className="text-[10px] text-[#9CA3AF] mt-0.5">{job.id}</div>}
+                        {job && <div className="text-[10px] text-[#6B7280] mt-0.5">{job.id}</div>}
                       </td>
-                      <td className="px-4 py-2.5 text-[#374151]">{drv?.name || <span className="text-[#9CA3AF]">—</span>}</td>
-                      <td className="px-4 py-2.5">
+                      <td className="px-3 py-1.5 text-[12px] text-[#374151]">{drv?.name || <span className="text-[#6B7280]">—</span>}</td>
+                      <td className="px-3 py-1.5">
                         <div className="flex items-center gap-1.5">
-                          <div className="flex-1 h-1.5 rounded-full overflow-hidden" style={{ background: 'rgba(0,0,0,0.08)', minWidth: '40px' }}>
+                          <div className="flex-1 h-1 rounded-full overflow-hidden" style={{ background: 'rgba(0,0,0,0.08)', minWidth: '36px' }}>
                             <div className="h-full rounded-full" style={{ width: `${v.fuel}%`, background: v.fuel < 25 ? '#ef4444' : '#07514D' }} />
                           </div>
-                          <span className="text-[10.5px] font-medium shrink-0" style={{ color: v.fuel < 25 ? '#dc2626' : '#6B7280' }}>{v.fuel}%</span>
+                          <span className="text-[10px] font-medium shrink-0" style={{ color: v.fuel < 25 ? '#dc2626' : '#6B7280' }}>{v.fuel}%</span>
                         </div>
-                        {svc.due && <div className="text-[9.5px] text-[#d97706] mt-0.5">Svc due</div>}
+                        {svc.due && <div className="text-[9px] text-[#d97706] mt-0.5">Svc due</div>}
                       </td>
-                      <td className="px-3 py-2.5">
+                      <td className="px-2 py-1.5">
                         <div className="flex gap-1">
                           <button onClick={() => navigate(`/map?focus=${v.id}`)}
-                            className="h-6 px-2 rounded-lg text-[10.5px] font-medium transition-colors"
+                            className="h-6 px-2 rounded-lg text-[10px] font-medium transition-colors"
                             style={{ background: 'rgba(7,81,77,0.08)', color: '#07514D' }}
                             onMouseEnter={ev => ev.currentTarget.style.background = 'rgba(7,81,77,0.15)'}
                             onMouseLeave={ev => ev.currentTarget.style.background = 'rgba(7,81,77,0.08)'}>Locate</button>
                           {v.status !== 'maintenance'
                             ? <button onClick={() => setVehicleStatus(v.id, 'maintenance')} disabled={v.status === 'enroute'}
-                                className="h-6 px-2 rounded-lg text-[10.5px] font-medium disabled:opacity-40 transition-colors"
+                                className="h-6 px-2 rounded-lg text-[10px] font-medium disabled:opacity-40 transition-colors"
                                 style={{ background: 'rgba(217,119,6,0.08)', color: '#d97706' }}
                                 onMouseEnter={ev => !ev.currentTarget.disabled && (ev.currentTarget.style.background = 'rgba(217,119,6,0.15)')}
                                 onMouseLeave={ev => ev.currentTarget.style.background = 'rgba(217,119,6,0.08)'}>Maint.</button>
                             : <button onClick={() => setVehicleStatus(v.id, 'idle')}
-                                className="h-6 px-2 rounded-lg text-[10.5px] font-medium transition-colors"
+                                className="h-6 px-2 rounded-lg text-[10px] font-medium transition-colors"
                                 style={{ background: 'rgba(22,163,74,0.1)', color: '#16a34a' }}>Return</button>}
                         </div>
                       </td>
@@ -271,12 +271,12 @@ function Vehicles() {
                   )
                 })}
                 {shown.length === 0 && (
-                  <tr><td colSpan={5} className="px-4 py-8 text-center text-[13px]" style={{ color: '#9CA3AF' }}>No units match.</td></tr>
+                  <tr><td colSpan={5} className="px-3 py-6 text-center text-[12px]" style={{ color: '#6B7280' }}>No units match.</td></tr>
                 )}
               </tbody>
             </table>
           </div>
-          <div className="px-4 py-2 text-[11px] shrink-0" style={{ color: '#9CA3AF', borderTop: '1px solid rgba(0,0,0,0.05)' }}>
+          <div className="px-4 py-2 text-[11px] shrink-0" style={{ color: '#6B7280', borderTop: '1px solid rgba(0,0,0,0.05)' }}>
             {shown.length} of {fleet.length} units
           </div>
         </>)}
@@ -325,7 +325,7 @@ function Drivers() {
   return (
     <div className="px-6 pb-6 space-y-4 overflow-auto h-full">
       <div className="relative w-60">
-        <svg className="absolute left-3 top-1/2 -translate-y-1/2 text-[#9CA3AF]" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+        <svg className="absolute left-3 top-1/2 -translate-y-1/2 text-[#6B7280]" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
         <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search crew…"
           className="pl-9 pr-4 py-2 rounded-xl text-[13px] text-[#0C1322] w-full"
           style={{ background: 'rgba(255,255,255,0.9)', border: '1px solid rgba(0,0,0,0.07)' }} />
@@ -375,7 +375,7 @@ function Drivers() {
               )
             })}
             {drivers.length === 0 && (
-              <tr><td colSpan={6} className="px-4 py-10 text-center text-[13px]" style={{ color: '#9CA3AF' }}>No crew match.</td></tr>
+              <tr><td colSpan={6} className="px-4 py-10 text-center text-[13px]" style={{ color: '#6B7280' }}>No crew match.</td></tr>
             )}
           </tbody>
         </table>
@@ -431,13 +431,13 @@ function Zones() {
 
 const Row = ({ label, value }) => (
   <div className="flex justify-between text-[13px]">
-    <span className="text-[#9CA3AF]">{label}</span>
+    <span className="text-[#6B7280]">{label}</span>
     <span className="text-[#374151] text-right">{value}</span>
   </div>
 )
 const Th = ({ children }) => (
-  <th className="text-left px-4 py-2.5 text-[10.5px] font-semibold uppercase tracking-widest" style={{ color: '#9CA3AF' }}>{children}</th>
+  <th className="text-left px-4 py-2 text-[10.5px] font-semibold uppercase tracking-widest" style={{ color: '#6B7280' }}>{children}</th>
 )
 const Td = ({ children, className = '' }) => (
-  <td className={`px-4 py-2.5 text-[13px] text-[#374151] ${className}`}>{children}</td>
+  <td className={`px-4 py-1.5 text-[13px] text-[#374151] ${className}`}>{children}</td>
 )

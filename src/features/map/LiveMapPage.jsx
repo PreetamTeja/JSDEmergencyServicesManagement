@@ -9,7 +9,7 @@ import { makeVehicleIcon, makeHospitalIcon, makeFirestationIcon } from './vehicl
 import { STATUS_COLORS, VehicleIcon } from '../../components/common/ui.jsx'
 import VehiclePanel from './VehiclePanel'
 
-const LIGHT_TILES = 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png'
+const LIGHT_TILES = 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png'
 const EMERGENCY_TYPES = ['ambulance', 'firetruck']
 const TYPE_ORDER = ['ambulance', 'firetruck']
 const TYPE_SHORT = { ambulance: 'amb', firetruck: 'fire' }
@@ -191,10 +191,10 @@ export default function LiveMapPage() {
                             <VehicleIcon type={t} size={12} />{byType[t]}
                           </span>
                         ))}
-                        {idleCount === 0 && <span className="text-[11px] text-[#9CA3AF]">none free</span>}
+                        {idleCount === 0 && <span className="text-[11px] text-[#6B7280]">none free</span>}
                       </span>
                       <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2"
-                        className={`text-[#9CA3AF] transition-transform ${open ? 'rotate-90' : ''}`}><path d="M9 6l6 6-6 6"/></svg>
+                        className={`text-[#6B7280] transition-transform ${open ? 'rotate-90' : ''}`}><path d="M9 6l6 6-6 6"/></svg>
                     </button>
                     {open && (
                       <div className="ml-4 pl-3 pb-1.5 space-y-0.5" style={{ borderLeft: '2px solid rgba(0,0,0,0.07)' }}>
@@ -232,7 +232,7 @@ export default function LiveMapPage() {
               <Key sq="#dc2626" label="Hospital" />
               <Key sq="#ea580c" label="Fire station" />
               <Key ring="#07514D" label="Location" />
-              <div className="pt-2 mt-2 text-[10px] font-bold uppercase tracking-widest text-[#9CA3AF]" style={{ borderTop: '1px solid rgba(0,0,0,0.06)' }}>Zones</div>
+              <div className="pt-2 mt-2 text-[10px] font-bold uppercase tracking-widest text-[#6B7280]" style={{ borderTop: '1px solid rgba(0,0,0,0.06)' }}>Zones</div>
               {ZONES.map((z) => <Key key={z.id} sq={z.color} label={z.name} />)}
             </div>
           </div>
@@ -285,7 +285,7 @@ function FlyTo({ pos }) {
 function Info({ k, v, cap }) {
   return (
     <div className="flex justify-between gap-3 text-[12px] leading-5">
-      <span style={{ color: '#9CA3AF' }}>{k}</span>
+      <span style={{ color: '#6B7280' }}>{k}</span>
       <span className={`text-[#0C1322] font-medium text-right ${cap ? 'capitalize' : ''}`}>{v}</span>
     </div>
   )

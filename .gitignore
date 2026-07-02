@@ -16,5 +16,7 @@ Thumbs.db
 .mcp.json
 lambda/TransportApi.Tests/bin/
 lambda/TransportApi.Tests/obj/
+lambda/TransportApi/bin/
 lambda/TransportApi/obj/
+lambda/VoiceAgent/bin/
 lambda/VoiceAgent/obj/

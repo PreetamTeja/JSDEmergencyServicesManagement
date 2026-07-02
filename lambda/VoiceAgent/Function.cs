@@ -119,7 +119,7 @@ public class Function
 
         // Greeting
         if (!anyUser && !finalize)
-            return Reply(new { reply = "Emergency line. Do you need an ambulance or a fire truck, and where is it?", booked = (object?)null }, cors);
+            return Reply(new { reply = "Emergency line. Ambulance or fire truck, and where?", booked = (object?)null }, cors);
 
         try
         {
@@ -234,11 +234,13 @@ public class Function
 
         var status = root.TryGetProperty("status", out var st) ? st.GetString() : null;
         var ok = status == "EN_ROUTE";
+        var queued = status == "QUEUED" || status == "NO_HOSPITAL" || status == "NO_BLOODBANK";
         var hospName = root.TryGetProperty("hospital", out var hn) ? hn.GetString() : null;
-        var reason = root.TryGetProperty("reason", out var re) ? re.GetString() : null;
         var dispatchedReply = ok
             ? $"{(kind == "fire" ? "Fire truck" : "Ambulance")} dispatched{(!string.IsNullOrEmpty(hospName) ? " to " + hospName : "")}."
-            : (reason ?? "No unit is available right now.");
+            : queued
+                ? "Request queued. We'll dispatch a unit as soon as one is available."
+                : "Request submitted.";
         return Reply(new
         {
             reply = dispatchedReply,

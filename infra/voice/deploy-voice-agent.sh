@@ -39,9 +39,19 @@ ROLE_ARN="$(aws iam get-role --role-name "$ROLE" --query Role.Arn --output text)
 aws iam put-role-policy --role-name "$ROLE" --policy-name bedrock-invoke \
   --policy-document '{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Action":["bedrock:InvokeModel"],"Resource":"*"}]}'
 
-# ---- 2) package ----
+# ---- 2) package — include OKF knowledge bundle ----
+rm -rf /tmp/voice-pkg && mkdir /tmp/voice-pkg
+cp voice-agent.mjs /tmp/voice-pkg/
+# knowledge bundle: ../knowledge relative to this script (infra/voice/ -> infra/knowledge/)
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+if [ -d "${SCRIPT_DIR}/../knowledge" ]; then
+  cp -r "${SCRIPT_DIR}/../knowledge" /tmp/voice-pkg/knowledge
+  echo "OKF knowledge bundle included ($(find /tmp/voice-pkg/knowledge -name '*.md' | wc -l) files)"
+else
+  echo "Warning: knowledge bundle not found at ${SCRIPT_DIR}/../knowledge — NLU will use flat location list"
+fi
 rm -f /tmp/voice.zip
-zip -j /tmp/voice.zip voice-agent.mjs >/dev/null
+(cd /tmp/voice-pkg && zip -r /tmp/voice.zip .) >/dev/null
 
 # ---- 3) create or update function ----
 if aws lambda get-function --function-name "$FN" --region "$REGION" >/dev/null 2>&1; then

@@ -5,16 +5,16 @@ import { JAMSHEDPUR_CENTER, LOCATIONS, locById } from '../data/locations'
 import { hospitalById, CASE_TYPES, SEVERITIES } from '../data/hospitals'
 import { makeVehicleIcon, makeHospitalIcon, makeFirestationIcon } from '../features/map/vehicleIcon'
 import LiveEta from '../components/common/LiveEta'
+import Icon from '../components/common/Icon'
 import VoiceAgent from './VoiceAgent'
 
-const LIGHT_TILES = 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png'
+const LIGHT_TILES = 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png'
 
 const SEV_META = {
   Critical: { color: '#dc2626', hint: 'Life-threatening' },
   Urgent: { color: '#d97706', hint: 'Needs help soon' },
   Normal: { color: '#2563eb', hint: 'Stable' },
 }
-const CASE_ICON = { Cardiac: '❤️', Trauma: '🩹', General: '🚑', Maternity: '🤰', Pediatric: '🧒' }
 
 // Self-service requester experience. When SSO lands, an authenticated "user"
 // (not admin) is routed here: they raise an emergency and track their own.
@@ -78,7 +78,20 @@ export default function UserPortal({ session, onSignOut }) {
       {callOpen && <VoiceAgent session={session} onClose={() => setCallOpen(false)} />}
 
       {error ? (
-        <div className="flex-1 grid place-items-center p-6 text-center"><div className="panel p-6 max-w-md"><div className="text-[18px] font-semibold mb-1">Service unavailable</div><p className="text-[14px] text-cmd-muted">{error}</p></div></div>
+        <div className="flex-1 grid place-items-center p-6 text-center">
+          <div className="panel p-6 max-w-md">
+            <div className="h-10 w-10 rounded-xl grid place-items-center mx-auto mb-3"
+              style={{ background: 'rgba(220,38,38,0.1)', color: '#dc2626' }}>
+              <Icon name="alert" size={20} strokeWidth={1.9} />
+            </div>
+            <div className="text-[18px] font-semibold mb-1">Service unavailable</div>
+            <p className="text-[14px] text-cmd-muted mb-4">{error}</p>
+            <button className="btn-primary w-full"
+              onClick={() => { useFleetStore.setState({ initialized: false, error: null }); useFleetStore.getState().init() }}>
+              Retry connection
+            </button>
+          </div>
+        </div>
       ) : !ready ? (
         <LoadingState />
       ) : (
@@ -147,7 +160,7 @@ export default function UserPortal({ session, onSignOut }) {
 
                 {result && (
                   <div className={`rounded-lg p-3 text-[13px] mt-1 flex items-start gap-2 ${result.ok ? 'bg-green-50 text-status-enroute' : 'bg-red-50 text-status-danger'}`}>
-                    <span className="text-base leading-none">{result.ok ? '✓' : '⚠'}</span>
+                    <span className="shrink-0 mt-0.5"><Icon name={result.ok ? 'check' : 'alert'} size={15} strokeWidth={2.2} /></span>
                     <span>{result.ok
                       ? (result.mass
                         ? `Mass casualty ${result.id} — ${result.dispatched}/${result.units} ambulances dispatched`
@@ -168,8 +181,8 @@ export default function UserPortal({ session, onSignOut }) {
 
             {/* floating Call button — bottom right */}
             <button onClick={() => setCallOpen(true)} title="Call for help"
-              className="absolute bottom-6 right-6 z-[500] flex items-center gap-3 bg-cta text-accent font-bold rounded-full pl-5 pr-6 h-16 shadow-xl active:scale-[0.97] transition-transform">
-              <span className="text-2xl">📞</span>
+              className="absolute bottom-6 right-6 z-[500] flex items-center gap-3 bg-cta text-accent font-bold rounded-full pl-5 pr-6 h-16 shadow-xl active:scale-[0.97] transition-transform hover:brightness-105">
+              <Icon name="phone" size={24} strokeWidth={1.9} />
               <span>Call for help</span>
             </button>
           </main>

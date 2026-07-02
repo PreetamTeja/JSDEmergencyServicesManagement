@@ -1,14 +1,15 @@
-import React, { useMemo } from 'react'
+import React, { useMemo, useState, useEffect, useRef } from 'react'
 import {
   PieChart, Pie, Cell, ResponsiveContainer, Tooltip, BarChart, Bar, XAxis, YAxis,
   LineChart, Line, CartesianGrid, Legend,
 } from 'recharts'
 import { useFleetStore } from '../../store/useFleetStore'
 import { locById, zoneById, ZONES } from '../../data/locations'
-import { hospitalById, SEVERITY_META } from '../../data/hospitals'
+import { hospitalById, shortHospitalName, SEVERITY_META } from '../../data/hospitals'
+import { slaTargets } from '../../services/sla'
+import Icon from '../../components/common/Icon'
 import PowerBIReport from './PowerBIReport'
 
-const TODAY = new Date().toISOString().slice(0, 10)
 const KIND = { medical: '#0B6A64', fire: '#E8833A' }
 // Cohesive teal ramp for categorical charts (brand-aligned, minimal).
 const RAMP = ['#07514D', '#0B6A64', '#2E8B84', '#4A9B96', '#7FB0AB', '#A9CCC8']
@@ -26,7 +27,11 @@ export default function DashboardPage() {
   const emergencies = useFleetStore((s) => s.emergencies)
   const vehicles = useFleetStore((s) => s.vehicles)
   const hospitals = useFleetStore((s) => s.hospitals)
+  const policy = useFleetStore((s) => s.policyConfig)
   const m = useMemo(() => buildMetrics(emergencies, vehicles, hospitals), [emergencies, vehicles, hospitals])
+  // Reference target for the response-time KPI (Urgent is the common case).
+  const respTarget = slaTargets(policy).Urgent
+  const respOk = m.avgResp <= respTarget
 
   // Secure Power BI embed (App-owns-data) — preferred for production.
   if (import.meta.env.VITE_POWERBI_SECURE === 'true') return <PowerBIReport />
@@ -44,7 +49,7 @@ export default function DashboardPage() {
   const dateLabel = now.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })
 
   return (
-    <div className="h-full overflow-auto" style={{ background: '#F9FAFB' }}>
+    <div className="h-full overflow-auto page-enter" style={{ background: '#E8E8EE' }}>
       {/* ── Page header ── */}
       <div className="px-7 pt-7 pb-5 flex items-start justify-between gap-4">
         <div>
@@ -69,11 +74,14 @@ export default function DashboardPage() {
       <div className="px-7 pb-8 space-y-5">
         {/* ── KPI cards (neomorphic) ── */}
         <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
-          <NeoKpi icon="activity" label="Total responses" value={m.total} sub={`${m.todayCount} today`} />
+          <NeoKpi icon="activity" label="Total responses" value={m.total}
+            sub={`${m.todayCount} today · ${m.yesterdayCount} yesterday`} spark={m.totalSpark} />
           <NeoKpi icon="pulse" label="Active now" value={m.active} sub={`${m.queued} queued`} accentColor="#16a34a" />
-          <NeoKpi icon="clock" label="Avg response" value={`${m.avgResp.toFixed(1)}m`} sub="to scene" />
-          <NeoKpi icon="route" label="Avg trip" value={`${m.avgTrip.toFixed(1)}m`} sub="end to end" />
-          <NeoKpi icon="truck" label="Fleet in use" value={`${m.utilPct}%`} sub={`${m.enroute}/${m.fleetTotal} units`} accentColor="#d97706" />
+          <NeoKpi icon="clock" label="Avg response" value={m.avgResp} format={(v) => `${v.toFixed(1)}m`}
+            sub={`target ≤ ${respTarget}m ${respOk ? '✓ on track' : '· over'}`}
+            accentColor={respOk ? '#16a34a' : '#d97706'} spark={m.respSpark} />
+          <NeoKpi icon="route" label="Avg trip" value={m.avgTrip} format={(v) => `${v.toFixed(1)}m`} sub="end to end" />
+          <NeoKpi icon="truck" label="Fleet in use" value={m.utilPct} format={(v) => `${Math.round(v)}%`} sub={`${m.enroute}/${m.fleetTotal} units`} accentColor="#d97706" />
         </div>
 
         {/* ── Row 1 ── */}
@@ -125,10 +133,10 @@ export default function DashboardPage() {
 
         {/* ── Active table ── */}
         <NeoCard title={`Active responses · ${m.active}`}>
-          {m.active === 0 ? <Empty msg="No active emergencies." /> : (
+          {m.active === 0 ? <Empty msg="No active emergencies right now — new dispatches appear here live." /> : (
             <table className="w-full text-[13px]">
               <thead>
-                <tr className="text-[11px] uppercase tracking-wide" style={{ color: '#9CA3AF', borderBottom: '1px solid #E9EAEC' }}>
+                <tr className="text-[11px] uppercase tracking-wide" style={{ color: '#6B7280', borderBottom: '1px solid #E9EAEC' }}>
                   <Th>ID</Th><Th>Type</Th><Th>Severity</Th><Th>Zone</Th><Th>Vehicle</Th><Th>Destination</Th>
                 </tr>
               </thead>
@@ -136,16 +144,15 @@ export default function DashboardPage() {
                 {emergencies.filter((e) => e.state === 'EN_ROUTE').map((e) => {
                   const isFire = e.kind === 'fire'
                   const veh = vehicles.find((v) => v.id === e.ambulanceId)
+                  const sevColor = SEVERITY_META[e.severity]?.color || '#6B7280'
                   return (
-                    <tr key={e.id} className="transition-colors" style={{ borderBottom: '1px solid rgba(0,0,0,0.04)' }}
-                      onMouseEnter={ev => ev.currentTarget.style.background = 'rgba(7,81,77,0.03)'}
-                      onMouseLeave={ev => ev.currentTarget.style.background = ''}>
+                    <tr key={e.id} className="transition-colors hover:bg-[rgba(7,81,77,0.03)]" style={{ borderBottom: '1px solid rgba(0,0,0,0.04)' }}>
                       <td className="py-2.5 font-semibold text-[#0C1322]">{e.id}</td>
                       <td><span className="px-2.5 py-1 rounded-full text-[11px] font-semibold" style={{ background: isFire ? '#FEF0E6' : '#E6F0EE', color: isFire ? KIND.fire : KIND.medical }}>{isFire ? 'Fire' : e.caseType || 'Medical'}</span></td>
-                      <td className="text-[#374151]">{e.severity}</td>
+                      <td><span className="px-2.5 py-1 rounded-full text-[11px] font-semibold" style={{ background: `${sevColor}14`, color: sevColor }}>{e.severity}</span></td>
                       <td className="text-[#374151]">{zoneById(locById(e.pickup)?.zone_id)?.name || '—'}</td>
                       <td className="font-mono text-[12px] text-[#374151]">{veh?.reg || '—'}</td>
-                      <td className="text-[#374151]">{isFire ? (locById(e.pickup)?.name || '—') : (hospitalById(e.hospitalId)?.name || '—')}</td>
+                      <td className="text-[#374151]">{isFire ? (locById(e.pickup)?.name || '—') : (shortHospitalName(hospitalById(e.hospitalId)?.name) || '—')}</td>
                     </tr>
                   )
                 })}
@@ -160,6 +167,9 @@ export default function DashboardPage() {
 
 /* ---------- metrics (unchanged data model) ---------- */
 function buildMetrics(emergencies, vehicles, hospitals) {
+  // Computed per refresh (not at module load) so counts stay correct past midnight.
+  const TODAY = new Date().toISOString().slice(0, 10)
+  const YESTERDAY = (() => { const d = new Date(); d.setDate(d.getDate() - 1); return d.toISOString().slice(0, 10) })()
   const list = emergencies
   const active = list.filter((e) => e.state === 'EN_ROUTE')
   const completed = list.filter((e) => e.state === 'COMPLETED')
@@ -190,6 +200,12 @@ function buildMetrics(emergencies, vehicles, hospitals) {
     medical: list.filter((e) => (e.createdAt || '').startsWith(day) && e.kind !== 'fire').length,
     fire: list.filter((e) => (e.createdAt || '').startsWith(day) && e.kind === 'fire').length,
   }))
+  // KPI sparklines: daily totals + daily avg response over the same 14 days.
+  const totalSpark = overTime.map((d) => d.medical + d.fire)
+  const respSpark = days.map((day) => {
+    const vals = done.filter((e) => (e.createdAt || '').startsWith(day) && e.etaToPickupMin > 0).map((e) => e.etaToPickupMin)
+    return vals.length ? mean(vals) : 0
+  })
 
   const respBySeverity = ['Critical', 'Urgent', 'Normal'].map((s) => ({
     name: s, value: +mean(done.filter((e) => e.severity === s && e.etaToPickupMin > 0).map((e) => e.etaToPickupMin)).toFixed(1),
@@ -208,7 +224,7 @@ function buildMetrics(emergencies, vehicles, hospitals) {
   })
 
   const hospCounts = {}
-  list.filter((e) => e.hospitalId).forEach((e) => { const n = hospitalById(e.hospitalId)?.name || e.hospitalId; hospCounts[n] = (hospCounts[n] || 0) + 1 })
+  list.filter((e) => e.hospitalId).forEach((e) => { const n = shortHospitalName(hospitalById(e.hospitalId)?.name || e.hospitalId); hospCounts[n] = (hospCounts[n] || 0) + 1 })
   const topHospitals = Object.entries(hospCounts).map(([name, value]) => ({ name, value }))
     .sort((a, b) => b.value - a.value).slice(0, 6)
 
@@ -218,67 +234,105 @@ function buildMetrics(emergencies, vehicles, hospitals) {
   return {
     total: list.length, active: active.length, queued,
     todayCount: list.filter((e) => (e.createdAt || '').startsWith(TODAY)).length,
+    yesterdayCount: list.filter((e) => (e.createdAt || '').startsWith(YESTERDAY)).length,
     avgResp: mean(done.filter((e) => e.etaToPickupMin > 0).map((e) => e.etaToPickupMin)),
     avgTrip: mean(done.filter((e) => e.totalEtaMin > 0).map((e) => e.totalEtaMin)),
     enroute, fleetTotal, utilPct: fleetTotal ? Math.round((enroute / fleetTotal) * 100) : 0,
     byKind, bySeverity, byCase, byZone, overTime, respBySeverity, fleetAvail, topHospitals,
+    totalSpark, respSpark,
   }
 }
 
 /* ---------- presentational ---------- */
-const ICONS = {
-  activity: '<path d="M3 12h4l2 6 4-14 2 8h6"/>',
-  pulse: '<path d="M3 12h4l2-5 3 10 2-7h7"/>',
-  clock: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
-  route: '<circle cx="6" cy="18" r="2"/><circle cx="18" cy="6" r="2"/><path d="M8 18h7a3 3 0 0 0 0-6H9a3 3 0 0 1 0-6h7"/>',
-  truck: '<path d="M3 7h11v8H3z"/><path d="M14 9h3.5l3.5 3.5V15h-7z"/><circle cx="7" cy="17" r="1.6"/><circle cx="17" cy="17" r="1.6"/>',
-}
-function Glyph({ name, className = '' }) {
-  return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"
-      strokeLinecap="round" strokeLinejoin="round" className={className} dangerouslySetInnerHTML={{ __html: ICONS[name] }} />
-  )
-}
 const CARD = {
   background: '#fff',
   borderRadius: '16px',
 }
 
-function NeoKpi({ icon, label, value, sub, accentColor }) {
+// Count from 0 to `value` once on mount; later data refreshes jump directly
+// (a dashboard that re-animates every poll would be noise, not delight).
+function useCountUp(value, ms = 650) {
+  const [display, setDisplay] = useState(0)
+  const done = useRef(false)
+  useEffect(() => {
+    if (typeof value !== 'number' || !isFinite(value)) { setDisplay(value); return }
+    const reduced = typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
+    if (done.current || reduced) { done.current = true; setDisplay(value); return }
+    done.current = true
+    const t0 = performance.now()
+    let raf
+    const step = (t) => {
+      const p = Math.min(1, (t - t0) / ms)
+      setDisplay(value * (1 - Math.pow(1 - p, 3)))
+      if (p < 1) raf = requestAnimationFrame(step)
+    }
+    raf = requestAnimationFrame(step)
+    return () => cancelAnimationFrame(raf)
+  }, [value, ms])
+  return display
+}
+
+// Tiny inline 14-day sparkline for KPI cards.
+function Spark({ data, color = '#07514D' }) {
+  if (!data || data.length < 2 || data.every((v) => !v)) return null
+  const max = Math.max(...data, 1)
+  const pts = data.map((v, i) => `${(i / (data.length - 1)) * 100},${26 - (v / max) * 22}`).join(' ')
   return (
-    <div className="p-5 flex flex-col gap-3" style={CARD}>
+    <svg viewBox="0 0 100 28" className="w-full h-6 mt-1" preserveAspectRatio="none" aria-hidden="true">
+      <polyline points={`0,28 ${pts} 100,28`} fill={`${color}12`} stroke="none" />
+      <polyline points={pts} fill="none" stroke={color} strokeWidth="1.6"
+        strokeLinecap="round" strokeLinejoin="round" vectorEffect="non-scaling-stroke" />
+    </svg>
+  )
+}
+
+function NeoKpi({ icon, label, value, sub, accentColor, format, spark, sparkColor }) {
+  const animated = useCountUp(typeof value === 'number' ? value : 0)
+  const shown = typeof value === 'number' ? (format ? format(animated) : Math.round(animated)) : value
+  return (
+    <div className="p-5 flex flex-col gap-3 card-lift" style={CARD}>
       <div className="flex items-center justify-between">
-        <span className="text-[11px] uppercase tracking-widest font-semibold" style={{ color: '#9CA3AF' }}>{label}</span>
+        <span className="text-[11px] uppercase tracking-widest font-semibold" style={{ color: '#6B7280' }}>{label}</span>
         <div className="h-8 w-8 rounded-xl grid place-items-center"
-          style={{ background: accentColor ? `${accentColor}18` : 'rgba(7,81,77,0.08)' }}>
-          <Glyph name={icon} className="" style={{ color: accentColor || '#07514D' }} />
+          style={{ background: accentColor ? `${accentColor}18` : 'rgba(7,81,77,0.08)', color: accentColor || '#07514D' }}>
+          <Icon name={icon} size={16} strokeWidth={1.8} />
         </div>
       </div>
-      <div className="text-[32px] font-bold leading-none tracking-tight" style={{ color: '#0C1322' }}>{value}</div>
+      <div className="text-[32px] font-bold leading-none tracking-tight" style={{ color: '#0C1322' }}>{shown}</div>
       <div className="text-[12px] font-medium" style={{ color: accentColor || '#6B7280' }}>{sub}</div>
+      <Spark data={spark} color={sparkColor || accentColor || '#07514D'} />
     </div>
   )
 }
 function NeoCard({ title, children, className = '' }) {
   return (
-    <div className={`p-5 ${className}`} style={CARD}>
-      <div className="text-[11px] uppercase tracking-widest font-semibold mb-4" style={{ color: '#9CA3AF' }}>{title}</div>
+    <div className={`p-5 card-static ${className}`} style={CARD} role="figure" aria-label={title}>
+      <div className="text-[11px] uppercase tracking-widest font-semibold mb-4" style={{ color: '#6B7280' }}>{title}</div>
       {children}
     </div>
   )
 }
 function Donut({ data }) {
   if (!data.length) return <Empty />
+  const total = data.reduce((s, d) => s + d.value, 0)
   return (
     <>
-      <ResponsiveContainer width="100%" height={180}>
-        <PieChart>
-          <Pie data={data} dataKey="value" nameKey="name" innerRadius={52} outerRadius={78} paddingAngle={2} stroke="none">
-            {data.map((d, i) => <Cell key={i} fill={d.color || RAMP[i % RAMP.length]} />)}
-          </Pie>
-          <Tooltip {...TIP} />
-        </PieChart>
-      </ResponsiveContainer>
+      <div className="relative">
+        <ResponsiveContainer width="100%" height={180}>
+          <PieChart>
+            <Pie data={data} dataKey="value" nameKey="name" innerRadius={52} outerRadius={78} paddingAngle={2} stroke="none">
+              {data.map((d, i) => <Cell key={i} fill={d.color || RAMP[i % RAMP.length]} />)}
+            </Pie>
+            <Tooltip {...TIP} />
+          </PieChart>
+        </ResponsiveContainer>
+        <div className="absolute inset-0 grid place-items-center pointer-events-none">
+          <div className="text-center">
+            <div className="text-[26px] font-bold leading-none" style={{ color: '#0C1322' }}>{total}</div>
+            <div className="text-[10px] uppercase tracking-widest font-semibold mt-1" style={{ color: '#6B7280' }}>total</div>
+          </div>
+        </div>
+      </div>
       <div className="flex flex-wrap gap-x-4 gap-y-1 mt-2">
         {data.map((d, i) => (
           <span key={d.name} className="flex items-center gap-1.5 text-[12px] text-cmd-text">
@@ -297,7 +351,7 @@ function Bars({ data, color, vertical }) {
       <ResponsiveContainer width="100%" height={210}>
         <BarChart data={data} layout="vertical" margin={{ left: 10, right: 12 }} barCategoryGap="30%">
           <XAxis type="number" allowDecimals={false} hide />
-          <YAxis dataKey="name" type="category" width={130} tickLine={false} axisLine={false} tick={{ fontSize: 11, fill: '#4B5552' }} />
+          <YAxis dataKey="name" type="category" width={110} tickLine={false} axisLine={false} tick={{ fontSize: 11, fill: '#4B5552' }} />
           <Tooltip {...TIP} />
           <Bar dataKey="value" fill={color || RAMP[0]} />
         </BarChart>

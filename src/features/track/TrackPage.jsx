@@ -5,7 +5,7 @@ import { api } from '../../services/api'
 import { getRoute } from '../../services/osrm'
 import { useNow } from '../../hooks/useNow'
 
-const TILES = 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png'
+const TILES = 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png'
 
 const STATUS = {
   EN_ROUTE: ['#16a34a', 'On the way'],

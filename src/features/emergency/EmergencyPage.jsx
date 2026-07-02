@@ -6,11 +6,12 @@ import { JAMSHEDPUR_CENTER, LOCATIONS, locById, bloodBanks, bloodBankById, picku
 import { hospitalById, CASE_TYPES, SEVERITIES, SEVERITY_META } from '../../data/hospitals'
 import { makeVehicleIcon, makeHospitalIcon, makeFirestationIcon } from '../map/vehicleIcon'
 import LiveEta from '../../components/common/LiveEta'
+import Icon from '../../components/common/Icon'
 import AlertsPanel from './AlertsPanel'
 import { useNow } from '../../hooks/useNow'
 import { slaTargets, slaStatus, slaText, SLA_COLOR, SLA_LABEL } from '../../services/sla'
 
-const LIGHT_TILES = 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png'
+const LIGHT_TILES = 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png'
 
 const FILTERS = [
   { key: 'active', label: 'Active' },
@@ -28,6 +29,11 @@ export default function EmergencyPage() {
   useEffect(() => {
     if (params.get('new') === '1') { setOpen(true); setParams({}, { replace: true }) }
   }, [params, setParams])
+
+  // Cards present on first render aren't "new"; later arrivals flash once.
+  const seenRef = React.useRef(null)
+  if (seenRef.current === null) seenRef.current = new Set(emergencies.map((e) => e.id))
+  useEffect(() => { emergencies.forEach((e) => seenRef.current.add(e.id)) }, [emergencies])
 
   const ACTIVE_STATES = ['EN_ROUTE', 'QUEUED', 'NO_HOSPITAL', 'NO_BLOODBANK', 'PREEMPTED']
 
@@ -47,7 +53,7 @@ export default function EmergencyPage() {
   }, [emergencies, filter])
 
   return (
-    <div className="relative h-full overflow-hidden">
+    <div className="relative h-full overflow-hidden page-enter">
       {/* ── Full-screen map ── */}
       <EmergencyMap emergencies={emergencies} />
 
@@ -71,17 +77,15 @@ export default function EmergencyPage() {
           </div>
         </div>
         <button onClick={() => setOpen(true)}
-          className="h-10 px-4 rounded-2xl text-[13px] font-semibold flex items-center gap-2 shrink-0 transition-all"
-          style={{ background: '#D6DF27', color: '#07514D', boxShadow: '0 4px 16px rgba(214,223,39,0.4)' }}
-          onMouseEnter={e => e.currentTarget.style.filter = 'brightness(1.05)'}
-          onMouseLeave={e => e.currentTarget.style.filter = ''}>
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M12 5v14M5 12h14"/></svg>
+          className="h-10 px-4 rounded-2xl text-[13px] font-semibold flex items-center gap-2 shrink-0 transition-all hover:brightness-105"
+          style={{ background: '#D6DF27', color: '#07514D' }}>
+          <Icon name="plus" size={13} strokeWidth={2.5} />
           New Emergency
         </button>
       </div>
 
       {/* ── Floating emergency list panel (left) ── */}
-      <div className="absolute left-4 top-[72px] bottom-4 z-[400] w-[340px] flex flex-col gap-3 overflow-hidden"
+      <div className="absolute left-4 top-[72px] bottom-4 z-[400] w-[340px] max-w-[calc(100vw-2rem)] flex flex-col gap-3 overflow-hidden"
         style={{ marginTop: '16px' }}>
         {/* Alerts */}
         <div className="rounded-2xl overflow-hidden"
@@ -93,11 +97,11 @@ export default function EmergencyPage() {
         <div className="flex-1 rounded-2xl flex flex-col min-h-0"
           style={{ background: 'rgba(255,255,255,0.88)', backdropFilter: 'blur(18px)', WebkitBackdropFilter: 'blur(18px)', boxShadow: '0 4px 24px rgba(0,0,0,0.10)', border: '1px solid rgba(255,255,255,0.6)' }}>
           {/* Filter tabs */}
-          <div className="flex gap-1.5 p-3 shrink-0" style={{ borderBottom: '1px solid rgba(0,0,0,0.06)' }}>
+          <div className="flex gap-1.5 p-3 shrink-0" role="tablist" aria-label="Filter emergencies" style={{ borderBottom: '1px solid rgba(0,0,0,0.06)' }}>
             {FILTERS.map((f) => {
               const isActive = filter === f.key
               return (
-                <button key={f.key} onClick={() => setFilter(f.key)}
+                <button key={f.key} onClick={() => setFilter(f.key)} role="tab" aria-selected={isActive}
                   className="flex-1 py-1.5 rounded-xl text-[12px] font-semibold transition-all"
                   style={isActive
                     ? { background: '#07514D', color: '#fff', boxShadow: '0 2px 8px rgba(7,81,77,0.25)' }
@@ -110,8 +114,19 @@ export default function EmergencyPage() {
           {/* List */}
           <div className="flex-1 overflow-auto px-3 py-2 space-y-2 no-scrollbar">
             {shown.length === 0
-              ? <div className="text-[13px] text-[#9CA3AF] text-center py-8">No emergencies in this view.</div>
-              : shown.map((e) => <EmergencyCard key={e.id} em={e} />)}
+              ? (
+                <div className="text-center py-8">
+                  <div className="text-[13px] text-[#6B7280]">No {filter === 'all' ? '' : filter + ' '}emergencies in this view.</div>
+                  {filter !== 'completed' && (
+                    <button onClick={() => setOpen(true)}
+                      className="mt-3 px-4 py-1.5 rounded-xl text-[12px] font-semibold transition-all hover:brightness-105"
+                      style={{ background: '#D6DF27', color: '#07514D' }}>
+                      Report new emergency
+                    </button>
+                  )}
+                </div>
+              )
+              : shown.map((e) => <EmergencyCard key={e.id} em={e} isNew={!seenRef.current.has(e.id)} />)}
           </div>
         </div>
       </div>
@@ -126,11 +141,11 @@ function TrafficControl() {
   const mode = useFleetStore((s) => s.trafficMode)
   const setMode = useFleetStore((s) => s.setTrafficMode)
   return (
-    <label className="flex items-center gap-1.5 text-[12px] text-cmd-muted">
-      <span>🚦 Traffic</span>
-      <select value={mode} onChange={(e) => setMode(e.target.value)}
+    <label className="flex items-center gap-1.5 text-[12px] text-[#6B7280]">
+      <span className="flex items-center gap-1"><Icon name="traffic" size={13} strokeWidth={1.8} /> Traffic</span>
+      <select value={mode} onChange={(e) => setMode(e.target.value)} aria-label="Traffic mode"
         className="bg-white border border-cmd-border rounded-md px-2 py-1 text-[12px] text-cmd-text">
-        <option value="auto">Auto (live)</option>
+        <option value="auto">Auto</option>
         <option value="clear">Clear</option>
         <option value="moderate">Moderate</option>
         <option value="heavy">Heavy</option>
@@ -140,7 +155,7 @@ function TrafficControl() {
   )
 }
 
-function EmergencyCard({ em }) {
+function EmergencyCard({ em, isNew = false }) {
   const vehicles = useFleetStore((s) => s.vehicles)
   const policy = useFleetStore((s) => s.policyConfig)
   const now = useNow(10000)
@@ -155,7 +170,7 @@ function EmergencyCard({ em }) {
   const accent = isFire ? '#ea580c' : isBlood ? '#b91c1c' : sev?.color
 
   return (
-    <div className="rounded-xl p-3"
+    <div className={`rounded-xl p-3 ${isNew ? 'row-flash' : ''}`}
       style={{ background: 'rgba(255,255,255,0.7)', border: '1px solid rgba(0,0,0,0.06)', backdropFilter: 'blur(8px)' }}>
       {/* Top row */}
       <div className="flex items-center justify-between gap-2">
@@ -313,6 +328,15 @@ function NewEmergencyDrawer({ onClose }) {
   const isBlood = kind === 'blood'
   const useUnits = !isFire && !isBlood && massCasualty ? Math.max(2, Number(units) || 2) : 1
 
+  // Keyboard support: Escape closes, focus moves into the drawer on open.
+  const panelRef = React.useRef(null)
+  useEffect(() => {
+    panelRef.current?.focus()
+    const h = (e) => { if (e.key === 'Escape') onClose() }
+    document.addEventListener('keydown', h)
+    return () => document.removeEventListener('keydown', h)
+  }, [onClose])
+
   async function submit() {
     setBusy(true)
     let r
@@ -334,7 +358,8 @@ function NewEmergencyDrawer({ onClose }) {
       <div className="absolute inset-0" style={{ background: 'rgba(0,0,0,0.25)', pointerEvents: 'auto' }} onClick={onClose} />
 
       {/* Drawer */}
-      <div className="relative flex flex-col w-[380px] h-full overflow-auto drawer-panel"
+      <div ref={panelRef} tabIndex={-1} role="dialog" aria-modal="true" aria-label="New emergency"
+        className="relative flex flex-col w-[380px] max-w-full h-full overflow-auto drawer-panel outline-none"
         style={{ background: 'rgba(255,255,255,0.95)', backdropFilter: 'blur(24px)', WebkitBackdropFilter: 'blur(24px)', boxShadow: '-8px 0 40px rgba(0,0,0,0.18)', pointerEvents: 'auto' }}>
 
         {/* Drawer header */}
@@ -344,21 +369,20 @@ function NewEmergencyDrawer({ onClose }) {
             <div className="text-[16px] font-bold text-[#0C1322]">New Emergency</div>
             <div className="text-[11px] text-[#6B7280] mt-0.5">Nearest unit dispatched automatically</div>
           </div>
-          <button onClick={onClose} className="h-8 w-8 rounded-xl grid place-items-center text-[#9CA3AF] transition-colors"
-            onMouseEnter={e => { e.currentTarget.style.background = '#F3F4F6'; e.currentTarget.style.color = '#374151' }}
-            onMouseLeave={e => { e.currentTarget.style.background = ''; e.currentTarget.style.color = '#9CA3AF' }}>
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+          <button onClick={onClose} aria-label="Close drawer"
+            className="h-8 w-8 rounded-xl grid place-items-center text-[#6B7280] transition-colors hover:bg-[#F3F4F6] hover:text-[#374151]">
+            <Icon name="x" size={16} strokeWidth={2.2} />
           </button>
         </div>
 
         <div className="flex-1 px-5 py-4 space-y-4 overflow-auto">
           {/* Type selector */}
           <div>
-            <div className="text-[11px] font-semibold uppercase tracking-widest text-[#9CA3AF] mb-2">Emergency type</div>
+            <div className="text-[11px] font-semibold uppercase tracking-widest text-[#6B7280] mb-2">Emergency type</div>
             <div className="grid grid-cols-3 gap-2">
-              <TypeBtn active={!isFire && !isBlood} onClick={() => setKind('medical')} label="🚑 Ambulance" color="#07514D" />
-              <TypeBtn active={isFire} onClick={() => setKind('fire')} label="🔥 Fire" color="#ea580c" />
-              <TypeBtn active={isBlood} onClick={() => setKind('blood')} label="🩸 Blood" color="#b91c1c" />
+              <TypeBtn active={!isFire && !isBlood} onClick={() => setKind('medical')} icon="medical" label="Ambulance" color="#07514D" />
+              <TypeBtn active={isFire} onClick={() => setKind('fire')} icon="flame" label="Fire" color="#ea580c" />
+              <TypeBtn active={isBlood} onClick={() => setKind('blood')} icon="droplet" label="Blood" color="#b91c1c" />
             </div>
           </div>
 
@@ -456,15 +480,13 @@ function NewEmergencyDrawer({ onClose }) {
         {/* Drawer footer */}
         <div className="px-5 py-4 shrink-0 flex gap-2" style={{ borderTop: '1px solid rgba(0,0,0,0.07)' }}>
           <button onClick={onClose}
-            className="flex-1 h-10 rounded-xl text-[13px] font-medium text-[#6B7280] transition-colors"
-            style={{ background: '#E8E8EE' }}
-            onMouseEnter={e => e.currentTarget.style.background = '#EAECEF'}
-            onMouseLeave={e => e.currentTarget.style.background = '#E8E8EE'}>
+            className="flex-1 h-10 rounded-xl text-[13px] font-medium text-[#6B7280] transition-colors hover:brightness-95"
+            style={{ background: '#E8E8EE' }}>
             Cancel
           </button>
           <button onClick={submit} disabled={busy || (isBlood && banks.length === 0)}
             className="flex-1 h-10 rounded-xl text-[13px] font-semibold transition-all disabled:opacity-50"
-            style={{ background: '#D6DF27', color: '#07514D', boxShadow: '0 2px 12px rgba(214,223,39,0.35)' }}>
+            style={{ background: '#D6DF27', color: '#07514D' }}>
             {busy ? 'Routing…' : isFire ? 'Dispatch fire truck' : isBlood ? 'Dispatch blood run' : useUnits > 1 ? `Dispatch ${useUnits} ambulances` : 'Dispatch ambulance'}
           </button>
         </div>
@@ -475,7 +497,7 @@ function NewEmergencyDrawer({ onClose }) {
 
 const DrawerField = ({ label, children }) => (
   <div>
-    <div className="text-[11px] font-semibold uppercase tracking-widest text-[#9CA3AF] mb-1.5">{label}</div>
+    <div className="text-[11px] font-semibold uppercase tracking-widest text-[#6B7280] mb-1.5">{label}</div>
     {children}
   </div>
 )
@@ -486,12 +508,13 @@ const DrawerSelect = ({ value, onChange, options, labels }) => (
     {options.map((o) => <option key={o} value={o}>{labels ? labels[o] : o}</option>)}
   </select>
 )
-const TypeBtn = ({ active, onClick, label, color }) => (
-  <button onClick={onClick}
-    className="h-10 rounded-xl text-[13px] font-semibold transition-all"
+const TypeBtn = ({ active, onClick, icon, label, color }) => (
+  <button onClick={onClick} aria-pressed={active}
+    className="h-10 rounded-xl text-[13px] font-semibold transition-all flex items-center justify-center gap-1.5"
     style={active
       ? { background: color, color: '#fff', boxShadow: `0 2px 10px ${color}40` }
       : { background: '#E8E8EE', color: '#6B7280' }}>
+    {icon && <Icon name={icon} size={14} strokeWidth={2} />}
     {label}
   </button>
 )

@@ -68,14 +68,14 @@ export default function InfraHealthPage() {
           <p className="text-[13px] text-[#6B7280] mt-0.5">CloudWatch metrics · Lambda + API Gateway</p>
         </div>
         <div className="flex items-center gap-3 shrink-0">
-          {lastRefresh && <span className="text-[11px] text-[#9CA3AF]">Refreshed {lastRefresh.toLocaleTimeString()}</span>}
+          {lastRefresh && <span className="text-[11px] text-[#6B7280]">Refreshed {lastRefresh.toLocaleTimeString()}</span>}
           <div className="flex gap-1 p-1 rounded-xl" style={{ background: 'rgba(255,255,255,0.85)', boxShadow: '0 2px 8px rgba(0,0,0,0.06)' }}>
             {RANGES.map((r, i) => (
               <button key={r.label} onClick={() => setRangeIdx(i)}
                 className="px-3 h-7 rounded-lg text-[12px] font-semibold transition-all"
                 style={i === rangeIdx
                   ? { background: '#07514D', color: '#fff', boxShadow: '0 2px 6px rgba(7,81,77,0.25)' }
-                  : { color: '#9CA3AF' }}>
+                  : { color: '#6B7280' }}>
                 {r.label}
               </button>
             ))}
@@ -104,7 +104,7 @@ export default function InfraHealthPage() {
         )}
 
         {!data && !loading && !err && (
-          <div className="text-[13px] text-[#9CA3AF] py-20 text-center">No data — deploy the backend first.</div>
+          <div className="text-[13px] text-[#6B7280] py-20 text-center">No data — deploy the backend first.</div>
         )}
 
         {data && (
@@ -133,13 +133,13 @@ export default function InfraHealthPage() {
                 <div className="space-y-0.5 max-h-72 overflow-y-auto">
                   {data.recent_errors.map((e, i) => (
                     <div key={i} className="flex gap-3 text-[12px] py-1.5" style={{ borderBottom: '1px solid rgba(0,0,0,0.04)' }}>
-                      <span className="shrink-0 font-mono text-[#9CA3AF]">{e.timestamp.slice(11, 19)}</span>
+                      <span className="shrink-0 font-mono text-[#6B7280]">{e.timestamp.slice(11, 19)}</span>
                       <span className={`flex-1 font-mono leading-relaxed ${e.message?.includes('ERROR') ? 'text-red-600' : 'text-[#6B7280]'}`}>{e.message}</span>
                     </div>
                   ))}
                 </div>
               ) : (
-                <div className="text-[13px] text-[#9CA3AF] py-8 text-center flex items-center justify-center gap-2">
+                <div className="text-[13px] text-[#6B7280] py-8 text-center flex items-center justify-center gap-2">
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                     <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/>
                   </svg>
@@ -220,9 +220,9 @@ function MiniLine({ data, color, label }) {
 function NeoKpi({ label, value, sub, accent }) {
   return (
     <div className="p-5" style={NEO}>
-      <div className="text-[10.5px] uppercase tracking-widest font-semibold mb-3" style={{ color: '#9CA3AF' }}>{label}</div>
+      <div className="text-[10.5px] uppercase tracking-widest font-semibold mb-3" style={{ color: '#6B7280' }}>{label}</div>
       <div className="text-[30px] font-bold leading-none" style={{ color: accent || '#0C1322' }}>{value}</div>
-      <div className="text-[12px] mt-2 font-medium" style={{ color: accent ? `${accent}99` : '#9CA3AF' }}>{sub}</div>
+      <div className="text-[12px] mt-2 font-medium" style={{ color: accent ? `${accent}99` : '#6B7280' }}>{sub}</div>
     </div>
   )
 }
@@ -230,11 +230,11 @@ function NeoKpi({ label, value, sub, accent }) {
 function NeoCard({ title, children }) {
   return (
     <div className="p-5" style={NEO}>
-      <div className="text-[10.5px] uppercase tracking-widest font-semibold mb-4" style={{ color: '#9CA3AF' }}>{title}</div>
+      <div className="text-[10.5px] uppercase tracking-widest font-semibold mb-4" style={{ color: '#6B7280' }}>{title}</div>
       {children}
     </div>
   )
 }
 
-const Empty = () => <div className="text-[13px] text-[#9CA3AF] py-12 text-center">No data yet.</div>
+const Empty = () => <div className="text-[13px] text-[#6B7280] py-12 text-center">No data yet.</div>
 const fmt = (n) => n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(n || 0)

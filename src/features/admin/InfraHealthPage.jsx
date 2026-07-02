@@ -127,6 +127,47 @@ export default function InfraHealthPage() {
               <NeoCard title="Duration (avg ms)"><MiniLine data={data.series.duration_avg} color="#7FB0AB" label="ms" /></NeoCard>
             </div>
 
+            {/* Functions comparison — TransportApi (primary) vs VoiceAgent */}
+            {data.functions?.length > 0 && (
+              <NeoCard title="Functions">
+                <FunctionsTable primary={data} others={data.functions} />
+              </NeoCard>
+            )}
+
+            {/* Cost estimate + DynamoDB + Bedrock */}
+            {(data.cost_estimate || data.dynamodb?.length > 0 || data.bedrock) && (
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+                {data.cost_estimate && (
+                  <NeoCard title="Estimated monthly cost">
+                    <CostEstimateCard cost={data.cost_estimate} />
+                  </NeoCard>
+                )}
+                {data.dynamodb?.length > 0 && (
+                  <NeoCard title="DynamoDB">
+                    <DynamoCard tables={data.dynamodb} />
+                  </NeoCard>
+                )}
+                {data.bedrock && (
+                  <NeoCard title="Bedrock (VoiceAgent)">
+                    <BedrockCard bedrock={data.bedrock} />
+                  </NeoCard>
+                )}
+              </div>
+            )}
+
+            {/* X-Ray trace breakdown */}
+            {data.trace_breakdown?.length > 0 && (
+              <NeoCard title="Request time breakdown · X-Ray (last hour)">
+                <TraceBreakdownCard segments={data.trace_breakdown} />
+              </NeoCard>
+            )}
+            {!data.trace_breakdown?.length && (
+              <div className="rounded-2xl px-5 py-3 text-[12px]" style={{ background: 'rgba(0,0,0,0.03)', color: '#6B7280' }}>
+                No X-Ray trace data yet — run <code className="bg-white px-1 rounded">infra/enable-observability.sh</code> once
+                in CloudShell to turn on Active tracing and the extra DynamoDB/Bedrock/cost metrics above.
+              </div>
+            )}
+
             {/* Error log */}
             <NeoCard title={data.recent_errors?.length > 0 ? `Recent errors · last ${Math.min(range.value, 60)} min` : 'Recent errors / warnings'}>
               {data.recent_errors?.length > 0 ? (
@@ -238,3 +279,115 @@ function NeoCard({ title, children }) {
 
 const Empty = () => <div className="text-[13px] text-[#6B7280] py-12 text-center">No data yet.</div>
 const fmt = (n) => n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(n || 0)
+
+function FunctionsTable({ primary, others }) {
+  const rows = [
+    { function_name: primary.function_name, invocations: primary.invocations, error_rate_pct: primary.error_rate_pct,
+      duration_avg_ms: primary.duration_avg_ms, duration_p99_ms: primary.duration_p99_ms, cold_starts: primary.cold_starts },
+    ...others,
+  ]
+  return (
+    <table className="w-full text-[13px]">
+      <thead>
+        <tr className="text-[11px] uppercase tracking-wide" style={{ color: '#6B7280', borderBottom: '1px solid #E9EAEC' }}>
+          <Th>Function</Th><Th>Invocations</Th><Th>Error rate</Th><Th>Avg</Th><Th>p99</Th><Th>Cold starts</Th>
+        </tr>
+      </thead>
+      <tbody>
+        {rows.map((r) => (
+          <tr key={r.function_name} style={{ borderBottom: '1px solid rgba(0,0,0,0.04)' }}>
+            <td className="py-2.5 font-mono text-[12px] font-semibold text-[#0C1322]">{r.function_name}</td>
+            <td>{fmt(r.invocations)}</td>
+            <td style={{ color: statusColor(r.error_rate_pct) }}>{r.error_rate_pct}%</td>
+            <td>{r.duration_avg_ms?.toFixed?.(0) ?? r.duration_avg_ms} ms</td>
+            <td>{r.duration_p99_ms?.toFixed?.(0) ?? r.duration_p99_ms} ms</td>
+            <td>{fmt(r.cold_starts)}</td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  )
+}
+const Th = ({ children }) => <th className="text-left font-medium py-2">{children}</th>
+
+function CostEstimateCard({ cost }) {
+  return (
+    <div>
+      <div className="text-[30px] font-bold leading-none" style={{ color: '#0C1322' }}>${cost.total_est_monthly_usd?.toFixed(2)}</div>
+      <div className="text-[12px] mt-1.5 font-medium" style={{ color: '#6B7280' }}>/ month, extrapolated from this window</div>
+      <div className="mt-3 space-y-1.5">
+        {cost.lambdas?.map((l) => (
+          <div key={l.function_name} className="flex justify-between text-[12px]">
+            <span className="font-mono text-[#6B7280]">{l.function_name}</span>
+            <span className="font-semibold text-[#374151]">${l.est_monthly_usd?.toFixed(2)}</span>
+          </div>
+        ))}
+        {cost.bedrock_est_monthly_usd != null && (
+          <div className="flex justify-between text-[12px]">
+            <span className="text-[#6B7280]">Bedrock tokens</span>
+            <span className="font-semibold text-[#374151]">${cost.bedrock_est_monthly_usd.toFixed(2)}</span>
+          </div>
+        )}
+      </div>
+      <div className="text-[10.5px] mt-3" style={{ color: '#9CA3AF' }}>{cost.note}</div>
+    </div>
+  )
+}
+
+function DynamoCard({ tables }) {
+  return (
+    <div className="space-y-3">
+      {tables.map((t) => {
+        const throttled = (t.read_throttles || 0) + (t.write_throttles || 0) > 0
+        return (
+          <div key={t.table} className="pb-2.5" style={{ borderBottom: '1px solid rgba(0,0,0,0.04)' }}>
+            <div className="flex items-center justify-between">
+              <span className="font-mono text-[12px] font-semibold text-[#0C1322]">{t.table}</span>
+              {throttled && (
+                <span className="px-2 py-0.5 rounded-full text-[10.5px] font-semibold" style={{ background: 'rgba(220,38,38,0.1)', color: '#dc2626' }}>throttled</span>
+              )}
+            </div>
+            <div className="flex gap-4 mt-1 text-[11px]" style={{ color: '#6B7280' }}>
+              <span>RCU: <b style={{ color: '#374151' }}>{fmt(t.consumed_rcu)}</b></span>
+              <span>WCU: <b style={{ color: '#374151' }}>{fmt(t.consumed_wcu)}</b></span>
+            </div>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+function BedrockCard({ bedrock }) {
+  return (
+    <div className="space-y-2 text-[12px]">
+      <div className="flex justify-between"><span style={{ color: '#6B7280' }}>Model</span><span className="font-mono text-[11px] text-[#374151]">{bedrock.model_id}</span></div>
+      <div className="flex justify-between"><span style={{ color: '#6B7280' }}>Invocations</span><span className="font-semibold text-[#374151]">{fmt(bedrock.invocations)}</span></div>
+      <div className="flex justify-between"><span style={{ color: '#6B7280' }}>Input tokens</span><span className="font-semibold text-[#374151]">{fmt(bedrock.input_tokens)}</span></div>
+      <div className="flex justify-between"><span style={{ color: '#6B7280' }}>Output tokens</span><span className="font-semibold text-[#374151]">{fmt(bedrock.output_tokens)}</span></div>
+      <div className="flex justify-between"><span style={{ color: '#6B7280' }}>Avg latency</span><span className="font-semibold text-[#374151]">{bedrock.avg_latency_ms?.toFixed(0)} ms</span></div>
+      {bedrock.client_errors > 0 && (
+        <div className="flex justify-between"><span style={{ color: '#dc2626' }}>Client errors</span><span className="font-semibold" style={{ color: '#dc2626' }}>{fmt(bedrock.client_errors)}</span></div>
+      )}
+    </div>
+  )
+}
+
+function TraceBreakdownCard({ segments }) {
+  const max = Math.max(...segments.map((s) => s.avg_ms), 1)
+  return (
+    <div className="space-y-2.5">
+      {segments.map((s) => (
+        <div key={s.service}>
+          <div className="flex justify-between text-[12px] mb-1">
+            <span className="font-medium text-[#374151]">{s.service}</span>
+            <span style={{ color: '#6B7280' }}>{s.avg_ms.toFixed(0)} ms · {s.samples} samples</span>
+          </div>
+          <div className="h-2 rounded-full overflow-hidden" style={{ background: 'rgba(0,0,0,0.06)' }}>
+            <div className="h-full rounded-full" style={{ width: `${(s.avg_ms / max) * 100}%`, background: RAMP.ok }} />
+          </div>
+        </div>
+      ))}
+    </div>
+  )
+}

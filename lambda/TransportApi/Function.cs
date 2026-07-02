@@ -28,6 +28,8 @@ public class Function
     private static readonly string TblRef      = Env("TBL_REF",      "ReferenceData");
     private static readonly string TblEmp      = Env("EMP_TABLE",    "jamshedpur-users");
     private static readonly string FnName      = Env("AWS_LAMBDA_FUNCTION_NAME", "psiog-transport-api");
+    private static readonly string VoiceFnName = Env("VOICE_FN_NAME", "psiog-voice-agent");
+    private static readonly string BedrockModelId = Env("BEDROCK_MODEL_ID", "eu.amazon.nova-lite-v1:0");
     private static readonly string AppBaseUrl  = (Env("APP_BASE_URL", "")).TrimEnd('/');
     private static readonly string PolicyBucket  = Env("POLICY_BUCKET", "");
     private static readonly string PolicySyncFn  = Env("POLICY_SYNC_FUNCTION", "psiog-policy-sync");
@@ -794,6 +796,47 @@ public class Function
                 try
                 {
                     var metrics = await Cwsvc.GetMetrics(FnName, rangeMin, periodMin);
+
+                    // Everything below is additive and best-effort: if X-Ray tracing or the
+                    // extra IAM permissions haven't been enabled yet (see
+                    // infra/enable-observability.sh), these fall back to empty/zero rather
+                    // than breaking the primary metrics that already work today.
+                    async Task<object?> Safe(Func<Task<object?>> f) { try { return await f(); } catch { return null; } }
+
+                    var voiceMetricsTask  = Safe(async () => { var m = await Cwsvc.GetMetrics(VoiceFnName, rangeMin, periodMin); return (object?)m; });
+                    var opsTableTask      = Safe(async () => (object?)await Cwsvc.GetDynamoMetrics(TblOps, rangeMin, periodMin));
+                    var fleetTableTask    = Safe(async () => (object?)await Cwsvc.GetDynamoMetrics(TblFleet, rangeMin, periodMin));
+                    var bedrockTask       = Safe(async () => (object?)await Cwsvc.GetBedrockMetrics(BedrockModelId, rangeMin, periodMin));
+                    var traceTask         = Safe(async () => (object?)await Cwsvc.GetTraceBreakdown(rangeMin));
+                    var costTransportTask = Safe(async () => (object?)await Cwsvc.GetLambdaCostEstimate(FnName, metrics.Invocations, metrics.DurationAvgMs, rangeMin));
+
+                    await Task.WhenAll(voiceMetricsTask, opsTableTask, fleetTableTask, bedrockTask, traceTask, costTransportTask);
+
+                    var voiceMetrics = (InfraMetrics?)await voiceMetricsTask;
+                    var opsTable = (DynamoTableMetrics?)await opsTableTask;
+                    var fleetTable = (DynamoTableMetrics?)await fleetTableTask;
+                    var bedrock = (BedrockMetrics?)await bedrockTask;
+                    var trace = (List<TraceSegment>?)await traceTask;
+                    var costTransport = (LambdaCostEstimate?)await costTransportTask;
+                    LambdaCostEstimate? costVoice = null;
+                    if (voiceMetrics != null)
+                    {
+                        try { costVoice = await Cwsvc.GetLambdaCostEstimate(VoiceFnName, voiceMetrics.Invocations, voiceMetrics.DurationAvgMs, rangeMin); } catch { }
+                    }
+
+                    object? Fn(InfraMetrics? m) => m == null ? null : new
+                    {
+                        function_name = m.FunctionName,
+                        invocations = m.Invocations, errors = m.Errors, error_rate_pct = m.ErrorRatePct,
+                        throttles = m.Throttles, duration_avg_ms = m.DurationAvgMs, duration_p99_ms = m.DurationP99Ms,
+                        cold_starts = m.ColdStarts, max_concurrent = m.MaxConcurrent,
+                        recent_errors = m.RecentErrors.Select(e => new { timestamp = e.Timestamp, message = e.Message }).ToList(),
+                    };
+
+                    var bedrockCostPerMonth = bedrock == null || rangeMin <= 0 ? (double?)null
+                        : Math.Round(((bedrock.InputTokens / 1000.0 * 0.00006) + (bedrock.OutputTokens / 1000.0 * 0.00024)) * (43800.0 / rangeMin), 2);
+                    var totalCost = (costTransport?.EstMonthlyUsd ?? 0) + (costVoice?.EstMonthlyUsd ?? 0) + (bedrockCostPerMonth ?? 0);
+
                     return Ok(new
                     {
                         function_name = metrics.FunctionName,
@@ -810,6 +853,33 @@ public class Function
                         },
                         recent_errors = metrics.RecentErrors.Select(e => new { timestamp = e.Timestamp, message = e.Message }).ToList(),
                         generated_at = metrics.GeneratedAt,
+
+                        // ── additive fields (all optional/best-effort) ──
+                        functions = new[] { Fn(voiceMetrics) }.Where(f => f != null).ToList(),
+                        dynamodb = new[]
+                        {
+                            opsTable == null ? null : new { table = opsTable.TableName, consumed_rcu = opsTable.ConsumedReadUnits, consumed_wcu = opsTable.ConsumedWriteUnits, read_throttles = opsTable.ReadThrottles, write_throttles = opsTable.WriteThrottles },
+                            fleetTable == null ? null : new { table = fleetTable.TableName, consumed_rcu = fleetTable.ConsumedReadUnits, consumed_wcu = fleetTable.ConsumedWriteUnits, read_throttles = fleetTable.ReadThrottles, write_throttles = fleetTable.WriteThrottles },
+                        }.Where(t => t != null).ToList(),
+                        bedrock = bedrock == null ? null : new
+                        {
+                            model_id = bedrock.ModelId, invocations = bedrock.Invocations,
+                            input_tokens = bedrock.InputTokens, output_tokens = bedrock.OutputTokens,
+                            avg_latency_ms = bedrock.AvgLatencyMs, client_errors = bedrock.ClientErrors,
+                            est_monthly_usd = bedrockCostPerMonth,
+                        },
+                        trace_breakdown = trace?.Select(t => new { service = t.Service, avg_ms = t.AvgMs, samples = t.SampleCount }).ToList(),
+                        cost_estimate = new
+                        {
+                            note = "Approximate, list pricing extrapolated from the sampled window — not a substitute for Cost Explorer.",
+                            lambdas = new[]
+                            {
+                                costTransport == null ? null : new { function_name = costTransport.FunctionName, memory_mb = costTransport.MemoryMb, est_monthly_usd = costTransport.EstMonthlyUsd },
+                                costVoice == null ? null : new { function_name = costVoice.FunctionName, memory_mb = costVoice.MemoryMb, est_monthly_usd = costVoice.EstMonthlyUsd },
+                            }.Where(c => c != null).ToList(),
+                            bedrock_est_monthly_usd = bedrockCostPerMonth,
+                            total_est_monthly_usd = Math.Round(totalCost, 2),
+                        },
                     }, corsHeaders);
                 }
                 catch (Exception ex) { return ErrResp(500, "CW_ERROR", ex.Message, corsHeaders); }

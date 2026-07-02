@@ -134,7 +134,7 @@ echo "Add these to GitHub → Settings → Secrets and variables → Actions:"
 echo
 echo "  SECRETS:"
 echo "    AWS_DEPLOY_ROLE_ARN  = ${ROLE_ARN}"
-echo "    VITE_API_KEY         = <your transport API key>"
+echo "    (no VITE_API_KEY needed — the browser authenticates with the Cognito JWT)"
 echo
 echo "  VARIABLES (not secrets — visible in logs):"
 echo "    AWS_REGION                  = ${REGION}"

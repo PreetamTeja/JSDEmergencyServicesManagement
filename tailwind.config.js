@@ -23,14 +23,14 @@ export default {
           DEFAULT: 'var(--color-accent)',
           text: 'var(--color-accent-text)',
         },
-        // Brand chart palette + surfaces
+        // Brand chart palette + surfaces — "Sage & Linen"
         brand: {
-          green: '#07514D',
-          green2: '#0B6A64',
-          teal: '#4A9B96',
-          lime: '#D6DF27',
-          pale: '#F8FAD6',
-          light: '#E6F0EE', // light green for active/hover surfaces
+          green: '#2E3A2F',
+          green2: '#3E4C3F',
+          teal: '#8FAF8A',
+          lime: '#8FAF8A',
+          pale: '#EDE8DF',
+          light: '#EDE8DF', // light surface for active/hover
         },
         status: {
           idle: '#64748b',
@@ -49,7 +49,7 @@ export default {
         '2xl': '16px', // modals
       },
       boxShadow: {
-        glow: 'inset 0 0 0 1px rgba(7,81,77,0.25)',
+        glow: 'inset 0 0 0 1px rgba(46,58,47,0.25)',
         card: '0 1px 2px rgba(16,24,40,0.06), 0 1px 1px rgba(16,24,40,0.04)',
       },
     },

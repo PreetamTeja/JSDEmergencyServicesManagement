@@ -89,7 +89,7 @@ export default function LiveMapPage() {
 
         {LOCATIONS.map((l) => (
           <CircleMarker key={l.id} center={[l.lat, l.lng]} radius={4}
-            pathOptions={{ color: '#07514D', fillColor: '#ffffff', fillOpacity: 1, weight: 1.5 }} />
+            pathOptions={{ color: '#2E3A2F', fillColor: '#ffffff', fillOpacity: 1, weight: 1.5 }} />
         ))}
 
         {hospitals.map((h) => (
@@ -150,12 +150,12 @@ export default function LiveMapPage() {
         <div className="px-4 py-2.5 rounded-2xl flex items-center gap-4"
           style={{ background: 'rgba(255,255,255,0.88)', backdropFilter: 'blur(18px)', WebkitBackdropFilter: 'blur(18px)', boxShadow: '0 4px 24px rgba(0,0,0,0.10)', border: '1px solid rgba(255,255,255,0.6)' }}>
           <div>
-            <div className="text-[14px] font-bold text-[#0C1322]">Live Map</div>
+            <div className="text-[14px] font-bold text-[#2E3A2F]">Live Map</div>
             <div className="text-[11px] text-[#6B7280]">Jamshedpur · real-time fleet</div>
           </div>
           <div className="flex items-center gap-3">
             <StatBadge color="#16a34a" label="En route" n={totals.enroute} />
-            <StatBadge color="#07514D" label="Idle" n={totals.idle} />
+            <StatBadge color="#2E3A2F" label="Idle" n={totals.idle} />
             <StatBadge color="#d97706" label="Maint." n={totals.maintenance} />
           </div>
           <label className="flex items-center gap-1.5 text-[12px] font-medium text-[#6B7280] cursor-pointer">
@@ -171,7 +171,7 @@ export default function LiveMapPage() {
           <div className="w-80 max-h-[70vh] flex flex-col overflow-hidden"
             style={{ background: 'rgba(255,255,255,0.93)', backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)', borderRadius: '20px', boxShadow: '0 8px 32px rgba(0,0,0,0.14)', border: '1px solid rgba(255,255,255,0.6)' }}>
             <div className="px-4 py-3.5 shrink-0" style={{ borderBottom: '1px solid rgba(0,0,0,0.06)' }}>
-              <div className="text-[13px] font-bold text-[#0C1322] mb-2.5">Zone Fleet Pools</div>
+              <div className="text-[13px] font-bold text-[#2E3A2F] mb-2.5">Zone Fleet Pools</div>
             </div>
             <div className="flex-1 overflow-auto px-2 py-2 no-scrollbar">
               {counts.map(({ zone, byType, idleCount }) => {
@@ -184,7 +184,7 @@ export default function LiveMapPage() {
                       onMouseEnter={ev => ev.currentTarget.style.background = 'rgba(0,0,0,0.04)'}
                       onMouseLeave={ev => ev.currentTarget.style.background = ''}>
                       <span className="h-3 w-3 rounded-sm shrink-0" style={{ background: zone.color }} />
-                      <span className="font-semibold text-[13px] text-[#0C1322] flex-1">{zone.name}</span>
+                      <span className="font-semibold text-[13px] text-[#2E3A2F] flex-1">{zone.name}</span>
                       <span className="flex items-center gap-2 text-[#6B7280]">
                         {TYPE_ORDER.filter((t) => byType[t]).map((t) => (
                           <span key={t} className="inline-flex items-center gap-0.5 text-[11px]">
@@ -204,8 +204,8 @@ export default function LiveMapPage() {
                             onMouseEnter={ev => ev.currentTarget.style.background = 'rgba(0,0,0,0.04)'}
                             onMouseLeave={ev => ev.currentTarget.style.background = ''}>
                             <span className="h-2 w-2 rounded-full shrink-0" style={{ background: STATUS_COLORS[v.status] }} />
-                            <span style={{ color: '#07514D' }}><VehicleIcon type={v.type} size={12} /></span>
-                            <span className="font-mono font-semibold text-[#0C1322] flex-1 truncate">{v.reg}</span>
+                            <span style={{ color: '#2E3A2F' }}><VehicleIcon type={v.type} size={12} /></span>
+                            <span className="font-mono font-semibold text-[#2E3A2F] flex-1 truncate">{v.reg}</span>
                             <span className="capitalize text-[11px]" style={{ color: STATUS_COLORS[v.status] }}>
                               {v.status === 'enroute' ? 'en route' : v.status}
                             </span>
@@ -223,7 +223,7 @@ export default function LiveMapPage() {
         {showLegend && (
           <div className="px-4 py-3.5 w-52"
             style={{ background: 'rgba(255,255,255,0.93)', backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)', borderRadius: '16px', boxShadow: '0 8px 24px rgba(0,0,0,0.1)' }}>
-            <div className="text-[11px] font-bold text-[#0C1322] mb-2.5 uppercase tracking-widest">Legend</div>
+            <div className="text-[11px] font-bold text-[#2E3A2F] mb-2.5 uppercase tracking-widest">Legend</div>
             <div className="space-y-2">
               <Key dot="#16a34a" label="Unit · responding" />
               <Key dot="#64748b" label="Unit · idle" />
@@ -231,7 +231,7 @@ export default function LiveMapPage() {
               <Key dot="#dc2626" label="Unit · on emergency" />
               <Key sq="#dc2626" label="Hospital" />
               <Key sq="#ea580c" label="Fire station" />
-              <Key ring="#07514D" label="Location" />
+              <Key ring="#2E3A2F" label="Location" />
               <div className="pt-2 mt-2 text-[10px] font-bold uppercase tracking-widest text-[#6B7280]" style={{ borderTop: '1px solid rgba(0,0,0,0.06)' }}>Zones</div>
               {ZONES.map((z) => <Key key={z.id} sq={z.color} label={z.name} />)}
             </div>
@@ -242,15 +242,15 @@ export default function LiveMapPage() {
           <button onClick={() => setShowFleet((v) => !v)}
             className="h-10 px-4 inline-flex items-center gap-2 rounded-2xl text-[13px] font-semibold transition-all"
             style={showFleet
-              ? { background: '#07514D', color: '#fff', boxShadow: '0 4px 16px rgba(7,81,77,0.3)' }
-              : { background: 'rgba(255,255,255,0.9)', color: '#07514D', backdropFilter: 'blur(12px)', boxShadow: '0 4px 16px rgba(0,0,0,0.1)' }}>
+              ? { background: '#2E3A2F', color: '#fff', boxShadow: '0 4px 16px rgba(46,58,47,0.3)' }
+              : { background: 'rgba(255,255,255,0.9)', color: '#2E3A2F', backdropFilter: 'blur(12px)', boxShadow: '0 4px 16px rgba(0,0,0,0.1)' }}>
             <VehicleIcon type="ambulance" size={15} /> Fleet
           </button>
           <button onClick={() => setShowLegend((v) => !v)}
             className="h-10 w-10 grid place-items-center rounded-2xl transition-all"
             style={showLegend
-              ? { background: '#07514D', color: '#fff', boxShadow: '0 4px 16px rgba(7,81,77,0.3)' }
-              : { background: 'rgba(255,255,255,0.9)', color: '#07514D', backdropFilter: 'blur(12px)', boxShadow: '0 4px 16px rgba(0,0,0,0.1)' }}>
+              ? { background: '#2E3A2F', color: '#fff', boxShadow: '0 4px 16px rgba(46,58,47,0.3)' }
+              : { background: 'rgba(255,255,255,0.9)', color: '#2E3A2F', backdropFilter: 'blur(12px)', boxShadow: '0 4px 16px rgba(0,0,0,0.1)' }}>
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 8h.01M11 12h1v4h1"/></svg>
           </button>
         </div>
@@ -286,7 +286,7 @@ function Info({ k, v, cap }) {
   return (
     <div className="flex justify-between gap-3 text-[12px] leading-5">
       <span style={{ color: '#6B7280' }}>{k}</span>
-      <span className={`text-[#0C1322] font-medium text-right ${cap ? 'capitalize' : ''}`}>{v}</span>
+      <span className={`text-[#2E3A2F] font-medium text-right ${cap ? 'capitalize' : ''}`}>{v}</span>
     </div>
   )
 }

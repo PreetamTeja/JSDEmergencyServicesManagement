@@ -103,7 +103,7 @@ export default function UserPortal({ session, onSignOut }) {
               <div>
                 {/* type tiles */}
                 <div className="grid grid-cols-2 gap-3 mb-4">
-                  <TypeTile active={!isFire} onClick={() => setKind('medical')} label="Ambulance" color="#07514D" />
+                  <TypeTile active={!isFire} onClick={() => setKind('medical')} label="Ambulance" color="#2E3A2F" />
                   <TypeTile active={isFire} onClick={() => setKind('fire')} label="Fire truck" color="#ea580c" />
                 </div>
 
@@ -218,7 +218,7 @@ function stepIndex(state) {
 function RequestCard({ e, vehicles, onCancel }) {
   const isF = e.kind === 'fire'
   const hosp = hospitalById(e.hospitalId)
-  const accent = isF ? '#ea580c' : '#07514D'
+  const accent = isF ? '#ea580c' : '#2E3A2F'
   const veh = vehicles.find((v) => v.id === e.ambulanceId)
   const cancelled = e.state === 'CANCELLED'
   const canCancel = ['EN_ROUTE', 'QUEUED', 'NO_HOSPITAL'].includes(e.state)

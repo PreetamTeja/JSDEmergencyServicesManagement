@@ -247,7 +247,12 @@ const Line = ({ k, v, accent }) => (
   <div className="flex justify-between gap-2"><span className="text-cmd-muted">{k}</span><span className={accent ? 'text-accent font-medium text-right' : 'text-cmd-text text-right'}>{v}</span></div>
 )
 
-function EmergencyMap({ emergencies }) {
+// Memoized: without this, opening the drawer (a local `open` state toggle in
+// the parent) re-renders this whole Leaflet tree — every marker/polyline gets
+// re-diffed on the same frames as the slide-in animation, which is what
+// caused the stutter. `emergencies` is the only prop and its reference is
+// stable unless the store actually changes it.
+const EmergencyMap = React.memo(function EmergencyMap({ emergencies }) {
   const live = useFleetStore((s) => s.live)
   const vehicles = useFleetStore((s) => s.vehicles)
   const hospitals = useFleetStore((s) => s.hospitals)
@@ -305,12 +310,20 @@ function EmergencyMap({ emergencies }) {
       })}
     </MapContainer>
   )
-}
+})
+
+// Static across the app's lifetime — build once instead of on every keystroke.
+const LOCATION_IDS = LOCATIONS.map((l) => l.id)
+const LOCATION_LABELS = Object.fromEntries(LOCATIONS.map((l) => [l.id, l.name]))
+const BLOOD_BANKS = bloodBanks()
+const BLOOD_BANK_LABELS = Object.fromEntries(BLOOD_BANKS.map((b) => [b.id, b.name]))
 
 function NewEmergencyDrawer({ onClose }) {
   const createEmergency = useFleetStore((s) => s.createEmergency)
   const hospitals = useFleetStore((s) => s.hospitals)
-  const banks = bloodBanks()
+  const banks = BLOOD_BANKS
+  const hospitalIds = useMemo(() => hospitals.map((h) => h.id), [hospitals])
+  const hospitalLabels = useMemo(() => Object.fromEntries(hospitals.map((h) => [h.id, h.name])), [hospitals])
   const [kind, setKind] = useState('medical')
   const [pickup, setPickup] = useState('loc-sakchi')
   const [caseType, setCaseType] = useState('Cardiac')
@@ -397,20 +410,17 @@ function NewEmergencyDrawer({ onClose }) {
           {isBlood ? (
             <>
               <DrawerField label="Requesting hospital">
-                <DrawerSelect value={pickupHosp} onChange={setPickupHosp} options={hospitals.map((h) => h.id)}
-                  labels={Object.fromEntries(hospitals.map((h) => [h.id, h.name]))} />
+                <DrawerSelect value={pickupHosp} onChange={setPickupHosp} options={hospitalIds} labels={hospitalLabels} />
               </DrawerField>
               <DrawerField label="Destination blood bank">
                 {banks.length === 0
                   ? <div className="text-[12px] text-red-600">No blood banks configured.</div>
-                  : <DrawerSelect value={bloodBank} onChange={setBloodBank} options={banks.map((b) => b.id)}
-                      labels={Object.fromEntries(banks.map((b) => [b.id, b.name]))} />}
+                  : <DrawerSelect value={bloodBank} onChange={setBloodBank} options={banks.map((b) => b.id)} labels={BLOOD_BANK_LABELS} />}
               </DrawerField>
             </>
           ) : (
             <DrawerField label={isFire ? 'Incident location' : 'Pickup location'}>
-              <DrawerSelect value={pickup} onChange={setPickup} options={LOCATIONS.map((l) => l.id)}
-                labels={Object.fromEntries(LOCATIONS.map((l) => [l.id, l.name]))} />
+              <DrawerSelect value={pickup} onChange={setPickup} options={LOCATION_IDS} labels={LOCATION_LABELS} />
             </DrawerField>
           )}
 

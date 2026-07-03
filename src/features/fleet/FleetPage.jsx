@@ -25,7 +25,7 @@ const serviceInfo = (odometer = 0) => {
 export default function FleetPage() {
   const [tab, setTab] = useState('Vehicles')
   return (
-    <div className="flex flex-col h-full page-enter" style={{ background: '#E8E8EE' }}>
+    <div className="flex flex-col h-full page-enter" style={{ background: '#F7F4EF' }}>
       {/* Floating tab header */}
       <div className="px-6 pt-5 pb-4 flex items-center gap-4 shrink-0">
         <div className="flex-1 min-w-0">

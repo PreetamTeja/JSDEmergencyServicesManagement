@@ -141,7 +141,7 @@ export default function DispatchBoard() {
   async function onCancel(id) { setMenuId(null); setBusy(id); try { await cancelRequest(id) } finally { setBusy(null) } }
 
   return (
-    <div className="flex flex-col h-full page-enter" style={{ background: '#E8E8EE' }}>
+    <div className="flex flex-col h-full page-enter" style={{ background: '#F7F4EF' }}>
 
       {/* ── Page header ── */}
       <div className="px-6 pt-6 pb-4 flex items-center gap-4">

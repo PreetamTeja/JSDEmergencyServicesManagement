@@ -177,7 +177,7 @@ function Console({ session, onSignOut }) {
   const initials = (session?.name || 'EC').split(' ').map((p) => p[0]).join('').slice(0, 2).toUpperCase()
 
   return (
-    <div className="flex h-screen overflow-hidden bg-[#E8E8EE] text-cmd-text">
+    <div className="flex h-screen overflow-hidden bg-[#F7F4EF] text-cmd-text">
       {/* ── Glassmorphism Sidebar ─────────────────────────────────── */}
       <aside
         className={`relative z-[1000] shrink-0 flex flex-col text-white transition-all duration-200 ${collapsed ? 'w-[68px]' : 'w-[240px]'}`}

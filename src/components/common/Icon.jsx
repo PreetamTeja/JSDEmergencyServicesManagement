@@ -11,6 +11,7 @@ const PATHS = {
   requests: <><path d="M9 5h10M9 12h10M9 19h10" /><path d="M4.5 5h.01M4.5 12h.01M4.5 19h.01" /></>,
   powerbi: <path d="M4 20V10M10 20V4M16 20v-7M22 20H2" />,
   infra: <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" />,
+  insights: <><path d="M4 20V10M10 20V13M16 20V7M22 20V4" /><path d="M2 20h20" /></>,
   // KPIs / metrics
   activity: <path d="M3 12h4l2 6 4-14 2 8h6" />,
   pulse: <path d="M3 12h4l2-5 3 10 2-7h7" />,

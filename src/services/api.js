@@ -58,6 +58,9 @@ export const api = {
   // admin: coverage-gap analytics over seeded synthetic historical data
   // (never live dispatch records) — admin JWT required
   getCoverageGaps: () => req('/analytics/coverage-gaps'),
+  // admin: broader historical insights (demand patterns, response trend,
+  // case mix, utilization) — same synthetic data, admin JWT required
+  getInsights: () => req('/analytics/insights'),
 }
 
 // Normalize DynamoDB fleet items (snake_case keys) to the shape the UI uses.

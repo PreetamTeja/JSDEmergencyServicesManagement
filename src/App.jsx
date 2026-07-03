@@ -13,6 +13,7 @@ import UserPortal from './portal/UserPortal'
 import PolicyControls from './components/common/PolicyControls'
 import TrackPage from './features/track/TrackPage'
 import InfraHealthPage from './features/admin/InfraHealthPage'
+import InsightsPage from './features/insights/InsightsPage'
 import Icon from './components/common/Icon'
 import CommandPalette from './components/common/CommandPalette'
 
@@ -31,6 +32,7 @@ const SECTIONS = [
   ] },
   { title: 'Analytics', items: [
     { to: '/powerbi', label: 'Power BI', icon: 'powerbi' },
+    { to: '/insights', label: 'AI Insights', icon: 'insights' },
   ] },
   { title: 'Admin', items: [
     { to: '/admin/infra', label: 'Infra Health', icon: 'infra' },
@@ -329,6 +331,7 @@ function Console({ session, onSignOut }) {
           <Route path="/map" element={<LiveMapPage />} />
           <Route path="/fleet" element={<FleetPage />} />
           <Route path="/powerbi" element={<PowerBIPage />} />
+          <Route path="/insights" element={<InsightsPage />} />
           <Route path="/admin/infra" element={<InfraHealthPage />} />
         </Routes>
       </main>

@@ -957,6 +957,87 @@ public class Function
                 catch (Exception ex) { return ErrResp(500, "ANALYTICS_ERROR", ex.Message, corsHeaders); }
             }
 
+            // ---- broader historical insights (demand patterns, response trend,
+            // case mix, utilization) — same synthetic table, one scan reused
+            // across all four breakdowns to keep this cheap ----
+            if (method == "GET" && seg[0] == "analytics" && seg.Length > 1 && seg[1] == "insights")
+            {
+                if (!admin && apiKeySource != "MCP") return ErrResp(403, "FORBIDDEN", "Admin or MCP key required", corsHeaders);
+                try
+                {
+                    var rows = await Ddb.Scan(TblHistorySim);
+                    var completedAll = rows.Where(r => Str(r, "status") == "COMPLETED").ToList();
+                    var dayNames = new[] { "Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat" };
+
+                    // demand by hour-of-day / day-of-week (whole dataset, not just completed —
+                    // demand is about calls coming in, not how they resolved)
+                    var parsed = rows.Select(r => new
+                    {
+                        row = r,
+                        dt = DateTime.TryParse(Str(r, "created_at"), null, System.Globalization.DateTimeStyles.RoundtripKind, out var d) ? d : (DateTime?)null,
+                    }).Where(x => x.dt.HasValue).ToList();
+
+                    var byHour = Enumerable.Range(0, 24).Select(h => new
+                    {
+                        hour = h,
+                        calls = parsed.Count(x => x.dt!.Value.Hour == h),
+                    }).ToList();
+                    var byWeekday = Enumerable.Range(0, 7).Select(w => new
+                    {
+                        weekday = dayNames[w],
+                        calls = parsed.Count(x => (int)x.dt!.Value.DayOfWeek == w),
+                    }).ToList();
+                    var byZoneDemand = rows.GroupBy(r => Str(r, "pickup_zone_id") ?? "unknown")
+                        .Select(g => new { zone_id = g.Key, calls = g.Count() })
+                        .OrderByDescending(z => z.calls).ToList();
+
+                    // response-time trend: monthly avg ETA across the whole window
+                    var byMonth = parsed.Where(x => Str(x.row, "status") == "COMPLETED" && Dbl(x.row, "eta_to_pickup_min") > 0)
+                        .GroupBy(x => x.dt!.Value.ToString("yyyy-MM"))
+                        .Select(g => new { month = g.Key, avg_eta_to_pickup_min = Math.Round(g.Average(x => Dbl(x.row, "eta_to_pickup_min")), 2), calls = g.Count() })
+                        .OrderBy(x => x.month).ToList();
+                    double trendSlope = 0;
+                    if (byMonth.Count >= 2)
+                    {
+                        var first = byMonth.Take(Math.Max(1, byMonth.Count / 4)).Average(m => m.avg_eta_to_pickup_min);
+                        var last = byMonth.Skip(byMonth.Count - Math.Max(1, byMonth.Count / 4)).Average(m => m.avg_eta_to_pickup_min);
+                        trendSlope = first > 0 ? Math.Round(((last - first) / first) * 100, 1) : 0;
+                    }
+
+                    // case-type / severity mix
+                    var caseMix = completedAll.Where(r => Str(r, "case_type") != null)
+                        .GroupBy(r => Str(r, "case_type")!)
+                        .Select(g => new { case_type = g.Key, count = g.Count() })
+                        .OrderByDescending(c => c.count).ToList();
+                    var severityMix = completedAll.GroupBy(r => Str(r, "severity") ?? "Unknown")
+                        .Select(g => new { severity = g.Key, count = g.Count() })
+                        .OrderByDescending(s => s.count).ToList();
+
+                    // vehicle/zone utilization — which simulated vehicle-zone pairs
+                    // carry the most call volume (proxy for busiest crews)
+                    var utilization = rows.Where(r => Str(r, "assigned_vehicle_id") != null)
+                        .GroupBy(r => new { vehicle_id = Str(r, "assigned_vehicle_id")!, zone_id = Str(r, "pickup_zone_id") ?? "unknown" })
+                        .Select(g => new { vehicle_id = g.Key.vehicle_id, zone_id = g.Key.zone_id, calls = g.Count() })
+                        .OrderByDescending(u => u.calls).Take(10).ToList();
+
+                    var dates = parsed.Select(x => x.dt!.Value).ToList();
+
+                    return Ok(new
+                    {
+                        record_count = rows.Count,
+                        date_range = dates.Count > 0 ? new { from = dates.Min().ToString("o"), to = dates.Max().ToString("o") } : null,
+                        demand = new { by_hour = byHour, by_weekday = byWeekday, by_zone = byZoneDemand },
+                        response_trend = new { by_month = byMonth, pct_change_first_to_last_quartile = trendSlope },
+                        case_mix = caseMix,
+                        severity_mix = severityMix,
+                        utilization,
+                        note = "Based on synthetic historical data seeded for demonstration — not live dispatch records.",
+                        generated_at = DateTime.UtcNow.ToString("o"),
+                    }, corsHeaders);
+                }
+                catch (Exception ex) { return ErrResp(500, "ANALYTICS_ERROR", ex.Message, corsHeaders); }
+            }
+
             return ErrResp(404, "NO_ROUTE", $"No handler for {method} {rawPath}", corsHeaders);
         }
         catch (Exception ex)

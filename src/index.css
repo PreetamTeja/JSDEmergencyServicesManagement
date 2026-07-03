@@ -37,7 +37,7 @@ body {
 .leaflet-tooltip-top:before { border-top-color: #101828; }
 /* Compact permanent place labels on the map */
 .leaflet-tooltip.loc-label {
-  background: rgba(255,255,255,0.9); color: #2E3A2F; border: none; box-shadow: none;
+  background: rgba(255,255,255,0.9); color: #07514D; border: none; box-shadow: none;
   font-size: 10px; font-weight: 600; padding: 0 3px; white-space: nowrap;
 }
 .leaflet-tooltip.loc-label:before { display: none; }
@@ -52,11 +52,11 @@ body {
   .panel { @apply bg-cmd-panel border border-cmd-border rounded-xl; box-shadow: 0 1px 2px rgba(255, 255, 255, 0.06), 0 1px 1px rgba(16,24,40,0.04); }
   .panel-2 { @apply bg-cmd-panel2 border border-cmd-border rounded-lg; }
   .btn { @apply px-4 py-2 rounded-lg text-[14px] font-medium transition-colors; }
-  .btn-primary { @apply btn text-white; background: #2E3A2F; }
-  .btn-primary:hover { background: #3E4C3F; }
-  .btn-secondary { @apply btn bg-white; border: 1px solid #2E3A2F; color: #2E3A2F; }
-  .btn-secondary:hover { background: #EDE8DF; }
-  .btn-cta { @apply btn font-semibold; background: #8FAF8A; color: #2E3A2F; }
+  .btn-primary { @apply btn text-white; background: #07514D; }
+  .btn-primary:hover { background: #0B6A64; }
+  .btn-secondary { @apply btn bg-white; border: 1px solid #07514D; color: #07514D; }
+  .btn-secondary:hover { background: #E6F0EE; }
+  .btn-cta { @apply btn font-semibold; background: #D6DF27; color: #07514D; }
   .btn-cta:hover { filter: brightness(0.95); }
   .btn-ghost { @apply btn border border-cmd-border bg-white text-cmd-text hover:bg-cmd-panel2; }
   .chip { @apply inline-flex items-center gap-1 px-2 py-0.5 rounded text-[12px] font-medium; }
@@ -78,8 +78,8 @@ body {
 .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
 
 /* Keyboard focus ring — app-wide (mouse clicks don't trigger :focus-visible) */
-:focus-visible { outline: 2px solid #3E4C3F; outline-offset: 2px; border-radius: 4px; }
-aside :focus-visible, .on-dark :focus-visible { outline-color: #8FAF8A; }
+:focus-visible { outline: 2px solid #0B6A64; outline-offset: 2px; border-radius: 4px; }
+aside :focus-visible, .on-dark :focus-visible { outline-color: #D6DF27; }
 
 /* ── Depth & polish ────────────────────────────────────────── */
 /* Interactive cards: soft ambient shadow, gentle lift on hover */
@@ -99,7 +99,7 @@ aside :focus-visible, .on-dark :focus-visible { outline-color: #8FAF8A; }
 
 /* Newly arrived live rows/cards flash softly so dispatchers notice them */
 @keyframes rowFlash {
-  0% { background-color: rgba(143, 175, 138, 0.35); }
+  0% { background-color: rgba(214, 223, 39, 0.35); }
   100% { background-color: transparent; }
 }
 .row-flash { animation: rowFlash 1.6s ease-out both; }
@@ -110,8 +110,8 @@ aside :focus-visible, .on-dark :focus-visible { outline-color: #8FAF8A; }
 @keyframes bootPulse { 0%, 100% { opacity: 0.55; } 50% { opacity: 1; } }
 .boot-pulse { animation: bootPulse 1.8s ease-in-out infinite; }
 @keyframes bootBeacon {
-  0%, 100% { box-shadow: 0 0 0 0 rgba(143, 175, 138, 0); }
-  50% { box-shadow: 0 0 28px 6px rgba(143, 175, 138, 0.35); }
+  0%, 100% { box-shadow: 0 0 0 0 rgba(214, 223, 39, 0); }
+  50% { box-shadow: 0 0 28px 6px rgba(214, 223, 39, 0.35); }
 }
 .boot-beacon { animation: bootBeacon 2.2s ease-in-out infinite; }
 @keyframes bootBar { from { transform: translateX(-100%); } to { transform: translateX(260%); } }

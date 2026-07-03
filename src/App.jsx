@@ -71,7 +71,7 @@ export default function App() {
   }
   if (error) return (
     <div className="h-screen grid place-items-center p-6 text-center"
-      style={{ background: 'linear-gradient(160deg,#1B231C 0%,#2E3A2F 60%,#3E4C3F 100%)' }}>
+      style={{ background: 'linear-gradient(160deg,#04332F 0%,#07514D 60%,#0B6A64 100%)' }}>
       <div className="bg-white rounded-2xl p-7 max-w-md w-full boot-in" style={{ boxShadow: '0 24px 64px rgba(0,0,0,0.3)' }}>
         <div className="h-11 w-11 rounded-xl grid place-items-center mx-auto mb-3"
           style={{ background: 'rgba(220,38,38,0.1)', color: '#dc2626' }}>
@@ -92,20 +92,20 @@ export default function App() {
 
 // Branded boot screen shown while live data loads — dispatch radar sweep.
 export function BootScreen({ message = 'Connecting to live operations…' }) {
-  const bg = 'linear-gradient(160deg,#1B231C 0%,#2E3A2F 55%,#3E4C3F 100%)'
+  const bg = 'linear-gradient(160deg,#05201E 0%,#083F3B 55%,#0B5A55 100%)'
   return (
     <div className="h-screen w-full grid place-items-center text-white on-dark" style={{ background: bg }}>
       <div className="boot-in flex flex-col items-center text-center px-6">
         <div className="h-14 w-14 rounded-2xl grid place-items-center font-bold text-[20px] boot-beacon mb-4"
-          style={{ background: '#8FAF8A', color: '#2E3A2F' }}>TS</div>
+          style={{ background: '#D6DF27', color: '#07514D' }}>TS</div>
         <div className="text-[22px] font-bold tracking-tight">JSD Emergency Services</div>
-        <div className="text-[13px] mb-8" style={{ color: 'rgba(143,175,138,0.8)' }}>Tata Steel · Jamshedpur</div>
+        <div className="text-[13px] mb-8" style={{ color: 'rgba(214,223,39,0.8)' }}>Tata Steel · Jamshedpur</div>
 
         <BootRadar />
 
         <div className="mt-8 text-[13px] boot-pulse" style={{ color: 'rgba(255,255,255,0.78)' }}>{message}</div>
         <div className="mt-3 h-1 w-44 rounded-full overflow-hidden" style={{ background: 'rgba(255,255,255,0.14)' }}>
-          <div className="boot-bar h-full w-2/5 rounded-full" style={{ background: '#8FAF8A' }} />
+          <div className="boot-bar h-full w-2/5 rounded-full" style={{ background: '#D6DF27' }} />
         </div>
       </div>
     </div>
@@ -118,9 +118,9 @@ function BootRadar() {
       <div className="absolute inset-3 rounded-full" style={{ border: '1px solid rgba(255,255,255,0.18)' }} />
       <div className="absolute inset-6 rounded-full" style={{ border: '1px solid rgba(255,255,255,0.12)' }} />
       <div className="absolute inset-0 rounded-full radar-sweep"
-        style={{ background: 'conic-gradient(from 0deg, rgba(143,175,138,0.55), transparent 75deg)' }} />
-      <span className="absolute h-1.5 w-1.5 rounded-full" style={{ top: '30%', left: '62%', background: '#8FAF8A' }} />
-      <span className="absolute h-1.5 w-1.5 rounded-full" style={{ top: '64%', left: '34%', background: '#8FAF8A', opacity: 0.7 }} />
+        style={{ background: 'conic-gradient(from 0deg, rgba(214,223,39,0.55), transparent 75deg)' }} />
+      <span className="absolute h-1.5 w-1.5 rounded-full" style={{ top: '30%', left: '62%', background: '#D6DF27' }} />
+      <span className="absolute h-1.5 w-1.5 rounded-full" style={{ top: '64%', left: '34%', background: '#D6DF27', opacity: 0.7 }} />
       <span className="absolute h-1 w-1 rounded-full" style={{ top: '48%', left: '48%', background: '#fff', opacity: 0.8 }} />
     </div>
   )
@@ -177,12 +177,12 @@ function Console({ session, onSignOut }) {
   const initials = (session?.name || 'EC').split(' ').map((p) => p[0]).join('').slice(0, 2).toUpperCase()
 
   return (
-    <div className="flex h-screen overflow-hidden bg-[#F7F4EF] text-cmd-text">
+    <div className="flex h-screen overflow-hidden bg-[#E8E8EE] text-cmd-text">
       {/* ── Glassmorphism Sidebar ─────────────────────────────────── */}
       <aside
         className={`relative z-[1000] shrink-0 flex flex-col text-white transition-all duration-200 ${collapsed ? 'w-[68px]' : 'w-[240px]'}`}
         style={{
-          background: 'rgba(46,58,47,0.93)',
+          background: 'rgba(7,81,77,0.93)',
           backdropFilter: 'blur(20px)',
           WebkitBackdropFilter: 'blur(20px)',
           boxShadow: '4px 0 32px rgba(0,0,0,0.22), inset -1px 0 0 rgba(255,255,255,0.07)',
@@ -194,7 +194,7 @@ function Console({ session, onSignOut }) {
           {!collapsed && (
             <div className="leading-tight min-w-0">
               <div className="font-bold text-[15px] text-white tracking-tight truncate">JSD Emergency</div>
-              <div className="text-[11px] truncate" style={{ color: 'rgba(143,175,138,0.75)' }}>Tata Steel · Jamshedpur</div>
+              <div className="text-[11px] truncate" style={{ color: 'rgba(214,223,39,0.75)' }}>Tata Steel · Jamshedpur</div>
             </div>
           )}
           <button onClick={toggle} title={collapsed ? 'Expand' : 'Collapse'} aria-label="Toggle navigation"
@@ -213,9 +213,9 @@ function Console({ session, onSignOut }) {
             title="New Emergency" aria-label="New Emergency"
             className={`w-full flex items-center justify-center gap-1.5 h-9 rounded-xl font-semibold text-[13px] transition-all duration-150 hover:brightness-105 ${collapsed ? 'px-0' : 'px-3'}`}
             style={{
-              background: '#8FAF8A',
-              color: '#2E3A2F',
-              boxShadow: '0 2px 10px rgba(143,175,138,0.3)',
+              background: '#D6DF27',
+              color: '#07514D',
+              boxShadow: '0 2px 10px rgba(214,223,39,0.3)',
             }}
           >
             <Icon name="plus" size={14} strokeWidth={2.5} />
@@ -241,11 +241,11 @@ function Console({ session, onSignOut }) {
                           <>
                             <span
                               className="absolute inset-0 rounded-xl -z-10"
-                              style={{ background: 'rgba(143,175,138,0.16)' }}
+                              style={{ background: 'rgba(214,223,39,0.16)' }}
                             />
                             <span
                               className="absolute left-0 top-2 bottom-2 w-[3px] rounded-full"
-                              style={{ background: '#8FAF8A' }}
+                              style={{ background: '#D6DF27' }}
                             />
                           </>
                         )}
@@ -282,7 +282,7 @@ function Console({ session, onSignOut }) {
             aria-expanded={menuOpen}
             className={`w-full flex items-center ${collapsed ? 'justify-center' : 'gap-2.5'} rounded-xl p-1.5 transition-colors hover:bg-white/10`}>
             <div className="h-8 w-8 rounded-full grid place-items-center text-[12px] font-bold shrink-0"
-              style={{ background: '#8FAF8A', color: '#2E3A2F' }}>{initials}</div>
+              style={{ background: '#D6DF27', color: '#07514D' }}>{initials}</div>
             {!collapsed && (
               <>
                 <div className="text-[12.5px] leading-tight flex-1 truncate text-left">

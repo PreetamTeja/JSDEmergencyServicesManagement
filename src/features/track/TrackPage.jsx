@@ -88,7 +88,7 @@ export default function TrackPage() {
   )
 
   const isFire = data.kind === 'fire'
-  const accent = isFire ? '#ea580c' : data.kind === 'blood' ? '#b91c1c' : '#2E3A2F'
+  const accent = isFire ? '#ea580c' : data.kind === 'blood' ? '#b91c1c' : '#07514D'
   const [sc, sl] = STATUS[data.status] || ['#64748b', data.status]
   const etaMin = Math.max(0, Math.ceil((data.eta_complete ? (data.eta_complete * 1000 - now) / 60000 : data.eta_to_pickup_min) || 0))
   const center = pos || (data.pickup ? [data.pickup.lat, data.pickup.lng] : (data.destination ? [data.destination.lat, data.destination.lng] : [22.80, 86.20]))

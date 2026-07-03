@@ -18,7 +18,7 @@ const SEVERITY_META = {
   Normal:   { rank: 2, color: '#2563eb' },
 }
 
-const KIND = { medical: '#3E4C3F', fire: '#E8833A' }
+const KIND = { medical: '#0B6A64', fire: '#E8833A' }
 
 function mean(a) {
   return a.length ? a.reduce((s, x) => s + x, 0) / a.length : 0

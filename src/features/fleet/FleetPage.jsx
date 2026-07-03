@@ -25,11 +25,11 @@ const serviceInfo = (odometer = 0) => {
 export default function FleetPage() {
   const [tab, setTab] = useState('Vehicles')
   return (
-    <div className="flex flex-col h-full page-enter" style={{ background: '#F7F4EF' }}>
+    <div className="flex flex-col h-full page-enter" style={{ background: '#E8E8EE' }}>
       {/* Floating tab header */}
       <div className="px-6 pt-5 pb-4 flex items-center gap-4 shrink-0">
         <div className="flex-1 min-w-0">
-          <h1 className="text-[22px] font-bold tracking-tight text-[#2E3A2F]">Fleet & Crews</h1>
+          <h1 className="text-[22px] font-bold tracking-tight text-[#0C1322]">Fleet & Crews</h1>
           <p className="text-[13px] text-[#6B7280] mt-0.5">Ambulances · fire trucks · crews · service zones</p>
         </div>
         <div className="flex gap-1.5 p-1 rounded-2xl shrink-0" role="tablist" aria-label="Fleet views"
@@ -38,7 +38,7 @@ export default function FleetPage() {
             <button key={t} onClick={() => setTab(t)} role="tab" aria-selected={tab === t}
               className="px-4 py-1.5 rounded-xl text-[13px] font-semibold transition-all"
               style={tab === t
-                ? { background: '#2E3A2F', color: '#fff', boxShadow: '0 2px 8px rgba(46,58,47,0.25)' }
+                ? { background: '#07514D', color: '#fff', boxShadow: '0 2px 8px rgba(7,81,77,0.25)' }
                 : { color: '#6B7280' }}>
               {t}
             </button>
@@ -135,7 +135,7 @@ function Vehicles() {
                 <div className="text-[12px]">
                   <div className="font-bold">{v.reg}</div>
                   <div className="text-[#6B7280] capitalize">{v.status}{driver ? ` · ${driver.name}` : ''}</div>
-                  {job && <div className="text-[#2E3A2F] font-medium mt-0.5">{job.id}</div>}
+                  {job && <div className="text-[#07514D] font-medium mt-0.5">{job.id}</div>}
                 </div>
               </Tooltip>
             </Marker>
@@ -156,13 +156,13 @@ function Vehicles() {
         {panelOpen && (<>
           {/* KPIs */}
           <div className="px-4 pt-3 pb-2.5 shrink-0" style={{ borderBottom: '1px solid rgba(0,0,0,0.06)' }}>
-            <div className="text-[14px] font-bold text-[#2E3A2F] mb-2">Fleet Status</div>
+            <div className="text-[14px] font-bold text-[#0C1322] mb-2">Fleet Status</div>
             <div className="grid grid-cols-6 gap-2">
               {[
-                { label: 'Amb', val: `${idleCount(amb)}/${amb.length}`, color: '#2E3A2F' },
+                { label: 'Amb', val: `${idleCount(amb)}/${amb.length}`, color: '#07514D' },
                 { label: 'Fire', val: `${idleCount(fire)}/${fire.length}`, color: '#ea580c' },
                 { label: 'Active', val: responding, color: '#16a34a' },
-                { label: 'Crews', val: crewAvail, color: '#3E4C3F' },
+                { label: 'Crews', val: crewAvail, color: '#0B6A64' },
                 { label: 'Low fuel', val: lowFuel, color: lowFuel ? '#dc2626' : '#6B7280' },
                 { label: 'Svc due', val: svcDue, color: svcDue ? '#d97706' : '#6B7280' },
               ].map((k) => (
@@ -179,7 +179,7 @@ function Vehicles() {
             <div className="relative flex-1">
               <svg className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[#6B7280]" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
               <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search reg or crew…"
-                className="w-full pl-7 pr-3 py-1.5 rounded-xl text-[12px] text-[#2E3A2F]"
+                className="w-full pl-7 pr-3 py-1.5 rounded-xl text-[12px] text-[#0C1322]"
                 style={{ background: 'rgba(0,0,0,0.04)' }} />
             </div>
             <select value={type} onChange={(e) => setType(e.target.value)}
@@ -215,11 +215,11 @@ function Vehicles() {
                   const job = jobFor(v.id)
                   const svc = serviceInfo(v.odometer)
                   const isFire = v.type === 'firetruck'
-                  const statColor = v.status === 'enroute' ? '#16a34a' : v.status === 'maintenance' ? '#d97706' : '#2E3A2F'
+                  const statColor = v.status === 'enroute' ? '#16a34a' : v.status === 'maintenance' ? '#d97706' : '#07514D'
                   const typeColor = isFire ? '#ea580c' : '#2563eb'
                   return (
                     <tr key={v.id} style={{ borderBottom: '1px solid rgba(0,0,0,0.04)' }}
-                      onMouseEnter={ev => ev.currentTarget.style.background = 'rgba(46,58,47,0.03)'}
+                      onMouseEnter={ev => ev.currentTarget.style.background = 'rgba(7,81,77,0.03)'}
                       onMouseLeave={ev => ev.currentTarget.style.background = ''}>
                       <td className="px-3 py-1.5">
                         <div className="flex items-center gap-2">
@@ -227,7 +227,7 @@ function Vehicles() {
                             <VehicleIcon type={v.type} size={12} />
                           </span>
                           <div>
-                            <div className="font-bold text-[#2E3A2F] text-[12px]">{v.reg}</div>
+                            <div className="font-bold text-[#0C1322] text-[12px]">{v.reg}</div>
                             <div className="text-[10px] text-[#6B7280] capitalize">{zoneById(v.homeZoneId)?.name || '—'}</div>
                           </div>
                         </div>
@@ -243,7 +243,7 @@ function Vehicles() {
                       <td className="px-3 py-1.5">
                         <div className="flex items-center gap-1.5">
                           <div className="flex-1 h-1 rounded-full overflow-hidden" style={{ background: 'rgba(0,0,0,0.08)', minWidth: '36px' }}>
-                            <div className="h-full rounded-full" style={{ width: `${v.fuel}%`, background: v.fuel < 25 ? '#ef4444' : '#2E3A2F' }} />
+                            <div className="h-full rounded-full" style={{ width: `${v.fuel}%`, background: v.fuel < 25 ? '#ef4444' : '#07514D' }} />
                           </div>
                           <span className="text-[10px] font-medium shrink-0" style={{ color: v.fuel < 25 ? '#dc2626' : '#6B7280' }}>{v.fuel}%</span>
                         </div>
@@ -253,9 +253,9 @@ function Vehicles() {
                         <div className="flex gap-1">
                           <button onClick={() => navigate(`/map?focus=${v.id}`)}
                             className="h-6 px-2 rounded-lg text-[10px] font-medium transition-colors"
-                            style={{ background: 'rgba(46,58,47,0.08)', color: '#2E3A2F' }}
-                            onMouseEnter={ev => ev.currentTarget.style.background = 'rgba(46,58,47,0.15)'}
-                            onMouseLeave={ev => ev.currentTarget.style.background = 'rgba(46,58,47,0.08)'}>Locate</button>
+                            style={{ background: 'rgba(7,81,77,0.08)', color: '#07514D' }}
+                            onMouseEnter={ev => ev.currentTarget.style.background = 'rgba(7,81,77,0.15)'}
+                            onMouseLeave={ev => ev.currentTarget.style.background = 'rgba(7,81,77,0.08)'}>Locate</button>
                           {v.status !== 'maintenance'
                             ? <button onClick={() => setVehicleStatus(v.id, 'maintenance')} disabled={v.status === 'enroute'}
                                 className="h-6 px-2 rounded-lg text-[10px] font-medium disabled:opacity-40 transition-colors"
@@ -296,7 +296,7 @@ function Vehicles() {
           padding: '8px 14px',
           fontSize: '12.5px',
           fontWeight: 600,
-          color: '#2E3A2F',
+          color: '#07514D',
         }}>
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"
           style={{ transform: panelOpen ? 'rotate(0deg)' : 'rotate(180deg)', transition: 'transform 0.2s' }}>
@@ -327,7 +327,7 @@ function Drivers() {
       <div className="relative w-60">
         <svg className="absolute left-3 top-1/2 -translate-y-1/2 text-[#6B7280]" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
         <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search crew…"
-          className="pl-9 pr-4 py-2 rounded-xl text-[13px] text-[#2E3A2F] w-full"
+          className="pl-9 pr-4 py-2 rounded-xl text-[13px] text-[#0C1322] w-full"
           style={{ background: 'rgba(255,255,255,0.9)', border: '1px solid rgba(0,0,0,0.07)' }} />
       </div>
       <div className="overflow-hidden" style={{ background: 'rgba(255,255,255,0.92)', borderRadius: '20px', boxShadow: '0 4px 24px rgba(0,0,0,0.07)', border: '1px solid rgba(0,0,0,0.05)' }}>
@@ -342,15 +342,15 @@ function Drivers() {
               const statColor = STATUS_COLORS[d.status]
               return (
                 <tr key={d.id} style={{ borderBottom: '1px solid rgba(0,0,0,0.04)' }}
-                  onMouseEnter={ev => ev.currentTarget.style.background = 'rgba(46,58,47,0.03)'}
+                  onMouseEnter={ev => ev.currentTarget.style.background = 'rgba(7,81,77,0.03)'}
                   onMouseLeave={ev => ev.currentTarget.style.background = ''}>
                   <Td>
                     <div className="flex items-center gap-2.5">
                       <div className="h-8 w-8 rounded-full grid place-items-center text-[12px] font-bold shrink-0"
-                        style={{ background: 'rgba(46,58,47,0.1)', color: '#2E3A2F' }}>
+                        style={{ background: 'rgba(7,81,77,0.1)', color: '#07514D' }}>
                         {d.name.split(' ').map((p) => p[0]).join('')}
                       </div>
-                      <span className="font-medium text-[#2E3A2F]">{d.name}</span>
+                      <span className="font-medium text-[#0C1322]">{d.name}</span>
                     </div>
                   </Td>
                   <Td>{d.license}</Td>
@@ -360,15 +360,15 @@ function Drivers() {
                       {d.status}
                     </span>
                   </Td>
-                  <Td className="font-mono text-[12px] font-semibold text-[#2E3A2F]">{veh?.reg || '—'}</Td>
+                  <Td className="font-mono text-[12px] font-semibold text-[#0C1322]">{veh?.reg || '—'}</Td>
                   <Td style={{ color: '#6B7280' }}>{job ? `${job.id} · ${job.kind === 'fire' ? 'Fire' : job.caseType}` : '—'}</Td>
                   <Td>
                     {veh && (
                       <button onClick={() => navigate(`/map?focus=${veh.id}`)}
                         className="px-3 py-1 rounded-xl text-[11px] font-semibold transition-colors"
-                        style={{ background: 'rgba(46,58,47,0.08)', color: '#2E3A2F' }}
-                        onMouseEnter={ev => ev.currentTarget.style.background = 'rgba(46,58,47,0.15)'}
-                        onMouseLeave={ev => ev.currentTarget.style.background = 'rgba(46,58,47,0.08)'}>Locate</button>
+                        style={{ background: 'rgba(7,81,77,0.08)', color: '#07514D' }}
+                        onMouseEnter={ev => ev.currentTarget.style.background = 'rgba(7,81,77,0.15)'}
+                        onMouseLeave={ev => ev.currentTarget.style.background = 'rgba(7,81,77,0.08)'}>Locate</button>
                     )}
                   </Td>
                 </tr>

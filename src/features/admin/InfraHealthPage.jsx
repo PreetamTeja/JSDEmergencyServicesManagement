@@ -9,7 +9,7 @@ const RANGES = [
   { label: '7 d', value: 10080, period: 720 },
 ]
 
-const RAMP = { ok: '#3E4C3F', warn: '#d97706', error: '#dc2626', muted: '#CBD5D3' }
+const RAMP = { ok: '#0B6A64', warn: '#d97706', error: '#dc2626', muted: '#CBD5D3' }
 const AXIS = '#9AA3A1'
 const GRID = '#EEF1F0'
 const TIP = {
@@ -24,7 +24,7 @@ function statusColor(errorRatePct) {
 }
 
 const NEO = {
-  background: '#F7F4EF',
+  background: '#E8E8EE',
   boxShadow: '8px 8px 20px rgba(0,0,0,0.12), -8px -8px 20px rgba(255,255,255,0.85)',
   borderRadius: '16px',
 }
@@ -60,11 +60,11 @@ export default function InfraHealthPage() {
   }, [load])
 
   return (
-    <div className="h-full overflow-auto" style={{ background: '#F7F4EF' }}>
+    <div className="h-full overflow-auto" style={{ background: '#E8E8EE' }}>
       {/* ── Page header ── */}
       <div className="px-7 pt-7 pb-5 flex items-center justify-between gap-4">
         <div>
-          <h1 className="text-[22px] font-bold tracking-tight text-[#2E3A2F]">Infrastructure Health</h1>
+          <h1 className="text-[22px] font-bold tracking-tight text-[#0C1322]">Infrastructure Health</h1>
           <p className="text-[13px] text-[#6B7280] mt-0.5">CloudWatch metrics · Lambda + API Gateway</p>
         </div>
         <div className="flex items-center gap-3 shrink-0">
@@ -74,7 +74,7 @@ export default function InfraHealthPage() {
               <button key={r.label} onClick={() => setRangeIdx(i)}
                 className="px-3 h-7 rounded-lg text-[12px] font-semibold transition-all"
                 style={i === rangeIdx
-                  ? { background: '#2E3A2F', color: '#fff', boxShadow: '0 2px 6px rgba(46,58,47,0.25)' }
+                  ? { background: '#07514D', color: '#fff', boxShadow: '0 2px 6px rgba(7,81,77,0.25)' }
                   : { color: '#6B7280' }}>
                 {r.label}
               </button>
@@ -124,7 +124,7 @@ export default function InfraHealthPage() {
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
               <NeoCard title="Invocations over time"><MiniLine data={data.series.invocations} color={RAMP.ok} label="calls" /></NeoCard>
               <NeoCard title="Errors over time"><MiniLine data={data.series.errors} color={RAMP.error} label="errors" /></NeoCard>
-              <NeoCard title="Duration (avg ms)"><MiniLine data={data.series.duration_avg} color="#8FAF8A" label="ms" /></NeoCard>
+              <NeoCard title="Duration (avg ms)"><MiniLine data={data.series.duration_avg} color="#7FB0AB" label="ms" /></NeoCard>
             </div>
 
             {/* Functions comparison — TransportApi (primary) vs VoiceAgent */}
@@ -191,12 +191,12 @@ export default function InfraHealthPage() {
 
             {/* MCP hint */}
             <div className="rounded-2xl px-5 py-4 flex gap-3 items-start"
-              style={{ background: 'rgba(46,58,47,0.05)', border: '1px solid rgba(46,58,47,0.1)' }}>
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#2E3A2F" strokeWidth="2" className="mt-0.5 shrink-0">
+              style={{ background: 'rgba(7,81,77,0.05)', border: '1px solid rgba(7,81,77,0.1)' }}>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#07514D" strokeWidth="2" className="mt-0.5 shrink-0">
                 <circle cx="12" cy="12" r="10"/><path d="M12 8v4m0 4h.01"/>
               </svg>
               <div>
-                <div className="text-[13px] font-semibold text-[#2E3A2F]">Query with Claude Code (MCP)</div>
+                <div className="text-[13px] font-semibold text-[#07514D]">Query with Claude Code (MCP)</div>
                 <p className="text-[12px] text-[#6B7280] mt-0.5">
                   Use <code className="bg-white px-1 rounded text-[11px]">get_infra_summary</code>,{' '}
                   <code className="bg-white px-1 rounded text-[11px]">get_recent_errors</code>, and{' '}
@@ -262,7 +262,7 @@ function NeoKpi({ label, value, sub, accent }) {
   return (
     <div className="p-5" style={NEO}>
       <div className="text-[10.5px] uppercase tracking-widest font-semibold mb-3" style={{ color: '#6B7280' }}>{label}</div>
-      <div className="text-[30px] font-bold leading-none" style={{ color: accent || '#2E3A2F' }}>{value}</div>
+      <div className="text-[30px] font-bold leading-none" style={{ color: accent || '#0C1322' }}>{value}</div>
       <div className="text-[12px] mt-2 font-medium" style={{ color: accent ? `${accent}99` : '#6B7280' }}>{sub}</div>
     </div>
   )
@@ -296,7 +296,7 @@ function FunctionsTable({ primary, others }) {
       <tbody>
         {rows.map((r) => (
           <tr key={r.function_name} style={{ borderBottom: '1px solid rgba(0,0,0,0.04)' }}>
-            <td className="py-2.5 font-mono text-[12px] font-semibold text-[#2E3A2F]">{r.function_name}</td>
+            <td className="py-2.5 font-mono text-[12px] font-semibold text-[#0C1322]">{r.function_name}</td>
             <td>{fmt(r.invocations)}</td>
             <td style={{ color: statusColor(r.error_rate_pct) }}>{r.error_rate_pct}%</td>
             <td>{r.duration_avg_ms?.toFixed?.(0) ?? r.duration_avg_ms} ms</td>
@@ -313,7 +313,7 @@ const Th = ({ children }) => <th className="text-left font-medium py-2">{childre
 function CostEstimateCard({ cost }) {
   return (
     <div>
-      <div className="text-[30px] font-bold leading-none" style={{ color: '#2E3A2F' }}>${cost.total_est_monthly_usd?.toFixed(2)}</div>
+      <div className="text-[30px] font-bold leading-none" style={{ color: '#0C1322' }}>${cost.total_est_monthly_usd?.toFixed(2)}</div>
       <div className="text-[12px] mt-1.5 font-medium" style={{ color: '#6B7280' }}>/ month, extrapolated from this window</div>
       <div className="mt-3 space-y-1.5">
         {cost.lambdas?.map((l) => (
@@ -342,7 +342,7 @@ function DynamoCard({ tables }) {
         return (
           <div key={t.table} className="pb-2.5" style={{ borderBottom: '1px solid rgba(0,0,0,0.04)' }}>
             <div className="flex items-center justify-between">
-              <span className="font-mono text-[12px] font-semibold text-[#2E3A2F]">{t.table}</span>
+              <span className="font-mono text-[12px] font-semibold text-[#0C1322]">{t.table}</span>
               {throttled && (
                 <span className="px-2 py-0.5 rounded-full text-[10.5px] font-semibold" style={{ background: 'rgba(220,38,38,0.1)', color: '#dc2626' }}>throttled</span>
               )}

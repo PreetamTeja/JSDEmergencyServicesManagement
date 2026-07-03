@@ -10,9 +10,9 @@ import { slaTargets } from '../../services/sla'
 import Icon from '../../components/common/Icon'
 import PowerBIReport from './PowerBIReport'
 
-const KIND = { medical: '#3E4C3F', fire: '#E8833A' }
-// Cohesive sage ramp for categorical charts (brand-aligned, minimal).
-const RAMP = ['#2E3A2F', '#3E4C3F', '#5C7159', '#8FAF8A', '#B7CDB3', '#DCE7D6']
+const KIND = { medical: '#0B6A64', fire: '#E8833A' }
+// Cohesive teal ramp for categorical charts (brand-aligned, minimal).
+const RAMP = ['#07514D', '#0B6A64', '#2E8B84', '#4A9B96', '#7FB0AB', '#A9CCC8']
 const AXIS = '#9AA3A1'
 const GRID = '#EEF1F0'
 const mean = (a) => (a.length ? a.reduce((s, x) => s + x, 0) / a.length : 0)
@@ -20,7 +20,7 @@ const mean = (a) => (a.length ? a.reduce((s, x) => s + x, 0) / a.length : 0)
 // Shared minimal tooltip look.
 const TIP = {
   contentStyle: { border: '1px solid #E5E9E8', borderRadius: 0, fontSize: 12, boxShadow: 'none', padding: '6px 10px' },
-  labelStyle: { color: '#161616', fontWeight: 600 }, cursor: { fill: 'rgba(46,58,47,0.05)' },
+  labelStyle: { color: '#161616', fontWeight: 600 }, cursor: { fill: 'rgba(7,81,77,0.05)' },
 }
 
 export default function DashboardPage() {
@@ -49,11 +49,11 @@ export default function DashboardPage() {
   const dateLabel = now.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })
 
   return (
-    <div className="h-full overflow-auto page-enter" style={{ background: '#F7F4EF' }}>
+    <div className="h-full overflow-auto page-enter" style={{ background: '#E8E8EE' }}>
       {/* ── Page header ── */}
       <div className="px-7 pt-7 pb-5 flex items-start justify-between gap-4">
         <div>
-          <h1 className="text-[22px] font-bold tracking-tight" style={{ color: '#2E3A2F' }}>Operations Overview</h1>
+          <h1 className="text-[22px] font-bold tracking-tight" style={{ color: '#0C1322' }}>Operations Overview</h1>
           <p className="text-[13px] mt-0.5" style={{ color: '#6B7280' }}>Emergency response analytics · live from dispatch</p>
         </div>
         <div className="flex items-center gap-2 shrink-0 mt-1">
@@ -65,7 +65,7 @@ export default function DashboardPage() {
             </span>
           )}
           <span className="px-3 py-1.5 rounded-full text-[12px] font-medium"
-            style={{ background: 'rgba(46,58,47,0.08)', color: '#2E3A2F' }}>
+            style={{ background: 'rgba(7,81,77,0.08)', color: '#07514D' }}>
             {dateLabel}
           </span>
         </div>
@@ -146,9 +146,9 @@ export default function DashboardPage() {
                   const veh = vehicles.find((v) => v.id === e.ambulanceId)
                   const sevColor = SEVERITY_META[e.severity]?.color || '#6B7280'
                   return (
-                    <tr key={e.id} className="transition-colors hover:bg-[rgba(46,58,47,0.03)]" style={{ borderBottom: '1px solid rgba(0,0,0,0.04)' }}>
-                      <td className="py-2.5 font-semibold text-[#2E3A2F]">{e.id}</td>
-                      <td><span className="px-2.5 py-1 rounded-full text-[11px] font-semibold" style={{ background: isFire ? '#FEF0E6' : '#EDE8DF', color: isFire ? KIND.fire : KIND.medical }}>{isFire ? 'Fire' : e.caseType || 'Medical'}</span></td>
+                    <tr key={e.id} className="transition-colors hover:bg-[rgba(7,81,77,0.03)]" style={{ borderBottom: '1px solid rgba(0,0,0,0.04)' }}>
+                      <td className="py-2.5 font-semibold text-[#0C1322]">{e.id}</td>
+                      <td><span className="px-2.5 py-1 rounded-full text-[11px] font-semibold" style={{ background: isFire ? '#FEF0E6' : '#E6F0EE', color: isFire ? KIND.fire : KIND.medical }}>{isFire ? 'Fire' : e.caseType || 'Medical'}</span></td>
                       <td><span className="px-2.5 py-1 rounded-full text-[11px] font-semibold" style={{ background: `${sevColor}14`, color: sevColor }}>{e.severity}</span></td>
                       <td className="text-[#374151]">{zoneById(locById(e.pickup)?.zone_id)?.name || '—'}</td>
                       <td className="font-mono text-[12px] text-[#374151]">{veh?.reg || '—'}</td>
@@ -273,7 +273,7 @@ function useCountUp(value, ms = 650) {
 }
 
 // Tiny inline 14-day sparkline for KPI cards.
-function Spark({ data, color = '#2E3A2F' }) {
+function Spark({ data, color = '#07514D' }) {
   if (!data || data.length < 2 || data.every((v) => !v)) return null
   const max = Math.max(...data, 1)
   const pts = data.map((v, i) => `${(i / (data.length - 1)) * 100},${26 - (v / max) * 22}`).join(' ')
@@ -294,13 +294,13 @@ function NeoKpi({ icon, label, value, sub, accentColor, format, spark, sparkColo
       <div className="flex items-center justify-between">
         <span className="text-[11px] uppercase tracking-widest font-semibold" style={{ color: '#6B7280' }}>{label}</span>
         <div className="h-8 w-8 rounded-xl grid place-items-center"
-          style={{ background: accentColor ? `${accentColor}18` : 'rgba(46,58,47,0.08)', color: accentColor || '#2E3A2F' }}>
+          style={{ background: accentColor ? `${accentColor}18` : 'rgba(7,81,77,0.08)', color: accentColor || '#07514D' }}>
           <Icon name={icon} size={16} strokeWidth={1.8} />
         </div>
       </div>
-      <div className="text-[32px] font-bold leading-none tracking-tight" style={{ color: '#2E3A2F' }}>{shown}</div>
+      <div className="text-[32px] font-bold leading-none tracking-tight" style={{ color: '#0C1322' }}>{shown}</div>
       <div className="text-[12px] font-medium" style={{ color: accentColor || '#6B7280' }}>{sub}</div>
-      <Spark data={spark} color={sparkColor || accentColor || '#2E3A2F'} />
+      <Spark data={spark} color={sparkColor || accentColor || '#07514D'} />
     </div>
   )
 }
@@ -328,7 +328,7 @@ function Donut({ data }) {
         </ResponsiveContainer>
         <div className="absolute inset-0 grid place-items-center pointer-events-none">
           <div className="text-center">
-            <div className="text-[26px] font-bold leading-none" style={{ color: '#2E3A2F' }}>{total}</div>
+            <div className="text-[26px] font-bold leading-none" style={{ color: '#0C1322' }}>{total}</div>
             <div className="text-[10px] uppercase tracking-widest font-semibold mt-1" style={{ color: '#6B7280' }}>total</div>
           </div>
         </div>

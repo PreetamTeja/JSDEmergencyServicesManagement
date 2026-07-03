@@ -4,34 +4,34 @@
    Consume via var(--token) or the Tailwind aliases mapped in tailwind.config.js.
    ===================================================================== */
 :root {
-  /* ---- Brand: "Sage & Linen" — fresh, calm, natural ---- */
-  --color-primary:        #2E3A2F; /* deep sage-black, replaces the old teal */
-  --color-primary-hover:  #3E4C3F;
-  --color-primary-light:  #EDE8DF; /* active/hover surfaces, selected rows */
-  --color-accent:         #8FAF8A; /* sage — CTAs, active nav */
-  --color-accent-text:    #2E3A2F; /* text on accent */
+  /* ---- Brand ---- */
+  --color-primary:        #07514D;
+  --color-primary-hover:  #0B6A64;
+  --color-primary-light:  #E6F0EE; /* active/hover surfaces, selected rows */
+  --color-accent:         #D6DF27;
+  --color-accent-text:    #07514D; /* text on accent */
 
   /* ---- Neutrals / surfaces ---- */
-  --color-bg:        #F7F4EF; /* linen */
-  --color-surface:   #ffffff; /* raised cards stay white for neomorphic/glass contrast */
-  --color-surface-2: #EDE8DF; /* table header, subtle fills */
-  --color-border:    #C8D5C3;
-  --color-text:      #2E3A2F;
-  --color-text-muted:#6B6558;
+  --color-bg:        #ffffff;
+  --color-surface:   #ffffff;
+  --color-surface-2: #E8E8EE; /* table header, subtle fills */
+  --color-border:    #D8DCE2;
+  --color-text:      #0C1322;
+  --color-text-muted:#475467;
   --color-white:     #ffffff;
 
-  /* ---- Status (unchanged — semantic, not brand) ---- */
+  /* ---- Status ---- */
   --status-active:   #16a34a;
   --status-pending:  #d97706;
   --status-inactive: #64748b;
   --status-failed:   #dc2626;
 
   /* ---- Chart palette (max 5) ---- */
-  --chart-1: #2E3A2F;
-  --chart-2: #4F6350;
-  --chart-3: #8FAF8A;
-  --chart-4: #B7CDB3;
-  --chart-5: #EDE8DF;
+  --chart-1: #07514D;
+  --chart-2: #0B6A64;
+  --chart-3: #4A9B96;
+  --chart-4: #D6DF27;
+  --chart-5: #F8FAD6;
 
   /* ---- Spacing scale (ONLY these) ---- */
   --space-1: 4px;
@@ -75,5 +75,5 @@
   --control-height:44px; /* min touch target */
 
   /* ---- Focus ---- */
-  --focus-ring: 0 0 0 3px rgba(46,58,47,0.25);
+  --focus-ring: 0 0 0 3px rgba(7,81,77,0.25);
 }

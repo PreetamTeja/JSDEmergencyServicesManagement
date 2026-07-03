@@ -60,7 +60,7 @@ export default function EmergencyPage() {
       {/* ── Floating top header strip ── */}
       <div className="absolute top-4 left-4 right-4 z-[400] px-4 py-2.5 rounded-2xl flex items-center gap-3"
         style={{ background: 'rgba(255,255,255,0.88)', backdropFilter: 'blur(18px)', WebkitBackdropFilter: 'blur(18px)', boxShadow: '0 4px 24px rgba(0,0,0,0.10)', border: '1px solid rgba(255,255,255,0.6)' }}>
-        <div className="text-[15px] font-bold text-[#2E3A2F] leading-tight shrink-0">Emergency Dispatch</div>
+        <div className="text-[15px] font-bold text-[#0C1322] leading-tight shrink-0">Emergency Dispatch</div>
         <div className="flex-1" />
         <TrafficControl />
         {counts.active > 0 && (
@@ -72,7 +72,7 @@ export default function EmergencyPage() {
         )}
         <button onClick={() => setOpen(true)}
           className="h-9 px-4 rounded-xl text-[13px] font-semibold flex items-center gap-2 shrink-0 transition-all hover:brightness-105"
-          style={{ background: '#8FAF8A', color: '#2E3A2F' }}>
+          style={{ background: '#D6DF27', color: '#07514D' }}>
           <Icon name="plus" size={13} strokeWidth={2.5} />
           New Emergency
         </button>
@@ -98,7 +98,7 @@ export default function EmergencyPage() {
                 <button key={f.key} onClick={() => setFilter(f.key)} role="tab" aria-selected={isActive}
                   className="flex-1 py-1.5 rounded-xl text-[12px] font-semibold transition-all"
                   style={isActive
-                    ? { background: '#2E3A2F', color: '#fff', boxShadow: '0 2px 8px rgba(46,58,47,0.25)' }
+                    ? { background: '#07514D', color: '#fff', boxShadow: '0 2px 8px rgba(7,81,77,0.25)' }
                     : { background: 'rgba(0,0,0,0.04)', color: '#6B7280' }}>
                   {f.label} <span style={{ opacity: 0.75 }}>{counts[f.key] || 0}</span>
                 </button>
@@ -114,7 +114,7 @@ export default function EmergencyPage() {
                   {filter !== 'completed' && (
                     <button onClick={() => setOpen(true)}
                       className="mt-3 px-4 py-1.5 rounded-xl text-[12px] font-semibold transition-all hover:brightness-105"
-                      style={{ background: '#8FAF8A', color: '#2E3A2F' }}>
+                      style={{ background: '#D6DF27', color: '#07514D' }}>
                       Report new emergency
                     </button>
                   )}
@@ -172,7 +172,7 @@ function EmergencyCard({ em, isNew = false }) {
       style={{ background: 'rgba(255,255,255,0.7)', border: '1px solid rgba(0,0,0,0.06)', backdropFilter: 'blur(8px)' }}>
       {/* Top row */}
       <div className="flex items-center justify-between gap-2">
-        <span className="font-bold text-[13px] text-[#2E3A2F] flex items-center gap-1.5">
+        <span className="font-bold text-[13px] text-[#0C1322] flex items-center gap-1.5">
           <span className="h-2 w-2 rounded-full shrink-0" style={{ background: accent }} />
           {em.id}
         </span>
@@ -197,10 +197,10 @@ function EmergencyCard({ em, isNew = false }) {
       {/* EN_ROUTE detail box */}
       {em.state === 'EN_ROUTE' && (
         <div className="mt-2 rounded-lg p-2.5 space-y-1.5 text-[12px]"
-          style={{ background: 'rgba(46,58,47,0.05)', border: '1px solid rgba(46,58,47,0.08)' }}>
+          style={{ background: 'rgba(7,81,77,0.05)', border: '1px solid rgba(7,81,77,0.08)' }}>
           <div className="flex justify-between gap-2">
             <span className="text-[#6B7280]">{isFire ? 'Fire truck' : 'Ambulance'}</span>
-            <span className="text-[#2E3A2F] font-medium text-right">
+            <span className="text-[#0C1322] font-medium text-right">
               {veh?.reg || '—'} · ETA <LiveEta etaComplete={em.etaComplete} fallbackMin={em.etaToPickupMin} className="font-semibold" />
             </span>
           </div>
@@ -217,7 +217,7 @@ function EmergencyCard({ em, isNew = false }) {
           )}
           <div className="flex justify-between gap-2">
             <span className="text-[#6B7280]">Total</span>
-            <span className="font-semibold text-[#2E3A2F] text-right">{em.totalDistanceKm.toFixed(1)} km · {Math.round(em.totalEtaMin)} min</span>
+            <span className="font-semibold text-[#07514D] text-right">{em.totalDistanceKm.toFixed(1)} km · {Math.round(em.totalEtaMin)} min</span>
           </div>
         </div>
       )}
@@ -378,7 +378,7 @@ function NewEmergencyDrawer({ onClose }) {
         <div className="flex items-center justify-between px-5 py-4 shrink-0"
           style={{ borderBottom: '1px solid rgba(0,0,0,0.07)' }}>
           <div>
-            <div className="text-[16px] font-bold text-[#2E3A2F]">New Emergency</div>
+            <div className="text-[16px] font-bold text-[#0C1322]">New Emergency</div>
             <div className="text-[11px] text-[#6B7280] mt-0.5">Nearest unit dispatched automatically</div>
           </div>
           <button onClick={onClose} aria-label="Close drawer"
@@ -392,7 +392,7 @@ function NewEmergencyDrawer({ onClose }) {
           <div>
             <div className="text-[11px] font-semibold uppercase tracking-widest text-[#6B7280] mb-2">Emergency type</div>
             <div className="grid grid-cols-3 gap-2">
-              <TypeBtn active={!isFire && !isBlood} onClick={() => setKind('medical')} icon="medical" label="Ambulance" color="#2E3A2F" />
+              <TypeBtn active={!isFire && !isBlood} onClick={() => setKind('medical')} icon="medical" label="Ambulance" color="#07514D" />
               <TypeBtn active={isFire} onClick={() => setKind('fire')} icon="flame" label="Fire" color="#ea580c" />
               <TypeBtn active={isBlood} onClick={() => setKind('blood')} icon="droplet" label="Blood" color="#b91c1c" />
             </div>
@@ -400,7 +400,7 @@ function NewEmergencyDrawer({ onClose }) {
 
           {/* Context hint */}
           <div className="text-[12px] rounded-xl px-3 py-2.5"
-            style={{ background: 'rgba(46,58,47,0.05)', color: '#374151' }}>
+            style={{ background: 'rgba(7,81,77,0.05)', color: '#374151' }}>
             {isFire ? 'Fire trucks respond from the closest fire station.'
               : isBlood ? 'Ambulance runs: hospital → blood bank → hospital.'
               : 'Routed to nearest hospital with matching specialty and free bed.'}
@@ -434,8 +434,8 @@ function NewEmergencyDrawer({ onClose }) {
             <div className="grid grid-cols-2 gap-3">
               <DrawerField label="Patients on scene">
                 <input type="number" min={1} max={200} value={patients} onChange={(e) => setPatients(e.target.value)}
-                  className="w-full rounded-xl px-3 py-2 text-[13px] text-[#2E3A2F]"
-                  style={{ background: '#F7F4EF', border: '1px solid #E5E7EB' }} />
+                  className="w-full rounded-xl px-3 py-2 text-[13px] text-[#0C1322]"
+                  style={{ background: '#E8E8EE', border: '1px solid #E5E7EB' }} />
               </DrawerField>
               <DrawerField label="Mass casualty">
                 <label className="flex items-center gap-2 h-[38px] text-[13px] text-[#374151] cursor-pointer">
@@ -449,8 +449,8 @@ function NewEmergencyDrawer({ onClose }) {
           {!isFire && !isBlood && massCasualty && (
             <DrawerField label="Ambulances to dispatch">
               <input type="number" min={2} max={10} value={units} onChange={(e) => setUnits(e.target.value)}
-                className="w-full rounded-xl px-3 py-2 text-[13px] text-[#2E3A2F]"
-                style={{ background: '#F7F4EF', border: '1px solid #E5E7EB' }} />
+                className="w-full rounded-xl px-3 py-2 text-[13px] text-[#0C1322]"
+                style={{ background: '#E8E8EE', border: '1px solid #E5E7EB' }} />
             </DrawerField>
           )}
 
@@ -465,7 +465,7 @@ function NewEmergencyDrawer({ onClose }) {
                     className="flex-1 h-9 rounded-xl text-[13px] font-semibold transition-all"
                     style={isActive
                       ? { background: activeColor, color: '#fff', boxShadow: `0 2px 10px ${activeColor}40` }
-                      : { background: '#F7F4EF', color: '#6B7280' }}>
+                      : { background: '#E8E8EE', color: '#6B7280' }}>
                     {s}
                   </button>
                 )
@@ -490,12 +490,12 @@ function NewEmergencyDrawer({ onClose }) {
         <div className="px-5 py-4 shrink-0 flex gap-2" style={{ borderTop: '1px solid rgba(0,0,0,0.07)' }}>
           <button onClick={onClose}
             className="flex-1 h-10 rounded-xl text-[13px] font-medium text-[#6B7280] transition-colors hover:brightness-95"
-            style={{ background: '#F7F4EF' }}>
+            style={{ background: '#E8E8EE' }}>
             Cancel
           </button>
           <button onClick={submit} disabled={busy || (isBlood && banks.length === 0)}
             className="flex-1 h-10 rounded-xl text-[13px] font-semibold transition-all disabled:opacity-50"
-            style={{ background: '#8FAF8A', color: '#2E3A2F' }}>
+            style={{ background: '#D6DF27', color: '#07514D' }}>
             {busy ? 'Routing…' : isFire ? 'Dispatch fire truck' : isBlood ? 'Dispatch blood run' : useUnits > 1 ? `Dispatch ${useUnits} ambulances` : 'Dispatch ambulance'}
           </button>
         </div>
@@ -512,8 +512,8 @@ const DrawerField = ({ label, children }) => (
 )
 const DrawerSelect = ({ value, onChange, options, labels }) => (
   <select value={value} onChange={(e) => onChange(e.target.value)}
-    className="w-full rounded-xl px-3 py-2 text-[13px] text-[#2E3A2F]"
-    style={{ background: '#F7F4EF', border: '1px solid #E5E7EB' }}>
+    className="w-full rounded-xl px-3 py-2 text-[13px] text-[#0C1322]"
+    style={{ background: '#E8E8EE', border: '1px solid #E5E7EB' }}>
     {options.map((o) => <option key={o} value={o}>{labels ? labels[o] : o}</option>)}
   </select>
 )
@@ -522,7 +522,7 @@ const TypeBtn = ({ active, onClick, icon, label, color }) => (
     className="h-10 rounded-xl text-[13px] font-semibold transition-all flex items-center justify-center gap-1.5"
     style={active
       ? { background: color, color: '#fff', boxShadow: `0 2px 10px ${color}40` }
-      : { background: '#F7F4EF', color: '#6B7280' }}>
+      : { background: '#E8E8EE', color: '#6B7280' }}>
     {icon && <Icon name={icon} size={14} strokeWidth={2} />}
     {label}
   </button>

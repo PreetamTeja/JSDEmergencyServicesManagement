@@ -141,12 +141,12 @@ export default function DispatchBoard() {
   async function onCancel(id) { setMenuId(null); setBusy(id); try { await cancelRequest(id) } finally { setBusy(null) } }
 
   return (
-    <div className="flex flex-col h-full page-enter" style={{ background: '#F7F4EF' }}>
+    <div className="flex flex-col h-full page-enter" style={{ background: '#E8E8EE' }}>
 
       {/* ── Page header ── */}
       <div className="px-6 pt-6 pb-4 flex items-center gap-4">
         <div className="flex-1 min-w-0">
-          <h1 className="text-[22px] font-bold tracking-tight text-[#2E3A2F]">Emergency Dispatch</h1>
+          <h1 className="text-[22px] font-bold tracking-tight text-[#0C1322]">Emergency Dispatch</h1>
         </div>
         <div className="flex items-center gap-2 shrink-0">
           <div className="relative">
@@ -154,7 +154,7 @@ export default function DispatchBoard() {
             <input ref={searchRef} value={q} onChange={(e) => setQ(e.target.value)}
               onKeyDown={(e) => { if (e.key === 'Escape') { setQ(''); e.currentTarget.blur() } }}
               placeholder="Search ID, location, unit…  ( / )" aria-label="Search responses"
-              className="pl-9 pr-9 py-2 rounded-xl text-[13px] text-[#2E3A2F] w-72 xl:w-96"
+              className="pl-9 pr-9 py-2 rounded-xl text-[13px] text-[#0C1322] w-72 xl:w-96"
               style={{ background: 'rgba(255,255,255,0.9)', border: '1px solid rgba(0,0,0,0.08)' }} />
             {q && (
               <button onClick={() => { setQ(''); searchRef.current?.focus() }} aria-label="Clear search"
@@ -197,7 +197,7 @@ export default function DispatchBoard() {
               <button key={f.key} onClick={() => setFilter(f.key)} role="tab" aria-selected={isActive}
                 className="px-3 py-1.5 rounded-xl text-[12px] font-semibold transition-all flex items-center gap-1.5"
                 style={isActive
-                  ? { background: '#2E3A2F', color: '#fff', boxShadow: '0 2px 8px rgba(46,58,47,0.25)' }
+                  ? { background: '#07514D', color: '#fff', boxShadow: '0 2px 8px rgba(7,81,77,0.25)' }
                   : { background: 'rgba(255,255,255,0.85)', color: '#6B7280' }}>
                 {f.key === 'fire' && <Icon name="flame" size={12} />}
                 {f.key === 'medical' && <Icon name="medical" size={12} />}
@@ -250,7 +250,7 @@ export default function DispatchBoard() {
                   {(q || filter !== 'all') && (
                     <button onClick={() => { setQ(''); setFilter('all') }}
                       className="mt-3 px-4 py-1.5 rounded-xl text-[12px] font-semibold transition-colors hover:brightness-95"
-                      style={{ background: 'rgba(46,58,47,0.08)', color: '#2E3A2F' }}>
+                      style={{ background: 'rgba(7,81,77,0.08)', color: '#07514D' }}>
                       Show all responses
                     </button>
                   )}
@@ -267,10 +267,10 @@ export default function DispatchBoard() {
                 const typeColor = isFire ? '#ea580c' : isBlood ? '#b91c1c' : '#2563eb'
                 const isNew = !seenRef.current.has(e.id)
                 return (
-                  <tr key={e.id} className={`align-middle group transition-colors hover:bg-[rgba(46,58,47,0.03)] ${isNew ? 'row-flash' : ''}`}
+                  <tr key={e.id} className={`align-middle group transition-colors hover:bg-[rgba(7,81,77,0.03)] ${isNew ? 'row-flash' : ''}`}
                     style={{ borderBottom: '1px solid rgba(0,0,0,0.04)' }}>
                     <td className="px-4 py-3.5">
-                      <div className="font-bold text-[#2E3A2F] flex items-center gap-1.5">
+                      <div className="font-bold text-[#0C1322] flex items-center gap-1.5">
                         {e.id}
                         {e.incidentId && <span className="px-1.5 py-0.5 rounded-full text-[9.5px] font-bold" style={{ background: '#fee2e2', color: '#dc2626' }}>MCI</span>}
                         {e.patientsCount > 1 && !isBlood && <span className="px-1.5 py-0.5 rounded-full text-[9.5px] font-bold" style={{ background: '#eef2ff', color: '#4338ca' }}>{e.patientsCount}p</span>}
@@ -294,21 +294,21 @@ export default function DispatchBoard() {
                     </td>
                     <td className="px-4 py-3.5 whitespace-nowrap">
                       {veh ? (
-                        <span className="font-mono text-[12px] font-semibold text-[#2E3A2F]">{veh.reg}</span>
+                        <span className="font-mono text-[12px] font-semibold text-[#0C1322]">{veh.reg}</span>
                       ) : <span className="text-[#6B7280]">—</span>}
                     </td>
                     <td className="px-4 py-3.5 max-w-[160px]">
                       <div className="truncate text-[#374151]" title={shortHospitalName(hosp?.name) || ''}>{isFire ? '—' : (shortHospitalName(hosp?.name) || '—')}</div>
                     </td>
                     <td className="px-4 py-3.5 w-44"><ProgressBar e={e} now={now} /></td>
-                    <td className="px-4 py-3.5 font-semibold text-[13px]" style={{ color: '#2E3A2F' }}>
+                    <td className="px-4 py-3.5 font-semibold text-[13px]" style={{ color: '#07514D' }}>
                       {e.state === 'EN_ROUTE' ? <LiveEta etaComplete={e.etaComplete} fallbackMin={e.etaToPickupMin} /> : <span className="text-[#6B7280] font-normal">—</span>}
                     </td>
                     <td className="px-4 py-3.5"><StatusChip state={e.state} /></td>
                     <td className="px-4 py-3.5 relative">
                       <button onClick={() => setMenuId(menuId === e.id ? null : e.id)}
                         aria-label={`Actions for ${e.id}`} aria-expanded={menuId === e.id}
-                        className="h-7 w-7 rounded-lg grid place-items-center text-[#6B7280] transition-colors hover:bg-[#F7F4EF]">⋮</button>
+                        className="h-7 w-7 rounded-lg grid place-items-center text-[#6B7280] transition-colors hover:bg-[#E8E8EE]">⋮</button>
                       {menuId === e.id && (
                         <RowMenu e={e} busy={busy === e.id}
                           onOverride={() => { setMenuId(null); setOverride(e) }}
@@ -335,7 +335,7 @@ function ProgressBar({ e, now }) {
   const done = e.state === 'COMPLETED'
   const cancelled = e.state === 'CANCELLED'
   const queued = ATTENTION.includes(e.state)
-  const color = cancelled ? '#CBD5E1' : done ? '#16a34a' : queued ? '#d97706' : (isFire ? '#ea580c' : '#2E3A2F')
+  const color = cancelled ? '#CBD5E1' : done ? '#16a34a' : queued ? '#d97706' : (isFire ? '#ea580c' : '#07514D')
   return (
     <div className="min-w-[130px]">
       <div className="flex items-center justify-between mb-1.5">
@@ -363,8 +363,8 @@ function RowMenu({ e, busy, onOverride, onCancel, onClose }) {
       style={{ background: 'rgba(255,255,255,0.97)', borderRadius: '14px', boxShadow: '0 8px 32px rgba(0,0,0,0.14)', border: '1px solid rgba(0,0,0,0.06)' }}>
       {enroute ? (
         <>
-          <button onClick={onOverride} className="w-full text-left px-4 py-2.5 font-medium transition-colors hover:bg-[rgba(46,58,47,0.05)]"
-            style={{ color: '#2E3A2F' }}>Override unit</button>
+          <button onClick={onOverride} className="w-full text-left px-4 py-2.5 font-medium transition-colors hover:bg-[rgba(7,81,77,0.05)]"
+            style={{ color: '#07514D' }}>Override unit</button>
           <div style={{ borderTop: '1px solid rgba(0,0,0,0.06)' }} />
           <button onClick={onCancel} disabled={busy} className="w-full text-left px-4 py-2.5 font-medium transition-colors disabled:opacity-50 hover:bg-[rgba(220,38,38,0.05)]"
             style={{ color: '#dc2626' }}>
@@ -407,11 +407,11 @@ function OverrideModal({ em, onClose }) {
         onClick={ev => ev.stopPropagation()}>
         <div className="px-5 py-4 flex items-center justify-between" style={{ borderBottom: '1px solid rgba(0,0,0,0.07)' }}>
           <div>
-            <div className="text-[15px] font-bold text-[#2E3A2F]">Override {em.id}</div>
+            <div className="text-[15px] font-bold text-[#0C1322]">Override {em.id}</div>
             <div className="text-[11px] text-[#6B7280]">Manually reassign unit{!isFire && ' or hospital'}. Previous unit is freed.</div>
           </div>
           <button onClick={onClose} aria-label="Close"
-            className="h-8 w-8 rounded-xl grid place-items-center text-[#6B7280] hover:bg-[#F7F4EF] transition-colors">
+            className="h-8 w-8 rounded-xl grid place-items-center text-[#6B7280] hover:bg-[#E8E8EE] transition-colors">
             <Icon name="x" size={15} strokeWidth={2.2} />
           </button>
         </div>
@@ -419,8 +419,8 @@ function OverrideModal({ em, onClose }) {
           <div>
             <div className="text-[11px] font-semibold uppercase tracking-widest text-[#6B7280] mb-1.5">{isFire ? 'Fire truck' : 'Ambulance'}</div>
             <select value={vehicleId} onChange={(e) => setVehicleId(e.target.value)}
-              className="w-full rounded-xl px-3 py-2 text-[13px] text-[#2E3A2F]"
-              style={{ background: '#F7F4EF', border: '1px solid #E5E7EB' }}>
+              className="w-full rounded-xl px-3 py-2 text-[13px] text-[#0C1322]"
+              style={{ background: '#E8E8EE', border: '1px solid #E5E7EB' }}>
               {free.length === 0 && <option value="">No free units</option>}
               {free.map((v) => <option key={v.id} value={v.id}>{v.reg}{v.id === em.ambulanceId ? ' (current)' : ' · idle'}</option>)}
             </select>
@@ -429,8 +429,8 @@ function OverrideModal({ em, onClose }) {
             <div>
               <div className="text-[11px] font-semibold uppercase tracking-widest text-[#6B7280] mb-1.5">Hospital</div>
               <select value={hospitalId} onChange={(e) => setHospitalId(e.target.value)}
-                className="w-full rounded-xl px-3 py-2 text-[13px] text-[#2E3A2F]"
-                style={{ background: '#F7F4EF', border: '1px solid #E5E7EB' }}>
+                className="w-full rounded-xl px-3 py-2 text-[13px] text-[#0C1322]"
+                style={{ background: '#E8E8EE', border: '1px solid #E5E7EB' }}>
                 {hospitals.map((h) => <option key={h.id} value={h.id}>{h.name}{h.id === em.hospitalId ? ' (current)' : ''}</option>)}
               </select>
             </div>
@@ -444,9 +444,9 @@ function OverrideModal({ em, onClose }) {
         </div>
         <div className="px-5 pb-5 flex gap-2">
           <button onClick={onClose} className="flex-1 h-10 rounded-xl text-[13px] font-medium transition-colors hover:brightness-95"
-            style={{ background: '#F7F4EF', color: '#6B7280' }}>Cancel</button>
+            style={{ background: '#E8E8EE', color: '#6B7280' }}>Cancel</button>
           <button onClick={submit} disabled={busy} className="flex-1 h-10 rounded-xl text-[13px] font-semibold disabled:opacity-50 transition-all"
-            style={{ background: '#2E3A2F', color: '#fff', boxShadow: '0 2px 10px rgba(46,58,47,0.25)' }}>
+            style={{ background: '#07514D', color: '#fff', boxShadow: '0 2px 10px rgba(7,81,77,0.25)' }}>
             {busy ? 'Reassigning…' : 'Apply override'}
           </button>
         </div>

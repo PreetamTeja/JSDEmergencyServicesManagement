@@ -27,6 +27,11 @@ public class Function
     private static readonly string TblCards    = Env("TBL_CARDS",    "ShuttleCards");
     private static readonly string TblRef      = Env("TBL_REF",      "ReferenceData");
     private static readonly string TblEmp      = Env("EMP_TABLE",    "jamshedpur-users");
+    // Isolated, read-mostly table of synthetic historical dispatch records
+    // used ONLY for the coverage-gap analytics endpoint below — completely
+    // separate from TblOps (live dispatch data). Never written to at
+    // request time; seeded offline.
+    private static readonly string TblHistorySim = Env("TBL_HISTORY_SIM", "TransportRequestsHistorySynthetic");
     private static readonly string FnName      = Env("AWS_LAMBDA_FUNCTION_NAME", "psiog-transport-api");
     private static readonly string VoiceFnName = Env("VOICE_FN_NAME", "psiog-voice-agent");
     private static readonly string BedrockModelId = Env("BEDROCK_MODEL_ID", "eu.amazon.nova-lite-v1:0");
@@ -883,6 +888,73 @@ public class Function
                     }, corsHeaders);
                 }
                 catch (Exception ex) { return ErrResp(500, "CW_ERROR", ex.Message, corsHeaders); }
+            }
+
+            // ---- coverage-gap analytics (synthetic historical data ONLY —
+            // never touches TblOps / live dispatch data) ----
+            if (method == "GET" && seg[0] == "analytics" && seg.Length > 1 && seg[1] == "coverage-gaps")
+            {
+                if (!admin && apiKeySource != "MCP") return ErrResp(403, "FORBIDDEN", "Admin or MCP key required", corsHeaders);
+                try
+                {
+                    var rows = await Ddb.Scan(TblHistorySim);
+                    var slaTarget = new Dictionary<string, double> { ["Critical"] = 8, ["Urgent"] = 15, ["Normal"] = 30 };
+                    double TargetFor(string? sev) => sev != null && slaTarget.TryGetValue(sev, out var t) ? t : 15;
+
+                    var byZone = rows.GroupBy(r => Str(r, "pickup_zone_id") ?? "unknown");
+                    var completedAll = rows.Where(r => Str(r, "status") == "COMPLETED").ToList();
+                    var overallAvgEta = completedAll.Count > 0 ? completedAll.Average(r => Dbl(r, "eta_to_pickup_min")) : 0;
+
+                    var zoneStats = byZone.Select(g =>
+                    {
+                        var completed = g.Where(r => Str(r, "status") == "COMPLETED").ToList();
+                        var etas = completed.Select(r => Dbl(r, "eta_to_pickup_min")).OrderBy(x => x).ToList();
+                        double P90() { if (etas.Count == 0) return 0; var idx = (int)Math.Ceiling(0.9 * etas.Count) - 1; return etas[Math.Clamp(idx, 0, etas.Count - 1)]; }
+                        var breaches = completed.Count(r => Dbl(r, "eta_to_pickup_min") > TargetFor(Str(r, "severity")));
+                        var avgEta = completed.Count > 0 ? completed.Average(r => Dbl(r, "eta_to_pickup_min")) : 0;
+                        var avgDist = completed.Count > 0 ? completed.Average(r => Dbl(r, "distance_km")) : 0;
+                        return new
+                        {
+                            zone_id = g.Key,
+                            calls = g.Count(),
+                            completed = completed.Count,
+                            avg_eta_to_pickup_min = Math.Round(avgEta, 2),
+                            avg_distance_km = Math.Round(avgDist, 2),
+                            p90_eta_min = Math.Round(P90(), 2),
+                            sla_breach_pct = completed.Count > 0 ? Math.Round(100.0 * breaches / completed.Count, 1) : 0,
+                            gap_ratio = overallAvgEta > 0 ? Math.Round(avgEta / overallAvgEta, 2) : 1,
+                        };
+                    }).OrderByDescending(z => z.avg_eta_to_pickup_min).ToList();
+
+                    // Flag zones running meaningfully hotter than the network average —
+                    // 1.4x is a deliberately conservative bar so this doesn't cry wolf.
+                    var gaps = zoneStats.Where(z => z.gap_ratio >= 1.4 && z.calls >= 30).Select(z => new
+                    {
+                        zone_id = z.zone_id,
+                        avg_eta_to_pickup_min = z.avg_eta_to_pickup_min,
+                        avg_distance_km = z.avg_distance_km,
+                        calls = z.calls,
+                        sla_breach_pct = z.sla_breach_pct,
+                        gap_ratio = z.gap_ratio,
+                        recommendation = $"Avg response is {z.gap_ratio}x the network average across {z.calls} historical calls — consider a dedicated unit for this zone.",
+                    }).ToList();
+
+                    var dates = rows.Select(r => Str(r, "created_at")).Where(d => d != null)
+                        .Select(d => DateTime.TryParse(d, null, System.Globalization.DateTimeStyles.RoundtripKind, out var dt) ? dt : (DateTime?)null)
+                        .Where(d => d.HasValue).Select(d => d!.Value).ToList();
+
+                    return Ok(new
+                    {
+                        record_count = rows.Count,
+                        date_range = dates.Count > 0 ? new { from = dates.Min().ToString("o"), to = dates.Max().ToString("o") } : null,
+                        overall_avg_eta_to_pickup_min = Math.Round(overallAvgEta, 2),
+                        zones = zoneStats,
+                        coverage_gaps = gaps,
+                        note = "Based on synthetic historical data seeded for demonstration — not live dispatch records.",
+                        generated_at = DateTime.UtcNow.ToString("o"),
+                    }, corsHeaders);
+                }
+                catch (Exception ex) { return ErrResp(500, "ANALYTICS_ERROR", ex.Message, corsHeaders); }
             }
 
             return ErrResp(404, "NO_ROUTE", $"No handler for {method} {rawPath}", corsHeaders);

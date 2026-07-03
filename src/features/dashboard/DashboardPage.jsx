@@ -10,6 +10,7 @@ import { slaTargets } from '../../services/sla'
 import Icon from '../../components/common/Icon'
 import LiveEta from '../../components/common/LiveEta'
 import PowerBIReport from './PowerBIReport'
+import { api } from '../../services/api'
 
 const KIND = { medical: '#0B6A64', fire: '#E8833A' }
 // Cohesive teal ramp for categorical charts (brand-aligned, minimal).
@@ -164,8 +165,97 @@ export default function DashboardPage() {
             </table>
           )}
         </NeoCard>
+
+        {/* ── Coverage gap analysis (synthetic historical demo data) ── */}
+        <CoverageGapsCard />
       </div>
     </div>
+  )
+}
+
+// Historical-pattern insight, deliberately separate from the live metrics
+// above: fetched once from its own endpoint, backed by seeded synthetic
+// data rather than the live dispatch feed. Clearly labeled as such so it's
+// never mistaken for a real-time number.
+function CoverageGapsCard() {
+  const [data, setData] = useState(null)
+  const [err, setErr] = useState(null)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    let cancelled = false
+    api.getCoverageGaps()
+      .then((d) => { if (!cancelled) { setData(d); setLoading(false) } })
+      .catch((e) => { if (!cancelled) { setErr(e.message); setLoading(false) } })
+    return () => { cancelled = true }
+  }, [])
+
+  if (loading) return null // avoid a flash of an empty card while the one-off fetch resolves
+  if (err) return null // non-critical insight — fail quietly rather than disrupt the live dashboard
+  if (!data || !data.zones?.length) return null
+
+  const years = data.date_range
+    ? ((new Date(data.date_range.to) - new Date(data.date_range.from)) / (365.25 * 24 * 3600 * 1000)).toFixed(1)
+    : null
+
+  return (
+    <NeoCard title={`Coverage gap analysis · ${years ? `${years}yr historical` : 'historical'} (demo data)`}>
+      <div className="flex items-center gap-2 mb-4 -mt-1">
+        <Icon name="alert" size={13} strokeWidth={2} className="text-[#9CA3AF]" />
+        <span className="text-[11px]" style={{ color: '#9CA3AF' }}>
+          {data.record_count?.toLocaleString()} seeded historical records · not live dispatch data
+        </span>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-[1fr_1.3fr] gap-5">
+        <div>
+          <div className="text-[11px] uppercase tracking-widest font-semibold mb-3" style={{ color: '#6B7280' }}>
+            Avg response by zone · min
+          </div>
+          <ResponsiveContainer width="100%" height={220}>
+            <BarChart data={data.zones.map((z) => ({ name: zoneById(z.zone_id)?.name || z.zone_id, value: z.avg_eta_to_pickup_min, flagged: z.gap_ratio >= 1.4 }))}
+              layout="vertical" margin={{ left: 10, right: 20 }} barCategoryGap="30%">
+              <XAxis type="number" allowDecimals={false} hide />
+              <YAxis dataKey="name" type="category" width={90} tickLine={false} axisLine={false} tick={{ fontSize: 11, fill: '#4B5552' }} />
+              <Tooltip {...TIP} formatter={(v) => [`${v} min`, 'Avg response']} />
+              <Bar dataKey="value" radius={[0, 4, 4, 0]}>
+                {data.zones.map((z, i) => <Cell key={i} fill={z.gap_ratio >= 1.4 ? '#dc2626' : RAMP[0]} />)}
+              </Bar>
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+
+        <div>
+          <div className="text-[11px] uppercase tracking-widest font-semibold mb-3" style={{ color: '#6B7280' }}>
+            {data.coverage_gaps?.length > 0 ? `${data.coverage_gaps.length} zone${data.coverage_gaps.length > 1 ? 's' : ''} flagged` : 'No zones flagged'}
+          </div>
+          {data.coverage_gaps?.length > 0 ? (
+            <div className="space-y-2.5">
+              {data.coverage_gaps.map((g) => (
+                <div key={g.zone_id} className="rounded-xl px-3.5 py-3" style={{ background: 'rgba(220,38,38,0.06)', border: '1px solid rgba(220,38,38,0.15)' }}>
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-[13px] font-bold" style={{ color: '#0C1322' }}>{zoneById(g.zone_id)?.name || g.zone_id}</span>
+                    <span className="px-2 py-0.5 rounded-full text-[10.5px] font-bold" style={{ background: 'rgba(220,38,38,0.12)', color: '#dc2626' }}>
+                      {g.gap_ratio}x avg
+                    </span>
+                  </div>
+                  <div className="text-[12px] mt-1" style={{ color: '#6B7280' }}>{g.recommendation}</div>
+                  <div className="flex gap-4 mt-2 text-[11px]" style={{ color: '#9CA3AF' }}>
+                    <span>{g.calls.toLocaleString()} calls</span>
+                    <span>{g.avg_distance_km} km avg</span>
+                    <span>{g.sla_breach_pct}% SLA breach</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="text-[13px] py-6 text-center" style={{ color: '#6B7280' }}>
+              No zone is running meaningfully hotter than the network average.
+            </div>
+          )}
+        </div>
+      </div>
+    </NeoCard>
   )
 }
 

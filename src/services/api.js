@@ -55,6 +55,9 @@ export const api = {
     if (params.period_min) qs.set('period_min', params.period_min)
     return req(`/infra/metrics?${qs}`)
   },
+  // admin: coverage-gap analytics over seeded synthetic historical data
+  // (never live dispatch records) — admin JWT required
+  getCoverageGaps: () => req('/analytics/coverage-gaps'),
 }
 
 // Normalize DynamoDB fleet items (snake_case keys) to the shape the UI uses.

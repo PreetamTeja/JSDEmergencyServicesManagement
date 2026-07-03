@@ -37,12 +37,33 @@ else
   aws iam create-user --user-name "$USER_NAME" >/dev/null
 fi
 
-# ---- 2) attach the scoped policy (same JSON written for the SSO path) ----
-echo "Attaching policy ${POLICY_NAME}..."
-aws iam put-user-policy \
-  --user-name "$USER_NAME" \
-  --policy-name "$POLICY_NAME" \
-  --policy-document "file://${POLICY_FILE}"
+# ---- 2) attach the scoped policy as a MANAGED policy, not inline ----
+# Inline user policies cap at 2048 bytes; this project's policy already
+# outgrew that. Managed policies allow up to 6144 bytes and are easier to
+# version (each update creates a new policy version instead of silently
+# overwriting).
+MANAGED_POLICY_NAME="${POLICY_NAME}-managed"
+POLICY_ARN="arn:aws:iam::${ACCOUNT}:policy/${MANAGED_POLICY_NAME}"
+
+if aws iam get-policy --policy-arn "$POLICY_ARN" >/dev/null 2>&1; then
+  echo "Updating existing managed policy ${MANAGED_POLICY_NAME}..."
+  # A managed policy keeps up to 5 versions; prune the oldest non-default one
+  # before adding a new one so repeated reruns don't hit that cap.
+  OLD_VERSION="$(aws iam list-policy-versions --policy-arn "$POLICY_ARN" \
+    --query "Versions[?IsDefaultVersion==\`false\`] | sort_by(@, &CreateDate)[0].VersionId" --output text)"
+  if [ -n "$OLD_VERSION" ] && [ "$OLD_VERSION" != "None" ]; then
+    aws iam delete-policy-version --policy-arn "$POLICY_ARN" --version-id "$OLD_VERSION" || true
+  fi
+  aws iam create-policy-version --policy-arn "$POLICY_ARN" --policy-document "file://${POLICY_FILE}" --set-as-default >/dev/null
+else
+  echo "Creating managed policy ${MANAGED_POLICY_NAME}..."
+  aws iam create-policy --policy-name "$MANAGED_POLICY_NAME" --policy-document "file://${POLICY_FILE}" >/dev/null
+fi
+
+aws iam attach-user-policy --user-name "$USER_NAME" --policy-arn "$POLICY_ARN"
+
+# Clean up the old inline policy from earlier runs of this script, if present.
+aws iam delete-user-policy --user-name "$USER_NAME" --policy-name "$POLICY_NAME" 2>/dev/null || true
 
 # ---- 3) create an access key, but only if one doesn't already exist ----
 EXISTING_KEYS="$(aws iam list-access-keys --user-name "$USER_NAME" --query 'length(AccessKeyMetadata)' --output text)"

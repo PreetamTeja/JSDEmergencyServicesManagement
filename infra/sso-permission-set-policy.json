@@ -72,6 +72,24 @@
         "arn:aws:dynamodb:eu-west-1:992382809089:table/ShuttleCards",
         "arn:aws:dynamodb:eu-west-1:992382809089:table/ReferenceData"
       ]
+    },
+    {
+      "Sid": "SyntheticHistoryTableFullAccess",
+      "Effect": "Allow",
+      "Action": [
+        "dynamodb:CreateTable",
+        "dynamodb:DescribeTable",
+        "dynamodb:PutItem",
+        "dynamodb:BatchWriteItem",
+        "dynamodb:Scan",
+        "dynamodb:Query",
+        "dynamodb:UpdateTimeToLive",
+        "dynamodb:TagResource"
+      ],
+      "Resource": [
+        "arn:aws:dynamodb:eu-west-1:992382809089:table/TransportRequestsHistorySynthetic",
+        "arn:aws:dynamodb:eu-west-1:992382809089:table/TransportRequestsHistorySynthetic/index/*"
+      ]
     }
   ]
 }

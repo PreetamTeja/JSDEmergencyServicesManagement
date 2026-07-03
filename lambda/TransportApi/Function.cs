@@ -957,80 +957,157 @@ public class Function
                 catch (Exception ex) { return ErrResp(500, "ANALYTICS_ERROR", ex.Message, corsHeaders); }
             }
 
-            // ---- broader historical insights (demand patterns, response trend,
-            // case mix, utilization) — same synthetic table, one scan reused
-            // across all four breakdowns to keep this cheap ----
+            // ---- prescriptive insights: where to stage ambulances, and how much
+            // to scale the on-duty fleet by time of day / calendar season.
+            // Deliberately NOT a dump of raw chart data — every number here
+            // feeds a specific recommendation, computed with plain, explainable
+            // techniques (demand-weighted centroid for placement, Little's Law
+            // for staffing sizing, seasonal multiplier detection) rather than a
+            // black box. Same isolated synthetic table as coverage-gaps. ----
             if (method == "GET" && seg[0] == "analytics" && seg.Length > 1 && seg[1] == "insights")
             {
                 if (!admin && apiKeySource != "MCP") return ErrResp(403, "FORBIDDEN", "Admin or MCP key required", corsHeaders);
                 try
                 {
                     var rows = await Ddb.Scan(TblHistorySim);
-                    var completedAll = rows.Where(r => Str(r, "status") == "COMPLETED").ToList();
-                    var dayNames = new[] { "Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat" };
-
-                    // demand by hour-of-day / day-of-week (whole dataset, not just completed —
-                    // demand is about calls coming in, not how they resolved)
                     var parsed = rows.Select(r => new
                     {
                         row = r,
                         dt = DateTime.TryParse(Str(r, "created_at"), null, System.Globalization.DateTimeStyles.RoundtripKind, out var d) ? d : (DateTime?)null,
                     }).Where(x => x.dt.HasValue).ToList();
-
-                    var byHour = Enumerable.Range(0, 24).Select(h => new
-                    {
-                        hour = h,
-                        calls = parsed.Count(x => x.dt!.Value.Hour == h),
-                    }).ToList();
-                    var byWeekday = Enumerable.Range(0, 7).Select(w => new
-                    {
-                        weekday = dayNames[w],
-                        calls = parsed.Count(x => (int)x.dt!.Value.DayOfWeek == w),
-                    }).ToList();
-                    var byZoneDemand = rows.GroupBy(r => Str(r, "pickup_zone_id") ?? "unknown")
-                        .Select(g => new { zone_id = g.Key, calls = g.Count() })
-                        .OrderByDescending(z => z.calls).ToList();
-
-                    // response-time trend: monthly avg ETA across the whole window
-                    var byMonth = parsed.Where(x => Str(x.row, "status") == "COMPLETED" && Dbl(x.row, "eta_to_pickup_min") > 0)
-                        .GroupBy(x => x.dt!.Value.ToString("yyyy-MM"))
-                        .Select(g => new { month = g.Key, avg_eta_to_pickup_min = Math.Round(g.Average(x => Dbl(x.row, "eta_to_pickup_min")), 2), calls = g.Count() })
-                        .OrderBy(x => x.month).ToList();
-                    double trendSlope = 0;
-                    if (byMonth.Count >= 2)
-                    {
-                        var first = byMonth.Take(Math.Max(1, byMonth.Count / 4)).Average(m => m.avg_eta_to_pickup_min);
-                        var last = byMonth.Skip(byMonth.Count - Math.Max(1, byMonth.Count / 4)).Average(m => m.avg_eta_to_pickup_min);
-                        trendSlope = first > 0 ? Math.Round(((last - first) / first) * 100, 1) : 0;
-                    }
-
-                    // case-type / severity mix
-                    var caseMix = completedAll.Where(r => Str(r, "case_type") != null)
-                        .GroupBy(r => Str(r, "case_type")!)
-                        .Select(g => new { case_type = g.Key, count = g.Count() })
-                        .OrderByDescending(c => c.count).ToList();
-                    var severityMix = completedAll.GroupBy(r => Str(r, "severity") ?? "Unknown")
-                        .Select(g => new { severity = g.Key, count = g.Count() })
-                        .OrderByDescending(s => s.count).ToList();
-
-                    // vehicle/zone utilization — which simulated vehicle-zone pairs
-                    // carry the most call volume (proxy for busiest crews)
-                    var utilization = rows.Where(r => Str(r, "assigned_vehicle_id") != null)
-                        .GroupBy(r => new { vehicle_id = Str(r, "assigned_vehicle_id")!, zone_id = Str(r, "pickup_zone_id") ?? "unknown" })
-                        .Select(g => new { vehicle_id = g.Key.vehicle_id, zone_id = g.Key.zone_id, calls = g.Count() })
-                        .OrderByDescending(u => u.calls).Take(10).ToList();
-
                     var dates = parsed.Select(x => x.dt!.Value).ToList();
+                    var totalDays = dates.Count > 0 ? Math.Max(1, (dates.Max() - dates.Min()).TotalDays) : 1;
+                    var refData = await LoadRef();
+                    double ZLat(Dictionary<string, object?> z) => Dbl((z.GetValueOrDefault("ref") as Dictionary<string, object?>) ?? z, "lat");
+                    double ZLng(Dictionary<string, object?> z) => Dbl((z.GetValueOrDefault("ref") as Dictionary<string, object?>) ?? z, "lng");
+
+                    // ---- 1) ambulance placement: demand-weighted centroid of actual
+                    // pickups per zone, compared against today's assumed staging point
+                    // (the zone reference/control-room location). A meaningful drift
+                    // means the standby unit is parked in the wrong part of the zone. ----
+                    var placementRecs = rows.GroupBy(r => Str(r, "pickup_zone_id") ?? "unknown").Select(g =>
+                    {
+                        var pts = g.Select(r => r.GetValueOrDefault("pickup") as Dictionary<string, object?>)
+                            .Where(p => p != null).Select(p => new GeoPoint(Dbl(p, "lat"), Dbl(p, "lng"))).ToList();
+                        if (pts.Count == 0) return null;
+                        var centroid = new GeoPoint(pts.Average(p => p.Lat), pts.Average(p => p.Lng));
+                        var zone = refData.Zones.FirstOrDefault(z => Str(z, "id") == g.Key);
+                        if (zone == null) return null;
+                        var zoneRef = new GeoPoint(ZLat(zone), ZLng(zone));
+                        var driftKm = Math.Round(HavKm(centroid, zoneRef), 2);
+                        // Nearest named location to the centroid, for a human-readable recommendation.
+                        var nearestLoc = refData.Locations
+                            .Select(l => (loc: l, d: HavKm(centroid, new GeoPoint(Dbl(l, "lat"), Dbl(l, "lng")))))
+                            .OrderBy(x => x.d).FirstOrDefault();
+                        return new
+                        {
+                            zone_id = g.Key,
+                            calls = g.Count(),
+                            current_staging = new { lat = Math.Round(zoneRef.Lat, 4), lng = Math.Round(zoneRef.Lng, 4) },
+                            recommended_staging = new { lat = Math.Round(centroid.Lat, 4), lng = Math.Round(centroid.Lng, 4) },
+                            nearest_landmark = nearestLoc.loc != null ? Str(nearestLoc.loc, "name") : null,
+                            drift_km = driftKm,
+                            recommendation = driftKm >= 0.4
+                                ? $"Historical pickups in this zone center {driftKm} km from the current staging point, nearest {Str(nearestLoc.loc, "name") ?? "landmark"} — reposition the standby unit there to cut average dispatch distance."
+                                : "Current staging point already tracks where calls actually originate — no repositioning needed.",
+                        };
+                    }).Where(x => x != null).OrderByDescending(x => x!.drift_km).ToList();
+
+                    // ---- 2) staffing sizing: Little's Law (L = λ·W) applied at each
+                    // zone's historical peak hour — how many concurrent units its
+                    // busiest hour actually demands to keep utilization under 70%. ----
+                    var staffingRecs = rows.GroupBy(r => Str(r, "pickup_zone_id") ?? "unknown").Select(g =>
+                    {
+                        var zoneRows = g.ToList();
+                        var zoneParsed = zoneRows.Select(r => DateTime.TryParse(Str(r, "created_at"), null, System.Globalization.DateTimeStyles.RoundtripKind, out var d) ? d : (DateTime?)null)
+                            .Where(d => d.HasValue).Select(d => d!.Value).ToList();
+                        var byHour = zoneParsed.GroupBy(d => d.Hour).Select(hg => (hour: hg.Key, count: hg.Count())).OrderByDescending(x => x.count).FirstOrDefault();
+                        var completed = zoneRows.Where(r => Str(r, "status") == "COMPLETED" && Dbl(r, "eta_min") > 0).ToList();
+                        var avgServiceMin = completed.Count > 0 ? completed.Average(r => Dbl(r, "eta_min")) + 15 /* scene + handover + return-to-service */ : 30;
+                        var arrivalPerHour = byHour.count / totalDays; // calls in that hour-of-day bucket, averaged per day = λ
+                        var requiredUnits = (int)Math.Ceiling(arrivalPerHour * (avgServiceMin / 60.0) / 0.7 /* target utilization */);
+                        return new
+                        {
+                            zone_id = g.Key,
+                            peak_hour = byHour.hour,
+                            peak_hour_calls_per_day = Math.Round(arrivalPerHour, 2),
+                            avg_service_min = Math.Round(avgServiceMin, 1),
+                            recommended_units = Math.Max(1, requiredUnits),
+                            rationale = $"Peak hour {byHour.hour}:00 sees {Math.Round(arrivalPerHour, 1)} calls/day on average with a {Math.Round(avgServiceMin, 0)}-min turnaround per call — needs {Math.Max(1, requiredUnits)} concurrently staffed unit(s) to keep utilization under 70%.",
+                        };
+                    }).OrderByDescending(x => x.recommended_units).ToList();
+
+                    // ---- 3) system-wide peak-window scaling: how much busier the
+                    // shift-change windows are than the daily baseline. ----
+                    var byHourAll = parsed.GroupBy(x => x.dt!.Value.Hour).ToDictionary(g => g.Key, g => g.Count());
+                    double HourRate(int h) => byHourAll.TryGetValue(h, out var c) ? c / totalDays : 0;
+                    var offPeakBaseline = Enumerable.Range(0, 24).Where(h => h < 6).Select(HourRate).DefaultIfEmpty(0).Average();
+                    var peakWindows = new[]
+                    {
+                        new { label = "Morning shift-change · 08:00-10:00", hours = new[] { 8, 9 } },
+                        new { label = "Evening shift-change · 17:00-20:00", hours = new[] { 17, 18, 19 } },
+                    }.Select(w =>
+                    {
+                        var rate = w.hours.Select(HourRate).Average();
+                        var mult = offPeakBaseline > 0 ? Math.Round(rate / offPeakBaseline, 1) : 0;
+                        return new
+                        {
+                            window = w.label,
+                            calls_per_hour = Math.Round(rate, 2),
+                            multiplier_vs_overnight_baseline = mult,
+                            recommendation = $"Call volume runs {mult}x the overnight baseline during this window — scale on-duty ambulances up accordingly rather than staffing flat across the day.",
+                        };
+                    }).ToList();
+
+                    // ---- 4) seasonal / calendar-event alerts, detected directly from
+                    // event tags the seed data carries plus a dynamically-computed
+                    // monsoon trauma-share comparison (no hardcoded assumption there). ----
+                    var seasonalAlerts = new List<object>();
+                    (string tag, string label, double windowDays)[] calendarEvents =
+                    [
+                        ("COVID_OMICRON_WAVE_2022", "Respiratory-illness wave (Jan-Feb 2022)", 46),
+                        ("DIWALI_FIRE_SEASON", "Diwali fire-cracker season", 45),
+                        ("NEW_YEAR_EVE", "New Year's Eve", 10),
+                    ];
+                    var overallDailyRate = rows.Count / totalDays;
+                    foreach (var (tag, label, windowDays) in calendarEvents)
+                    {
+                        var n = rows.Count(r => Str(r, "event_tag") == tag);
+                        if (n == 0) continue;
+                        var rate = n / windowDays;
+                        var mult = overallDailyRate > 0 ? Math.Round(rate / overallDailyRate, 1) : 0;
+                        seasonalAlerts.Add(new
+                        {
+                            event_name = label,
+                            historical_calls = n,
+                            multiplier_vs_average_day = mult,
+                            recommendation = $"Call volume runs ~{mult}x an average day during this period historically — pre-position extra units and flag for elevated staffing when the calendar approaches it again.",
+                        });
+                    }
+                    var monsoonTrauma = rows.Where(r => r.TryGetValue("created_at", out var c) && DateTime.TryParse(Str(r, "created_at"), null, System.Globalization.DateTimeStyles.RoundtripKind, out var d) ? d.Month is >= 6 and <= 9 : false).ToList();
+                    var nonMonsoon = rows.Except(monsoonTrauma).ToList();
+                    double TraumaShare(List<Dictionary<string, object?>> set) => set.Count > 0 ? (double)set.Count(r => Str(r, "case_type") == "Trauma") / set.Count : 0;
+                    var monsoonShare = TraumaShare(monsoonTrauma);
+                    var baseShare = TraumaShare(nonMonsoon);
+                    if (monsoonShare > 0 && baseShare > 0)
+                    {
+                        seasonalAlerts.Add(new
+                        {
+                            event_name = "Monsoon season (Jun-Sep)",
+                            historical_calls = monsoonTrauma.Count(r => Str(r, "case_type") == "Trauma"),
+                            multiplier_vs_average_day = Math.Round(monsoonShare / baseShare, 1),
+                            recommendation = $"Road-trauma cases make up {Math.Round(monsoonShare * 100, 0)}% of monsoon-season calls vs {Math.Round(baseShare * 100, 0)}% the rest of the year — trauma-equipped units and wet-road routing matter more in this window.",
+                        });
+                    }
 
                     return Ok(new
                     {
                         record_count = rows.Count,
                         date_range = dates.Count > 0 ? new { from = dates.Min().ToString("o"), to = dates.Max().ToString("o") } : null,
-                        demand = new { by_hour = byHour, by_weekday = byWeekday, by_zone = byZoneDemand },
-                        response_trend = new { by_month = byMonth, pct_change_first_to_last_quartile = trendSlope },
-                        case_mix = caseMix,
-                        severity_mix = severityMix,
-                        utilization,
+                        placement_recommendations = placementRecs,
+                        staffing_recommendations = staffingRecs,
+                        peak_windows = peakWindows,
+                        seasonal_alerts = seasonalAlerts.OrderByDescending(a => ((dynamic)a).multiplier_vs_average_day).ToList(),
                         note = "Based on synthetic historical data seeded for demonstration — not live dispatch records.",
                         generated_at = DateTime.UtcNow.ToString("o"),
                     }, corsHeaders);
@@ -1042,8 +1119,10 @@ public class Function
         }
         catch (Exception ex)
         {
-            Console.Error.WriteLine($"ERR {ex.GetType().Name} {ex.Message}");
-            return ErrResp(500, "INTERNAL", "Internal error", corsHeaders);
+            // Full exception detail for this one (ErrResp's own logging only
+            // gets the generic "Internal error" message, not the real cause).
+            Console.Error.WriteLine($"ERROR {ex.GetType().Name} {ex.Message}\n{ex.StackTrace}");
+            return Resp(500, JsonSerializer.Serialize(new { code = "INTERNAL", message = "Internal error" }), corsHeaders);
         }
     }
 
@@ -1602,6 +1681,15 @@ public class Function
 
     private static APIGatewayHttpApiV2ProxyResponse ErrResp(int status, string code, string message, Dictionary<string, string> cors, object? extra = null)
     {
+        // Every 5xx gets logged with the "ERROR" token so it's picked up by
+        // the CloudWatch FilterPattern ("?ERROR ?Error ?WARN") that backs
+        // both the Infra Health page and the CloudWatch MCP tool. Handlers
+        // that catch their own exceptions and return ErrResp(500, ...) were
+        // previously silent in the logs — this is the only log line they'd
+        // ever produce, so it has to happen here, not just in the top-level
+        // catch.
+        if (status >= 500)
+            Console.Error.WriteLine($"ERROR {code} {message}");
         object body = extra == null
             ? (object)new { code, message }
             : JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(JsonSerializer.Serialize(new { code, message }))!

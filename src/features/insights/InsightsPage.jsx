@@ -1,23 +1,19 @@
 import React from 'react'
-import {
-  ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
-  LineChart, Line, PieChart, Pie, Cell,
-} from 'recharts'
 import { api } from '../../services/api'
 import { zoneById } from '../../data/locations'
 import Icon from '../../components/common/Icon'
 import { useCachedApi } from '../../hooks/useCachedApi'
 
 const RAMP = ['#07514D', '#0B6A64', '#2E8B84', '#4A9B96', '#7FB0AB', '#A9CCC8']
-const AXIS = '#9AA3A1'
-const GRID = '#EEF1F0'
-const TIP = {
-  contentStyle: { border: '1px solid #E5E9E8', borderRadius: 0, fontSize: 12, boxShadow: 'none', padding: '6px 10px' },
-  labelStyle: { color: '#161616', fontWeight: 600 }, cursor: { fill: 'rgba(7,81,77,0.05)' },
-}
 
+// This page is deliberately NOT a dashboard of raw historical charts — every
+// card here is a specific, actionable recommendation (where to stage a unit,
+// how many units a zone's peak hour justifies, when to scale staffing up)
+// computed with plain explainable techniques: demand-weighted centroid,
+// Little's Law, and seasonal-multiplier detection over the seeded synthetic
+// dataset. See lambda /analytics/insights for the math.
 export default function InsightsPage() {
-  const { data, loading, refreshing, err } = useCachedApi('psiog_insights_v1', api.getInsights)
+  const { data, loading, refreshing, err } = useCachedApi('psiog_insights_v2', api.getInsights)
 
   const years = data?.date_range
     ? ((new Date(data.date_range.to) - new Date(data.date_range.from)) / (365.25 * 24 * 3600 * 1000)).toFixed(1)
@@ -28,12 +24,12 @@ export default function InsightsPage() {
       <div className="px-7 pt-7 pb-5">
         <h1 className="text-[22px] font-bold tracking-tight" style={{ color: '#0C1322' }}>AI Insights</h1>
         <p className="text-[13px] mt-0.5" style={{ color: '#6B7280' }}>
-          Patterns mined from {years ? `${years}yr` : ''} seeded historical dispatch data — for planning, not live ops
+          Where to stage units and how to scale staffing — derived from {years ? `${years}yr` : ''} of seeded historical dispatch data
         </p>
       </div>
 
       <div className="px-7 pb-8 space-y-5">
-        {loading && <NeoCard title="Loading"><Empty msg="Crunching historical data…" /></NeoCard>}
+        {loading && <NeoCard title="Loading"><Empty msg="Computing recommendations…" /></NeoCard>}
         {err && <NeoCard title="Unavailable"><Empty msg={`Couldn't load insights: ${err}`} /></NeoCard>}
 
         {data && (
@@ -46,64 +42,93 @@ export default function InsightsPage() {
               </span>
             </div>
 
-            {/* ── Demand patterns ── */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-              <NeoCard title="Call demand by hour of day">
-                <ResponsiveContainer width="100%" height={210}>
-                  <BarChart data={data.demand.by_hour.map((h) => ({ name: h.hour, value: h.calls }))} margin={{ left: -20, top: 6 }} barCategoryGap="15%">
-                    <CartesianGrid stroke={GRID} vertical={false} />
-                    <XAxis dataKey="name" tickLine={false} axisLine={{ stroke: GRID }} tick={{ fontSize: 10, fill: AXIS }} interval={2} />
-                    <YAxis allowDecimals={false} tickLine={false} axisLine={false} tick={{ fontSize: 11, fill: AXIS }} />
-                    <Tooltip {...TIP} labelFormatter={(v) => `${v}:00`} />
-                    <Bar dataKey="value" fill={RAMP[0]} radius={[3, 3, 0, 0]} />
-                  </BarChart>
-                </ResponsiveContainer>
-              </NeoCard>
-              <NeoCard title="Call demand by day of week">
-                <ResponsiveContainer width="100%" height={210}>
-                  <BarChart data={data.demand.by_weekday.map((w) => ({ name: w.weekday, value: w.calls }))} margin={{ left: -20, top: 6 }} barCategoryGap="35%">
-                    <CartesianGrid stroke={GRID} vertical={false} />
-                    <XAxis dataKey="name" tickLine={false} axisLine={{ stroke: GRID }} tick={{ fontSize: 11, fill: AXIS }} />
-                    <YAxis allowDecimals={false} tickLine={false} axisLine={false} tick={{ fontSize: 11, fill: AXIS }} />
-                    <Tooltip {...TIP} />
-                    <Bar dataKey="value" fill={RAMP[1]} radius={[3, 3, 0, 0]} />
-                  </BarChart>
-                </ResponsiveContainer>
-              </NeoCard>
-            </div>
-
-            {/* ── Response trend ── */}
-            <NeoCard title={`Avg response time trend · monthly ${data.response_trend.pct_change_first_to_last_quartile !== 0 ? `(${data.response_trend.pct_change_first_to_last_quartile > 0 ? '+' : ''}${data.response_trend.pct_change_first_to_last_quartile}% vs. early window)` : ''}`}>
-              <ResponsiveContainer width="100%" height={220}>
-                <LineChart data={data.response_trend.by_month} margin={{ left: -10, top: 6, right: 10 }}>
-                  <CartesianGrid stroke={GRID} vertical={false} />
-                  <XAxis dataKey="month" tickLine={false} axisLine={{ stroke: GRID }} tick={{ fontSize: 10, fill: AXIS }} interval={5} />
-                  <YAxis tickLine={false} axisLine={false} tick={{ fontSize: 11, fill: AXIS }} />
-                  <Tooltip {...TIP} formatter={(v) => [`${v} min`, 'Avg ETA']} />
-                  <Line type="monotone" dataKey="avg_eta_to_pickup_min" stroke={RAMP[0]} strokeWidth={2} dot={false} />
-                </LineChart>
-              </ResponsiveContainer>
+            {/* ── Placement recommendations ── */}
+            <NeoCard title="Ambulance staging placement">
+              {data.placement_recommendations?.length ? (
+                <div className="space-y-2.5">
+                  {data.placement_recommendations.map((p) => (
+                    <div key={p.zone_id} className="rounded-xl px-3.5 py-3 flex items-start gap-3"
+                      style={{ background: p.drift_km >= 0.4 ? 'rgba(217,119,6,0.06)' : 'rgba(11,106,100,0.05)', border: `1px solid ${p.drift_km >= 0.4 ? 'rgba(217,119,6,0.18)' : 'rgba(11,106,100,0.12)'}` }}>
+                      <div className="h-8 w-8 rounded-lg grid place-items-center shrink-0 mt-0.5"
+                        style={{ background: p.drift_km >= 0.4 ? 'rgba(217,119,6,0.12)' : 'rgba(11,106,100,0.1)', color: p.drift_km >= 0.4 ? '#d97706' : '#0B6A64' }}>
+                        <Icon name="route" size={15} strokeWidth={1.8} />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-[13px] font-bold" style={{ color: '#0C1322' }}>{zoneById(p.zone_id)?.name || p.zone_id}</span>
+                          {p.drift_km >= 0.4 && (
+                            <span className="px-2 py-0.5 rounded-full text-[10.5px] font-bold shrink-0" style={{ background: 'rgba(217,119,6,0.14)', color: '#d97706' }}>
+                              {p.drift_km} km drift
+                            </span>
+                          )}
+                        </div>
+                        <div className="text-[12px] mt-1" style={{ color: '#6B7280' }}>{p.recommendation}</div>
+                        <div className="text-[11px] mt-1.5" style={{ color: '#9CA3AF' }}>{p.calls.toLocaleString()} historical pickups analyzed</div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : <Empty />}
             </NeoCard>
 
-            {/* ── Case & severity mix ── */}
+            {/* ── Staffing sizing + peak windows ── */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-              <NeoCard title="Medical case-type mix">
-                <Donut data={data.case_mix.map((c, i) => ({ name: c.case_type, value: c.count, color: RAMP[i % RAMP.length] }))} />
+              <NeoCard title="Recommended units by zone · peak-hour sizing">
+                {data.staffing_recommendations?.length ? (
+                  <div className="space-y-2.5">
+                    {data.staffing_recommendations.map((s) => (
+                      <div key={s.zone_id} className="pb-2.5" style={{ borderBottom: '1px solid #F0F1F0' }}>
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-[13px] font-semibold" style={{ color: '#0C1322' }}>{zoneById(s.zone_id)?.name || s.zone_id}</span>
+                          <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold" style={{ background: 'rgba(7,81,77,0.1)', color: '#07514D' }}>
+                            {s.recommended_units} unit{s.recommended_units > 1 ? 's' : ''}
+                          </span>
+                        </div>
+                        <div className="text-[11.5px] mt-1" style={{ color: '#6B7280' }}>{s.rationale}</div>
+                      </div>
+                    ))}
+                  </div>
+                ) : <Empty />}
               </NeoCard>
-              <NeoCard title="Severity mix">
-                <Donut data={data.severity_mix.map((s, i) => ({ name: s.severity, value: s.count, color: RAMP[i % RAMP.length] }))} />
+
+              <NeoCard title="Shift-change load scaling">
+                {data.peak_windows?.length ? (
+                  <div className="space-y-3">
+                    {data.peak_windows.map((w, i) => (
+                      <div key={w.window} className="rounded-xl px-3.5 py-3" style={{ background: `${RAMP[i % RAMP.length]}0F`, border: `1px solid ${RAMP[i % RAMP.length]}26` }}>
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-[13px] font-bold" style={{ color: '#0C1322' }}>{w.window}</span>
+                          <span className="px-2 py-0.5 rounded-full text-[10.5px] font-bold" style={{ background: `${RAMP[i % RAMP.length]}22`, color: RAMP[i % RAMP.length] }}>
+                            {w.multiplier_vs_overnight_baseline}x baseline
+                          </span>
+                        </div>
+                        <div className="text-[12px] mt-1" style={{ color: '#6B7280' }}>{w.recommendation}</div>
+                      </div>
+                    ))}
+                  </div>
+                ) : <Empty />}
               </NeoCard>
             </div>
 
-            {/* ── Zone demand & utilization ── */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-              <NeoCard title="Demand by zone">
-                <Bars data={data.demand.by_zone.map((z) => ({ name: zoneById(z.zone_id)?.name || z.zone_id, value: z.calls }))} color={RAMP[2]} vertical />
-              </NeoCard>
-              <NeoCard title="Busiest simulated vehicle/zone pairs">
-                <Bars data={data.utilization.map((u) => ({ name: `${u.vehicle_id} · ${zoneById(u.zone_id)?.name || u.zone_id}`, value: u.calls }))} color={RAMP[3]} vertical />
-              </NeoCard>
-            </div>
+            {/* ── Seasonal / calendar-event alerts ── */}
+            <NeoCard title="Seasonal & calendar-event alerts">
+              {data.seasonal_alerts?.length ? (
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+                  {data.seasonal_alerts.map((a) => (
+                    <div key={a.event_name} className="rounded-xl px-3.5 py-3" style={{ background: 'rgba(220,38,38,0.05)', border: '1px solid rgba(220,38,38,0.14)' }}>
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-[13px] font-bold" style={{ color: '#0C1322' }}>{a.event_name}</span>
+                        <span className="px-2 py-0.5 rounded-full text-[10.5px] font-bold shrink-0" style={{ background: 'rgba(220,38,38,0.12)', color: '#dc2626' }}>
+                          {a.multiplier_vs_average_day}x average day
+                        </span>
+                      </div>
+                      <div className="text-[12px] mt-1" style={{ color: '#6B7280' }}>{a.recommendation}</div>
+                      <div className="text-[11px] mt-1.5" style={{ color: '#9CA3AF' }}>{a.historical_calls.toLocaleString()} historical calls tagged</div>
+                    </div>
+                  ))}
+                </div>
+              ) : <Empty msg="No calendar-driven spikes detected in this window." />}
+            </NeoCard>
           </>
         )}
       </div>
@@ -118,64 +143,6 @@ function NeoCard({ title, children, className = '' }) {
       <div className="text-[11px] uppercase tracking-widest font-semibold mb-4" style={{ color: '#6B7280' }}>{title}</div>
       {children}
     </div>
-  )
-}
-function Donut({ data }) {
-  if (!data.length) return <Empty />
-  const total = data.reduce((s, d) => s + d.value, 0)
-  return (
-    <>
-      <div className="relative">
-        <ResponsiveContainer width="100%" height={180}>
-          <PieChart>
-            <Pie data={data} dataKey="value" nameKey="name" innerRadius={52} outerRadius={78} paddingAngle={2} stroke="none">
-              {data.map((d, i) => <Cell key={i} fill={d.color} />)}
-            </Pie>
-            <Tooltip {...TIP} />
-          </PieChart>
-        </ResponsiveContainer>
-        <div className="absolute inset-0 grid place-items-center pointer-events-none">
-          <div className="text-center">
-            <div className="text-[26px] font-bold leading-none" style={{ color: '#0C1322' }}>{total}</div>
-            <div className="text-[10px] uppercase tracking-widest font-semibold mt-1" style={{ color: '#6B7280' }}>total</div>
-          </div>
-        </div>
-      </div>
-      <div className="flex flex-wrap gap-x-4 gap-y-1 mt-2">
-        {data.map((d) => (
-          <span key={d.name} className="flex items-center gap-1.5 text-[12px] text-cmd-text">
-            <i className="h-2 w-2 rounded-full" style={{ background: d.color }} />
-            {d.name} <span className="text-cmd-muted">({d.value})</span>
-          </span>
-        ))}
-      </div>
-    </>
-  )
-}
-function Bars({ data, color, vertical }) {
-  if (!data.length || data.every((d) => !d.value)) return <Empty />
-  if (vertical) {
-    return (
-      <ResponsiveContainer width="100%" height={Math.max(180, data.length * 30)}>
-        <BarChart data={data} layout="vertical" margin={{ left: 10, right: 12 }} barCategoryGap="30%">
-          <XAxis type="number" allowDecimals={false} hide />
-          <YAxis dataKey="name" type="category" width={140} tickLine={false} axisLine={false} tick={{ fontSize: 11, fill: '#4B5552' }} />
-          <Tooltip {...TIP} />
-          <Bar dataKey="value" fill={color || RAMP[0]} radius={[0, 4, 4, 0]} />
-        </BarChart>
-      </ResponsiveContainer>
-    )
-  }
-  return (
-    <ResponsiveContainer width="100%" height={210}>
-      <BarChart data={data} margin={{ left: -20, top: 6 }} barCategoryGap="35%">
-        <CartesianGrid stroke={GRID} vertical={false} />
-        <XAxis dataKey="name" tickLine={false} axisLine={{ stroke: GRID }} tick={{ fontSize: 11, fill: AXIS }} />
-        <YAxis allowDecimals={false} tickLine={false} axisLine={false} tick={{ fontSize: 11, fill: AXIS }} />
-        <Tooltip {...TIP} />
-        <Bar dataKey="value" fill={color || RAMP[0]} />
-      </BarChart>
-    </ResponsiveContainer>
   )
 }
 const Empty = ({ msg = 'No data yet.' }) => <div className="text-[13px] text-cmd-muted py-12 text-center">{msg}</div>

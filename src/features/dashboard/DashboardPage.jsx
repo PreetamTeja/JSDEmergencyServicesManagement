@@ -8,6 +8,7 @@ import { locById, zoneById, ZONES } from '../../data/locations'
 import { hospitalById, shortHospitalName, SEVERITY_META } from '../../data/hospitals'
 import { slaTargets } from '../../services/sla'
 import Icon from '../../components/common/Icon'
+import LiveEta from '../../components/common/LiveEta'
 import PowerBIReport from './PowerBIReport'
 
 const KIND = { medical: '#0B6A64', fire: '#E8833A' }
@@ -137,7 +138,7 @@ export default function DashboardPage() {
             <table className="w-full text-[13px]">
               <thead>
                 <tr className="text-[11px] uppercase tracking-wide" style={{ color: '#6B7280', borderBottom: '1px solid #E9EAEC' }}>
-                  <Th>ID</Th><Th>Type</Th><Th>Severity</Th><Th>Zone</Th><Th>Vehicle</Th><Th>Destination</Th>
+                  <Th>ID</Th><Th>Type</Th><Th>Severity</Th><Th>Zone</Th><Th>Vehicle</Th><Th>Destination</Th><Th>ETA</Th>
                 </tr>
               </thead>
               <tbody>
@@ -153,6 +154,9 @@ export default function DashboardPage() {
                       <td className="text-[#374151]">{zoneById(locById(e.pickup)?.zone_id)?.name || '—'}</td>
                       <td className="font-mono text-[12px] text-[#374151]">{veh?.reg || '—'}</td>
                       <td className="text-[#374151]">{isFire ? (locById(e.pickup)?.name || '—') : (shortHospitalName(hospitalById(e.hospitalId)?.name) || '—')}</td>
+                      <td className="font-semibold text-[13px]" style={{ color: '#07514D' }}>
+                        <LiveEta etaComplete={e.etaComplete} fallbackMin={e.etaToPickupMin} />
+                      </td>
                     </tr>
                   )
                 })}

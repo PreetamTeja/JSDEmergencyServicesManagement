@@ -93,10 +93,27 @@ export function login() {
 }
 
 export function logout() {
-  sessionStorage.removeItem(ACCESS_KEY)
-  sessionStorage.removeItem(ID_KEY)
-  sessionStorage.removeItem(DEV_KEY)
+  clearLocalSession()
   if (MAIN_APP_URL) window.location.href = MAIN_APP_URL
 }
 
+// Clears the session without leaving the app — used for idle timeout, where
+// bouncing an unattended screen to another site would be more surprising
+// than just landing back on this app's own sign-in screen.
+export function clearLocalSession() {
+  sessionStorage.removeItem(ACCESS_KEY)
+  sessionStorage.removeItem(ID_KEY)
+  sessionStorage.removeItem(DEV_KEY)
+}
+
 export function isAuthed() { return !!getSession() }
+
+// True once the SSO access token's own `exp` has passed. Dev sessions have
+// no expiry claim and always return false — idle timeout still applies to
+// them, just not token-expiry.
+export function isTokenExpired() {
+  const at = sessionStorage.getItem(ACCESS_KEY)
+  if (!at) return false
+  const claims = decode(at)
+  return !!claims?.exp && claims.exp * 1000 <= Date.now()
+}

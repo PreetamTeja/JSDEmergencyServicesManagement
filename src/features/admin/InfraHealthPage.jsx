@@ -188,22 +188,6 @@ export default function InfraHealthPage() {
                 </div>
               )}
             </NeoCard>
-
-            {/* MCP hint */}
-            <div className="rounded-2xl px-5 py-4 flex gap-3 items-start"
-              style={{ background: 'rgba(7,81,77,0.05)', border: '1px solid rgba(7,81,77,0.1)' }}>
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#07514D" strokeWidth="2" className="mt-0.5 shrink-0">
-                <circle cx="12" cy="12" r="10"/><path d="M12 8v4m0 4h.01"/>
-              </svg>
-              <div>
-                <div className="text-[13px] font-semibold text-[#07514D]">Query with Claude Code (MCP)</div>
-                <p className="text-[12px] text-[#6B7280] mt-0.5">
-                  Use <code className="bg-white px-1 rounded text-[11px]">get_infra_summary</code>,{' '}
-                  <code className="bg-white px-1 rounded text-[11px]">get_recent_errors</code>, and{' '}
-                  <code className="bg-white px-1 rounded text-[11px]">query_logs</code> directly in Claude Code.
-                </p>
-              </div>
-            </div>
           </>
         )}
       </div>

@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react'
 import { MapContainer, TileLayer, Marker, Polyline, CircleMarker, Tooltip } from 'react-leaflet'
 import { useFleetStore } from '../store/useFleetStore'
-import { JAMSHEDPUR_CENTER, LOCATIONS, locById } from '../data/locations'
+import { mapCenter, LOCATIONS, locById } from '../data/locations'
 import { hospitalById, CASE_TYPES, SEVERITIES } from '../data/hospitals'
 import { makeVehicleIcon, makeHospitalIcon, makeFirestationIcon } from '../features/map/vehicleIcon'
 import LiveEta from '../components/common/LiveEta'
@@ -337,7 +337,7 @@ function LocationPicker({ value, onChange }) {
       </button>
       {open && (
         <div className="absolute z-30 mt-1 w-full bg-white border border-cmd-border rounded-lg shadow-card overflow-hidden">
-          <input autoFocus value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search location…"
+          <input autoFocus value={q} onChange={(e) => setQ(e.target.value)} placeholder="" aria-label="Search location"
             className="w-full px-3 py-2 text-[14px] border-b border-cmd-border outline-none" />
           <div className="max-h-56 overflow-auto">
             {list.length === 0 && <div className="px-3 py-3 text-[13px] text-cmd-muted">No match</div>}
@@ -357,7 +357,7 @@ function LocationPicker({ value, onChange }) {
 // store's `live` geometry (animated by the app tick).
 function TrackMap({ active, live, vehicles, hospitals, firestations }) {
   const first = active.find((e) => locById(e.pickup)) || active[0]
-  const center = (first && locById(first.pickup)) || JAMSHEDPUR_CENTER
+  const center = (first && locById(first.pickup)) || mapCenter()
   return (
     <MapContainer center={[center.lat, center.lng]} zoom={14} zoomControl={false} className="h-full w-full">
       <TileLayer url={LIGHT_TILES} attribution="&copy; OpenStreetMap" />

@@ -1,0 +1,82 @@
+#!/usr/bin/env bash
+# =====================================================================
+# setup-cli-user.sh — Creates a dedicated IAM user scoped to this
+# project (not root, not a blanket admin) for local AWS CLI access.
+#
+# Replaces the Identity Center/SSO approach: this AWS account runs
+# Identity Center in "account instance" mode, which doesn't support
+# Permission Sets — so we use a plain scoped IAM user + access key
+# instead. Less "expires on its own" than SSO, but still far more
+# limited than root, and works immediately with no Organizations setup.
+#
+# Run once from CloudShell (uses the same policy file as the SSO
+# attempt — upload sso-permission-set-policy.json alongside this):
+#
+#   ./setup-cli-user.sh
+#
+# Safe to rerun — reuses the user if it already exists. Prints a NEW
+# access key each run only if one doesn't already exist (IAM caps
+# users at 2 active keys; rerunning won't create duplicates).
+# =====================================================================
+set -euo pipefail
+
+USER_NAME="${USER_NAME:-preetam-cli}"
+POLICY_FILE="${POLICY_FILE:-sso-permission-set-policy.json}"
+POLICY_NAME="${POLICY_NAME:-psiog-deploy}"
+
+[ -f "$POLICY_FILE" ] || { echo "ERROR: $POLICY_FILE not found. Upload it alongside this script."; exit 1; }
+
+ACCOUNT="$(aws sts get-caller-identity --query Account --output text)"
+echo "Account=${ACCOUNT}  User=${USER_NAME}"
+
+# ---- 1) create (or reuse) the user ----
+if aws iam get-user --user-name "$USER_NAME" >/dev/null 2>&1; then
+  echo "Reusing existing user ${USER_NAME}"
+else
+  echo "Creating user ${USER_NAME}..."
+  aws iam create-user --user-name "$USER_NAME" >/dev/null
+fi
+
+# ---- 2) attach the scoped policy (same JSON written for the SSO path) ----
+echo "Attaching policy ${POLICY_NAME}..."
+aws iam put-user-policy \
+  --user-name "$USER_NAME" \
+  --policy-name "$POLICY_NAME" \
+  --policy-document "file://${POLICY_FILE}"
+
+# ---- 3) create an access key, but only if one doesn't already exist ----
+EXISTING_KEYS="$(aws iam list-access-keys --user-name "$USER_NAME" --query 'length(AccessKeyMetadata)' --output text)"
+if [ "$EXISTING_KEYS" != "0" ]; then
+  echo
+  echo "==================================================================="
+  echo "User ${USER_NAME} already has ${EXISTING_KEYS} access key(s)."
+  echo "Not creating a new one (IAM caps users at 2 active keys, and the"
+  echo "secret can only be shown once — at creation time). If you lost the"
+  echo "secret, delete the old key and rerun this script:"
+  echo "  aws iam delete-access-key --user-name ${USER_NAME} --access-key-id <id>"
+  echo "==================================================================="
+  exit 0
+fi
+
+echo "Creating access key..."
+KEY_JSON="$(aws iam create-access-key --user-name "$USER_NAME" --output json)"
+ACCESS_KEY_ID="$(echo "$KEY_JSON" | python3 -c 'import json,sys; print(json.load(sys.stdin)["AccessKey"]["AccessKeyId"])')"
+SECRET_KEY="$(echo "$KEY_JSON" | python3 -c 'import json,sys; print(json.load(sys.stdin)["AccessKey"]["SecretAccessKey"])')"
+
+echo
+echo "==================================================================="
+echo "Done. Save these NOW — the secret key is shown only this once:"
+echo
+echo "  AWS Access Key ID:     ${ACCESS_KEY_ID}"
+echo "  AWS Secret Access Key: ${SECRET_KEY}"
+echo
+echo "On your laptop:"
+echo "  aws configure --profile psiog"
+echo "    AWS Access Key ID:     ${ACCESS_KEY_ID}"
+echo "    AWS Secret Access Key: ${SECRET_KEY}"
+echo "    Default region:        eu-west-1"
+echo "    Default output format: json"
+echo
+echo "Then every command:  aws <cmd> --profile psiog"
+echo "  (or once per terminal session: \$env:AWS_PROFILE = 'psiog')"
+echo "==================================================================="

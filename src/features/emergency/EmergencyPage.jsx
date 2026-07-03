@@ -2,7 +2,7 @@ import React, { useState, useMemo, useEffect } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { MapContainer, TileLayer, Marker, Polyline, CircleMarker, Tooltip } from 'react-leaflet'
 import { useFleetStore } from '../../store/useFleetStore'
-import { JAMSHEDPUR_CENTER, LOCATIONS, locById, bloodBanks, bloodBankById, pickupLabel, fmtPt } from '../../data/locations'
+import { mapCenter, LOCATIONS, locById, bloodBanks, bloodBankById, pickupLabel, fmtPt } from '../../data/locations'
 import { hospitalById, CASE_TYPES, SEVERITIES, SEVERITY_META } from '../../data/hospitals'
 import { makeVehicleIcon, makeHospitalIcon, makeFirestationIcon } from '../map/vehicleIcon'
 import LiveEta from '../../components/common/LiveEta'
@@ -138,7 +138,7 @@ function TrafficControl() {
     <div className="relative flex items-center gap-1.5 shrink-0 text-[12px] font-medium text-[#374151]">
       <Icon name="traffic" size={13} strokeWidth={1.8} className="text-[#6B7280]" />
       <select value={mode} onChange={(e) => setMode(e.target.value)} aria-label="Traffic mode"
-        className="appearance-none bg-transparent border-0 outline-none pr-4 py-1 text-[12px] font-medium text-[#374151] cursor-pointer">
+        className="appearance-none bg-transparent border-0 outline-none pr-5 py-1 text-[12px] font-medium text-[#374151] cursor-pointer min-w-[86px]">
         <option value="auto">Auto</option>
         <option value="clear">Clear</option>
         <option value="moderate">Moderate</option>
@@ -260,7 +260,7 @@ const EmergencyMap = React.memo(function EmergencyMap({ emergencies }) {
   const active = emergencies.filter((e) => e.state === 'EN_ROUTE')
 
   return (
-    <MapContainer center={[JAMSHEDPUR_CENTER.lat, JAMSHEDPUR_CENTER.lng]} zoom={14} zoomControl={false} className="h-full w-full absolute inset-0 z-0">
+    <MapContainer center={[mapCenter().lat, mapCenter().lng]} zoom={14} zoomControl={false} className="h-full w-full absolute inset-0 z-0">
       <TileLayer url={LIGHT_TILES} attribution='&copy; OpenStreetMap &copy; CARTO' />
 
       {hospitals.map((h) => (
@@ -275,53 +275,75 @@ const EmergencyMap = React.memo(function EmergencyMap({ emergencies }) {
         </Marker>
       ))}
 
+      {active.map((e) => <EmergencyRoute key={e.id} e={e} />)}
       {active.map((e) => {
-        const isFire = e.kind === 'fire'
-        const isBlood = e.kind === 'blood'
         const veh = vehicles.find((v) => v.id === e.ambulanceId)
         const pos = live[e.ambulanceId]?.pos
-        const pickup = locById(e.pickup) || e.pickupPt
-        if (!pickup) return null
-        const pickName = locById(e.pickup)?.name || e.pickupName || fmtPt(e.pickupPt) || 'Pickup'
-        const bank = isBlood ? bloodBankById(e.bloodBankId) : null
-        const pickColor = isFire ? '#ea580c' : isBlood ? '#b91c1c' : '#2563eb'
-        return (
-          <React.Fragment key={e.id}>
-            {e.leg1?.length > 0 && <Polyline positions={e.leg1} pathOptions={{ color: e.traffic?.color || pickColor, weight: 4, opacity: 0.8 }} />}
-            {e.leg2?.length > 0 && <Polyline positions={e.leg2} pathOptions={{ color: isBlood ? '#b91c1c' : '#dc2626', weight: 4, opacity: 0.85 }} />}
-            {e.leg3?.length > 0 && <Polyline positions={e.leg3} pathOptions={{ color: '#16a34a', weight: 4, opacity: 0.85, dashArray: '6 6' }} />}
-            <CircleMarker center={[pickup.lat, pickup.lng]} radius={6}
-              pathOptions={{ color: pickColor, fillColor: '#fff', fillOpacity: 1, weight: 2 }}>
-              <Tooltip>{isFire ? 'Fire incident' : isBlood ? 'Hospital' : 'Pickup'} · {pickName}</Tooltip>
-            </CircleMarker>
-            {bank && (
-              <CircleMarker center={[bank.lat, bank.lng]} radius={7}
-                pathOptions={{ color: '#b91c1c', fillColor: '#fee2e2', fillOpacity: 1, weight: 2 }}>
-                <Tooltip><b>Blood bank</b> · {bank.name}</Tooltip>
-              </CircleMarker>
-            )}
-            {pos && veh && (
-              <Marker position={pos} icon={makeVehicleIcon(veh, false, true)}>
-                <Tooltip direction="top" offset={[0, -16]}>{veh.reg} · {isFire ? 'Fire' : isBlood ? 'Blood' : e.severity}</Tooltip>
-              </Marker>
-            )}
-          </React.Fragment>
-        )
+        if (!pos || !veh) return null
+        return <VehicleMarker key={e.id} e={e} veh={veh} pos={pos} />
       })}
     </MapContainer>
   )
 })
 
-// Static across the app's lifetime — build once instead of on every keystroke.
-const LOCATION_IDS = LOCATIONS.map((l) => l.id)
-const LOCATION_LABELS = Object.fromEntries(LOCATIONS.map((l) => [l.id, l.name]))
-const BLOOD_BANKS = bloodBanks()
-const BLOOD_BANK_LABELS = Object.fromEntries(BLOOD_BANKS.map((b) => [b.id, b.name]))
+// Split from EmergencyMap so the 1s live-position tick only re-renders the
+// small moving marker below, not the route (route legs can be hundreds of
+// OSRM points and previously got recreated every tick even though they
+// don't change between hydrations — this was the real source of the
+// drawer-opening stutter, since it competed with the slide animation for
+// the same frames). Crucially this component never receives `pos`, so its
+// props are stable across ticks and React can skip it entirely.
+const EmergencyRoute = React.memo(function EmergencyRoute({ e }) {
+  const isFire = e.kind === 'fire'
+  const isBlood = e.kind === 'blood'
+  const pickup = locById(e.pickup) || e.pickupPt
+  if (!pickup) return null
+  const pickName = locById(e.pickup)?.name || e.pickupName || fmtPt(e.pickupPt) || 'Pickup'
+  const bank = isBlood ? bloodBankById(e.bloodBankId) : null
+  const pickColor = isFire ? '#ea580c' : isBlood ? '#b91c1c' : '#2563eb'
+  return (
+    <>
+      {e.leg1?.length > 0 && <Polyline positions={e.leg1} pathOptions={{ color: e.traffic?.color || pickColor, weight: 4, opacity: 0.8 }} />}
+      {e.leg2?.length > 0 && <Polyline positions={e.leg2} pathOptions={{ color: isBlood ? '#b91c1c' : '#dc2626', weight: 4, opacity: 0.85 }} />}
+      {e.leg3?.length > 0 && <Polyline positions={e.leg3} pathOptions={{ color: '#16a34a', weight: 4, opacity: 0.85, dashArray: '6 6' }} />}
+      <CircleMarker center={[pickup.lat, pickup.lng]} radius={6}
+        pathOptions={{ color: pickColor, fillColor: '#fff', fillOpacity: 1, weight: 2 }}>
+        <Tooltip>{isFire ? 'Fire incident' : isBlood ? 'Hospital' : 'Pickup'} · {pickName}</Tooltip>
+      </CircleMarker>
+      {bank && (
+        <CircleMarker center={[bank.lat, bank.lng]} radius={7}
+          pathOptions={{ color: '#b91c1c', fillColor: '#fee2e2', fillOpacity: 1, weight: 2 }}>
+          <Tooltip><b>Blood bank</b> · {bank.name}</Tooltip>
+        </CircleMarker>
+      )}
+    </>
+  )
+})
+
+// The only piece that re-renders every 1s tick — cheap (one marker).
+function VehicleMarker({ e, veh, pos }) {
+  const isFire = e.kind === 'fire'
+  const isBlood = e.kind === 'blood'
+  return (
+    <Marker position={pos} icon={makeVehicleIcon(veh, false, true)}>
+      <Tooltip direction="top" offset={[0, -16]}>{veh.reg} · {isFire ? 'Fire' : isBlood ? 'Blood' : e.severity}</Tooltip>
+    </Marker>
+  )
+}
 
 function NewEmergencyDrawer({ onClose }) {
   const createEmergency = useFleetStore((s) => s.createEmergency)
   const hospitals = useFleetStore((s) => s.hospitals)
-  const banks = BLOOD_BANKS
+  // LOCATIONS/bloodBanks() are populated asynchronously from the backend
+  // (a plain module-level `let`, not store state) — computing these at
+  // module-import time would freeze them as empty forever. The drawer only
+  // renders while open, so recomputing per render is cheap and correct;
+  // `hospitals.length` is used purely as a reactive proxy signal that
+  // fires once the initial data load has landed.
+  const banks = useMemo(() => bloodBanks(), [hospitals.length])
+  const bankLabels = useMemo(() => Object.fromEntries(banks.map((b) => [b.id, b.name])), [banks])
+  const locationIds = useMemo(() => LOCATIONS.map((l) => l.id), [hospitals.length])
+  const locationLabels = useMemo(() => Object.fromEntries(LOCATIONS.map((l) => [l.id, l.name])), [locationIds])
   const hospitalIds = useMemo(() => hospitals.map((h) => h.id), [hospitals])
   const hospitalLabels = useMemo(() => Object.fromEntries(hospitals.map((h) => [h.id, h.name])), [hospitals])
   const [kind, setKind] = useState('medical')
@@ -415,12 +437,12 @@ function NewEmergencyDrawer({ onClose }) {
               <DrawerField label="Destination blood bank">
                 {banks.length === 0
                   ? <div className="text-[12px] text-red-600">No blood banks configured.</div>
-                  : <DrawerSelect value={bloodBank} onChange={setBloodBank} options={banks.map((b) => b.id)} labels={BLOOD_BANK_LABELS} />}
+                  : <DrawerSelect value={bloodBank} onChange={setBloodBank} options={banks.map((b) => b.id)} labels={bankLabels} />}
               </DrawerField>
             </>
           ) : (
             <DrawerField label={isFire ? 'Incident location' : 'Pickup location'}>
-              <DrawerSelect value={pickup} onChange={setPickup} options={LOCATION_IDS} labels={LOCATION_LABELS} />
+              <DrawerSelect value={pickup} onChange={setPickup} options={locationIds} labels={locationLabels} />
             </DrawerField>
           )}
 

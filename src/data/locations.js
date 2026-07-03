@@ -17,6 +17,16 @@ export function setGeoReference(locations = [], zones = []) {
 export const locById = (id) => LOCATIONS.find((l) => l.id === id)
 export const zoneById = (id) => ZONES.find((z) => z.id === id)
 
+// Exact center between the loaded zones' reference points — a function
+// (not a cached constant) because ZONES loads asynchronously after this
+// module first evaluates; falls back to JAMSHEDPUR_CENTER until it does.
+export function mapCenter() {
+  if (!ZONES.length) return JAMSHEDPUR_CENTER
+  const lat = ZONES.reduce((s, z) => s + z.ref.lat, 0) / ZONES.length
+  const lng = ZONES.reduce((s, z) => s + z.ref.lng, 0) / ZONES.length
+  return { lat, lng, zoom: JAMSHEDPUR_CENTER.zoom }
+}
+
 // Blood banks are Locations tagged type="bloodbank" (one per zone).
 export const bloodBanks = () => LOCATIONS.filter((l) => l.type === 'bloodbank')
 export const bloodBankById = (id) => LOCATIONS.find((l) => l.id === id && l.type === 'bloodbank')

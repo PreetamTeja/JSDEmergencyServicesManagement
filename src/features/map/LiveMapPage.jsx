@@ -2,7 +2,7 @@ import React, { useState, useMemo, useEffect } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { MapContainer, TileLayer, Marker, Polyline, Polygon, CircleMarker, Tooltip, useMap } from 'react-leaflet'
 import { useFleetStore } from '../../store/useFleetStore'
-import { JAMSHEDPUR_CENTER, LOCATIONS, ZONES, zoneById, locById } from '../../data/locations'
+import { mapCenter, LOCATIONS, ZONES, zoneById, locById } from '../../data/locations'
 import { hospitalById } from '../../data/hospitals'
 import { zonePoolCounts } from '../../services/dispatchService'
 import { makeVehicleIcon, makeHospitalIcon, makeFirestationIcon } from './vehicleIcon'
@@ -72,7 +72,7 @@ export default function LiveMapPage() {
 
   return (
     <div className="relative h-full">
-      <MapContainer center={[JAMSHEDPUR_CENTER.lat, JAMSHEDPUR_CENTER.lng]} zoom={JAMSHEDPUR_CENTER.zoom}
+      <MapContainer center={[mapCenter().lat, mapCenter().lng]} zoom={mapCenter().zoom}
         zoomControl={false} className="h-full w-full">
         <TileLayer url={LIGHT_TILES} attribution='&copy; OpenStreetMap &copy; CARTO' />
         <FlyTo pos={selected?.pos} />

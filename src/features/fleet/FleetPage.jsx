@@ -1,9 +1,9 @@
-import React, { useState, useMemo } from 'react'
+import React, { useState, useMemo, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { MapContainer, TileLayer, Polygon, CircleMarker, Marker, Tooltip } from 'react-leaflet'
 import { makeHospitalIcon, makeFirestationIcon } from '../map/vehicleIcon'
 import { useFleetStore } from '../../store/useFleetStore'
-import { JAMSHEDPUR_CENTER, ZONES, LOCATIONS, zoneById } from '../../data/locations'
+import { mapCenter, ZONES, LOCATIONS, zoneById } from '../../data/locations'
 import { hospitalById } from '../../data/hospitals'
 import { StatusDot, STATUS_COLORS, VehicleIcon, Progress } from '../../components/common/ui.jsx'
 import { makeVehicleIcon } from '../map/vehicleIcon'
@@ -25,18 +25,17 @@ const serviceInfo = (odometer = 0) => {
 export default function FleetPage() {
   const [tab, setTab] = useState('Vehicles')
   return (
-    <div className="flex flex-col h-full page-enter" style={{ background: '#F7F4EF' }}>
-      {/* Floating tab header */}
-      <div className="px-6 pt-5 pb-4 flex items-center gap-4 shrink-0">
-        <div className="flex-1 min-w-0">
-          <h1 className="text-[22px] font-bold tracking-tight text-[#0C1322]">Fleet & Crews</h1>
-          <p className="text-[13px] text-[#6B7280] mt-0.5">Ambulances · fire trucks · crews · service zones</p>
-        </div>
-        <div className="flex gap-1.5 p-1 rounded-2xl shrink-0" role="tablist" aria-label="Fleet views"
-          style={{ background: 'rgba(255,255,255,0.85)', backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)', boxShadow: '0 2px 12px rgba(0,0,0,0.07)' }}>
+    <div className="relative h-full overflow-hidden page-enter" style={{ background: '#F7F4EF' }}>
+      {/* Floating title + tabs — overlays whatever the active tab renders
+          (map or plain list), same pattern as the Emergency Dispatch page. */}
+      <div className="absolute top-4 left-4 right-4 z-[400] px-4 py-2.5 rounded-2xl flex items-center gap-3"
+        style={{ background: 'rgba(255,255,255,0.88)', backdropFilter: 'blur(18px)', WebkitBackdropFilter: 'blur(18px)', boxShadow: '0 4px 24px rgba(0,0,0,0.10)', border: '1px solid rgba(255,255,255,0.6)' }}>
+        <div className="text-[15px] font-bold text-[#0C1322] leading-tight shrink-0">Fleet & Crews</div>
+        <div className="flex-1" />
+        <div className="flex gap-1 p-1 rounded-xl shrink-0" role="tablist" aria-label="Fleet views" style={{ background: 'rgba(0,0,0,0.04)' }}>
           {TABS.map((t) => (
             <button key={t} onClick={() => setTab(t)} role="tab" aria-selected={tab === t}
-              className="px-4 py-1.5 rounded-xl text-[13px] font-semibold transition-all"
+              className="px-3 py-1.5 rounded-lg text-[12.5px] font-semibold transition-all"
               style={tab === t
                 ? { background: '#07514D', color: '#fff', boxShadow: '0 2px 8px rgba(7,81,77,0.25)' }
                 : { color: '#6B7280' }}>
@@ -45,7 +44,7 @@ export default function FleetPage() {
           ))}
         </div>
       </div>
-      <div className="flex-1 overflow-hidden">
+      <div className="h-full overflow-hidden">
         {tab === 'Vehicles' && <Vehicles />}
         {tab === 'Crews' && <Drivers />}
         {tab === 'Service Zones' && <Zones />}
@@ -97,6 +96,14 @@ function Vehicles() {
     })
   }, [fleet, drivers, type, status, zone, q])
 
+  // Pagination — small fixed page instead of a scrolling table.
+  const PAGE_SIZE = 8
+  const [page, setPage] = useState(0)
+  const pageCount = Math.max(1, Math.ceil(shown.length / PAGE_SIZE))
+  useEffect(() => { setPage(0) }, [q, type, status, zone])
+  useEffect(() => { if (page > pageCount - 1) setPage(Math.max(0, pageCount - 1)) }, [pageCount, page])
+  const pagedShown = useMemo(() => shown.slice(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE), [shown, page])
+
   const positioned = useMemo(() => fleet.map((v, i) => {
     const l = live[v.id]
     if (l?.pos) return { ...v, pos: l.pos }
@@ -108,7 +115,7 @@ function Vehicles() {
   return (
     <div className="relative h-full overflow-hidden">
       {/* ── Full-screen fleet map ── */}
-      <MapContainer center={[JAMSHEDPUR_CENTER.lat, JAMSHEDPUR_CENTER.lng]} zoom={14}
+      <MapContainer center={[mapCenter().lat, mapCenter().lng]} zoom={14}
         zoomControl={false} className="absolute inset-0 z-0 h-full w-full">
         <TileLayer url={LIGHT_TILES} attribution='&copy; OpenStreetMap &copy; CARTO' />
         {ZONES.map((z) => (
@@ -149,8 +156,8 @@ function Vehicles() {
           style={{ background: 'linear-gradient(to right, rgba(245,246,248,0.4) 0%, transparent 100%)' }} />
       )}
 
-      {/* ── Floating vehicle list panel ── */}
-      <div className={`absolute left-4 top-4 bottom-4 z-[400] transition-all duration-300 overflow-hidden flex flex-col ${panelOpen ? 'w-[520px] max-w-[calc(100vw-2rem)]' : 'w-0 opacity-0'}`}
+      {/* ── Floating vehicle list panel — starts below the title/tabs overlay ── */}
+      <div className={`absolute left-4 top-[76px] bottom-4 z-[400] transition-all duration-300 overflow-hidden flex flex-col ${panelOpen ? 'w-[520px] max-w-[calc(100vw-2rem)]' : 'w-0 opacity-0'}`}
         style={{ borderRadius: '20px', background: panelOpen ? 'rgba(255,255,255,0.93)' : 'transparent', backdropFilter: panelOpen ? 'blur(20px)' : 'none', WebkitBackdropFilter: panelOpen ? 'blur(20px)' : 'none', boxShadow: panelOpen ? '0 4px 32px rgba(0,0,0,0.13)' : 'none' }}>
 
         {panelOpen && (<>
@@ -178,7 +185,7 @@ function Vehicles() {
           <div className="px-4 py-2 shrink-0 flex gap-2 flex-wrap" style={{ borderBottom: '1px solid rgba(0,0,0,0.06)' }}>
             <div className="relative flex-1">
               <svg className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[#6B7280]" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
-              <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search reg or crew…"
+              <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="" aria-label="Search reg or crew"
                 className="w-full pl-7 pr-3 py-1.5 rounded-xl text-[12px] text-[#0C1322]"
                 style={{ background: 'rgba(0,0,0,0.04)' }} />
             </div>
@@ -210,7 +217,7 @@ function Vehicles() {
                 </tr>
               </thead>
               <tbody>
-                {shown.map((v) => {
+                {pagedShown.map((v) => {
                   const drv = drivers.find((d) => d.id === v.driverId)
                   const job = jobFor(v.id)
                   const svc = serviceInfo(v.odometer)
@@ -276,8 +283,19 @@ function Vehicles() {
               </tbody>
             </table>
           </div>
-          <div className="px-4 py-2 text-[11px] shrink-0" style={{ color: '#6B7280', borderTop: '1px solid rgba(0,0,0,0.05)' }}>
-            {shown.length} of {fleet.length} units
+          <div className="px-4 py-2 text-[11px] shrink-0 flex items-center justify-between" style={{ color: '#6B7280', borderTop: '1px solid rgba(0,0,0,0.05)' }}>
+            <span>{shown.length} of {fleet.length} units</span>
+            {pageCount > 1 && (
+              <div className="flex items-center gap-1">
+                <button onClick={() => setPage((p) => Math.max(0, p - 1))} disabled={page === 0}
+                  className="h-6 px-2 rounded-lg text-[10.5px] font-semibold transition-colors disabled:opacity-35"
+                  style={{ background: 'rgba(0,0,0,0.04)', color: '#374151' }}>Prev</button>
+                <span className="px-1">Page {page + 1}/{pageCount}</span>
+                <button onClick={() => setPage((p) => Math.min(pageCount - 1, p + 1))} disabled={page >= pageCount - 1}
+                  className="h-6 px-2 rounded-lg text-[10.5px] font-semibold transition-colors disabled:opacity-35"
+                  style={{ background: 'rgba(0,0,0,0.04)', color: '#374151' }}>Next</button>
+              </div>
+            )}
           </div>
         </>)}
       </div>
@@ -286,7 +304,7 @@ function Vehicles() {
       <button onClick={() => setPanelOpen((o) => !o)}
         className="absolute z-[400] flex items-center gap-2 transition-all"
         style={{
-          top: '16px',
+          top: '76px',
           left: panelOpen ? '552px' : '16px',
           background: 'rgba(255,255,255,0.92)',
           backdropFilter: 'blur(12px)',
@@ -323,10 +341,10 @@ function Drivers() {
     .filter((d) => !term || `${d.name} ${d.license}`.toLowerCase().includes(term))
 
   return (
-    <div className="px-6 pb-6 space-y-4 overflow-auto h-full">
+    <div className="px-6 pt-[76px] pb-6 space-y-4 overflow-auto h-full">
       <div className="relative w-60">
         <svg className="absolute left-3 top-1/2 -translate-y-1/2 text-[#6B7280]" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
-        <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search crew…"
+        <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="" aria-label="Search crew"
           className="pl-9 pr-4 py-2 rounded-xl text-[13px] text-[#0C1322] w-full"
           style={{ background: 'rgba(255,255,255,0.9)', border: '1px solid rgba(0,0,0,0.07)' }} />
       </div>
@@ -388,9 +406,9 @@ function Zones() {
   const hospitals = useFleetStore((s) => s.hospitals)
   const firestations = useFleetStore((s) => s.firestations)
   return (
-    <div className="grid lg:grid-cols-[1fr_320px] gap-4">
+    <div className="grid lg:grid-cols-[1fr_320px] gap-4 px-6 pt-[76px] pb-6 overflow-auto h-full">
       <div className="panel overflow-hidden h-[70vh]">
-        <MapContainer center={[JAMSHEDPUR_CENTER.lat, JAMSHEDPUR_CENTER.lng]} zoom={13} className="h-full w-full">
+        <MapContainer center={[mapCenter().lat, mapCenter().lng]} zoom={13} className="h-full w-full">
           <TileLayer url={LIGHT_TILES} attribution='&copy; OpenStreetMap &copy; CARTO' />
           {ZONES.map((z) => (
             <Polygon key={z.id} positions={z.polygon} pathOptions={{ color: z.color, weight: 2, fillOpacity: 0.12 }}>

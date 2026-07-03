@@ -1,7 +1,8 @@
-import React, { useEffect, useState, useRef } from 'react'
+import React, { useEffect, useState, useRef, useCallback } from 'react'
 import { Routes, Route, NavLink, Navigate, useNavigate } from 'react-router-dom'
 import { useFleetStore } from './store/useFleetStore'
-import { getSession, devLogin, login, logout, captureTokenFromUrl } from './auth'
+import { getSession, devLogin, login, logout, clearLocalSession, captureTokenFromUrl } from './auth'
+import { useSessionGuard } from './hooks/useSessionGuard'
 import LiveMapPage from './features/map/LiveMapPage'
 import FleetPage from './features/fleet/FleetPage'
 import DashboardPage from './features/dashboard/DashboardPage'
@@ -13,6 +14,7 @@ import PolicyControls from './components/common/PolicyControls'
 import TrackPage from './features/track/TrackPage'
 import InfraHealthPage from './features/admin/InfraHealthPage'
 import Icon from './components/common/Icon'
+import CommandPalette from './components/common/CommandPalette'
 
 // Public shareable tracking links bypass auth + the authed data load entirely.
 const IS_TRACK = typeof window !== 'undefined' && window.location.pathname.startsWith('/track/')
@@ -41,6 +43,14 @@ export default function App() {
   const ready = useFleetStore((s) => s.ready)
   const error = useFleetStore((s) => s.error)
   const [session, setSession] = useState(() => { captureTokenFromUrl(); return getSession() })
+
+  // Idle timeout: clears the session locally (no cross-app redirect) after
+  // 25 min of no activity, or shortly after the SSO token expires if the
+  // user has also gone idle. An active user is left alone regardless of
+  // token expiry — this app has no silent-refresh path, so the alternative
+  // would be yanking them mid-task, which is worse.
+  const onSessionExpire = useCallback(() => { clearLocalSession(); setSession(null) }, [])
+  useSessionGuard(onSessionExpire)
 
   useEffect(() => { if (!IS_TRACK) init() }, [init])
   useEffect(() => {
@@ -166,6 +176,16 @@ function Console({ session, onSignOut }) {
     const h = (e) => { if (menuRef.current && !menuRef.current.contains(e.target)) setMenuOpen(false) }
     document.addEventListener('mousedown', h); return () => document.removeEventListener('mousedown', h)
   }, [menuOpen])
+
+  // Command palette: Ctrl/Cmd+K from anywhere in the console.
+  const [paletteOpen, setPaletteOpen] = useState(false)
+  useEffect(() => {
+    const h = (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); setPaletteOpen((o) => !o) }
+    }
+    document.addEventListener('keydown', h)
+    return () => document.removeEventListener('keydown', h)
+  }, [])
 
   const linkClass = ({ isActive }) =>
     `flex items-center gap-3 ${collapsed ? 'justify-center px-0' : 'px-3'} h-10 rounded-xl transition-all duration-150 relative select-none ${
@@ -312,6 +332,8 @@ function Console({ session, onSignOut }) {
           <Route path="/admin/infra" element={<InfraHealthPage />} />
         </Routes>
       </main>
+
+      <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} isAdmin={session?.role === 'admin'} />
     </div>
   )
 }

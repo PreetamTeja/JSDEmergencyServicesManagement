@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { useFleetStore } from '../../store/useFleetStore'
 import { locById, pickupLabel } from '../../data/locations'
 import { hospitalById, shortHospitalName, SEVERITY_META } from '../../data/hospitals'
@@ -13,6 +14,7 @@ const FILTERS = [
   { key: 'completed', label: 'Completed' },
   { key: 'fire', label: 'Fire' },
   { key: 'medical', label: 'Medical' },
+  { key: 'cleared', label: 'Cleared' },
 ]
 const ATTENTION = ['QUEUED', 'NO_HOSPITAL', 'NO_BLOODBANK', 'PREEMPTED']
 const NO_FACILITY = ['NO_HOSPITAL', 'NO_BLOODBANK']
@@ -45,14 +47,20 @@ function stageLabel(e) {
 export default function DispatchBoard() {
   const emergencies = useFleetStore((s) => s.emergencies)
   const vehicles = useFleetStore((s) => s.vehicles)
+  const drivers = useFleetStore((s) => s.drivers)
   const cancelRequest = useFleetStore((s) => s.cancelRequest)
   const now = useNow(3000)
   const [filter, setFilter] = useState('all')
-  const [q, setQ] = useState('')
+  const [params, setParams] = useSearchParams()
+  const [q, setQ] = useState(() => params.get('q') || '')
+  // Command palette / other pages can deep-link a search term via ?q=
+  useEffect(() => {
+    const urlQ = params.get('q')
+    if (urlQ) { setQ(urlQ); setParams({}, { replace: true }) }
+  }, [params, setParams])
   const [busy, setBusy] = useState(null)
   const [override, setOverride] = useState(null)
   const [menuId, setMenuId] = useState(null)
-  const [showCleared, setShowCleared] = useState(false)
   const cleared = useFleetStore((s) => s.clearedIds)
   const setClearedIds = useFleetStore((s) => s.setClearedIds)
   const persistCleared = (set) => setClearedIds(set)
@@ -88,9 +96,33 @@ export default function DispatchBoard() {
     setBulkBusy(false)
   }
 
+  // Row multi-select for bulk clear/cancel — cleared whenever the visible
+  // set changes underneath it (filter/search/page) so a stale selection
+  // can't silently act on rows the user isn't looking at anymore.
+  const [selected, setSelected] = useState(() => new Set())
+  const toggleSelected = (id) => setSelected((s) => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n })
+  const clearSelection = () => setSelected(new Set())
+  async function bulkCancelSelected() {
+    const targets = [...selected].filter((id) => emergencies.find((e) => e.id === id)?.state === 'EN_ROUTE')
+    if (!targets.length) return
+    setBulkBusy(true)
+    for (const id of targets) { try { await cancelRequest(id) } catch {} }
+    setBulkBusy(false)
+    clearSelection()
+  }
+  function bulkClearSelected() {
+    const n = new Set(cleared)
+    selected.forEach((id) => n.add(id))
+    persistCleared(n)
+    clearSelection()
+  }
+
+  // KPI counts always reflect the live (non-cleared) board, regardless of
+  // which filter tab — including "Cleared" — is currently selected, so
+  // clearing items never makes the at-a-glance numbers look wrong.
   const visible = useMemo(
-    () => emergencies.filter((e) => showCleared || !cleared.has(e.id)),
-    [emergencies, cleared, showCleared])
+    () => emergencies.filter((e) => !cleared.has(e.id)),
+    [emergencies, cleared])
 
   const kpis = useMemo(() => {
     // Recomputed with `now` so "today" rolls over correctly past midnight.
@@ -107,7 +139,10 @@ export default function DispatchBoard() {
 
   const liveRows = useMemo(() => {
     const term = q.trim().toLowerCase()
-    const match = (e) => (filter === 'all'
+    // "Cleared" is its own pool (only cleared items); every other tab draws
+    // from the live board and never shows cleared items.
+    const base = filter === 'cleared' ? emergencies.filter((e) => cleared.has(e.id)) : visible
+    const match = (e) => (filter === 'all' || filter === 'cleared'
       || (filter === 'active' && e.state === 'EN_ROUTE')
       || (filter === 'queued' && ATTENTION.includes(e.state))
       || (filter === 'completed' && e.state === 'COMPLETED')
@@ -120,9 +155,9 @@ export default function DispatchBoard() {
         .filter(Boolean).join(' ').toLowerCase()
       return hay.includes(term)
     }
-    return [...visible].filter((e) => match(e) && search(e))
+    return [...base].filter((e) => match(e) && search(e))
       .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
-  }, [visible, vehicles, filter, q])
+  }, [visible, emergencies, cleared, vehicles, filter, q])
 
   // While a row menu is open, freeze the row ORDER (data stays live) so the
   // 5s refresh can't shuffle the row out from under the pointer.
@@ -137,6 +172,17 @@ export default function DispatchBoard() {
     const byId = new Map(liveRows.map((e) => [e.id, e]))
     return frozenOrderRef.current.map((id) => byId.get(id)).filter(Boolean)
   }, [liveRows, menuId])
+
+  // Pagination — a fixed page of rows instead of a scrolling table. Kept
+  // small enough that a page of rows fits without needing to scroll on a
+  // typical viewport; overflow-auto below is just a safety net for very
+  // short windows, not the primary way through the list anymore.
+  const PAGE_SIZE = 10
+  const [page, setPage] = useState(0)
+  const pageCount = Math.max(1, Math.ceil(rows.length / PAGE_SIZE))
+  useEffect(() => { setPage(0); setSelected(new Set()) }, [q, filter])
+  useEffect(() => { if (page > pageCount - 1) setPage(Math.max(0, pageCount - 1)) }, [pageCount, page])
+  const pagedRows = useMemo(() => rows.slice(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE), [rows, page])
 
   async function onCancel(id) { setMenuId(null); setBusy(id); try { await cancelRequest(id) } finally { setBusy(null) } }
 
@@ -153,7 +199,7 @@ export default function DispatchBoard() {
             <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[#6B7280]"><Icon name="search" size={14} strokeWidth={2} /></span>
             <input ref={searchRef} value={q} onChange={(e) => setQ(e.target.value)}
               onKeyDown={(e) => { if (e.key === 'Escape') { setQ(''); e.currentTarget.blur() } }}
-              placeholder="Search ID, location, unit…  ( / )" aria-label="Search responses"
+              placeholder="" aria-label="Search responses"
               className="pl-9 pr-9 py-2 rounded-xl text-[13px] text-[#0C1322] w-72 xl:w-96"
               style={{ background: 'rgba(255,255,255,0.9)', border: '1px solid rgba(0,0,0,0.08)' }} />
             {q && (
@@ -166,17 +212,18 @@ export default function DispatchBoard() {
         </div>
       </div>
 
-      {/* ── KPI strip ── */}
+      {/* ── KPI strip — each tile applies the matching filter ── */}
       <div className="px-6 pb-4 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
         {[
-          { value: kpis.active, label: 'Active', color: '#16a34a', icon: 'activity' },
-          { value: kpis.queued, label: 'Queued', color: '#d97706', icon: 'clock' },
-          { value: kpis.completedToday, label: 'Completed today', color: '#4f46e5', icon: 'check' },
-          { value: kpis.fire, label: 'Fire incidents', color: '#dc2626', icon: 'flame' },
-          { value: kpis.medical, label: 'Medical', color: '#2563eb', icon: 'medical' },
+          { value: kpis.active, label: 'Active', color: '#16a34a', icon: 'activity', filterKey: 'active' },
+          { value: kpis.queued, label: 'Queued', color: '#d97706', icon: 'clock', filterKey: 'queued' },
+          { value: kpis.completedToday, label: 'Completed today', color: '#4f46e5', icon: 'check', filterKey: 'completed' },
+          { value: kpis.fire, label: 'Fire incidents', color: '#dc2626', icon: 'flame', filterKey: 'fire' },
+          { value: kpis.medical, label: 'Medical', color: '#2563eb', icon: 'medical', filterKey: 'medical' },
         ].map((k) => (
-          <div key={k.label} className="px-4 py-3.5 flex items-center gap-3 card-lift"
-            style={{ background: '#fff', borderRadius: '16px' }}>
+          <button key={k.label} onClick={() => setFilter(k.filterKey)}
+            className="px-4 py-3.5 flex items-center gap-3 card-lift text-left transition-all"
+            style={{ background: '#fff', borderRadius: '16px', outline: filter === k.filterKey ? `2px solid ${k.color}` : 'none', outlineOffset: '-2px' }}>
             <div className="h-9 w-9 rounded-xl grid place-items-center shrink-0" style={{ background: `${k.color}15`, color: k.color }}>
               <Icon name={k.icon} size={17} />
             </div>
@@ -184,9 +231,33 @@ export default function DispatchBoard() {
               <div className="text-[24px] font-bold leading-none" style={{ color: k.color }}>{k.value}</div>
               <div className="text-[11px] text-[#6B7280] mt-0.5 leading-tight">{k.label}</div>
             </div>
-          </div>
+          </button>
         ))}
       </div>
+
+      {/* ── Bulk action bar — appears once rows are selected ── */}
+      {selected.size > 0 && (
+        <div className="mx-6 mb-3 px-4 py-2.5 rounded-xl flex items-center gap-3"
+          style={{ background: 'rgba(7,81,77,0.08)', border: '1px solid rgba(7,81,77,0.15)' }}>
+          <span className="text-[12.5px] font-semibold" style={{ color: '#07514D' }}>{selected.size} selected</span>
+          <div className="flex-1" />
+          <button onClick={bulkCancelSelected} disabled={bulkBusy}
+            className="px-3 py-1.5 rounded-lg text-[12px] font-semibold transition-all disabled:opacity-40"
+            style={{ background: 'rgba(220,38,38,0.1)', color: '#dc2626' }}>
+            {bulkBusy ? 'Cancelling…' : 'Cancel selected'}
+          </button>
+          <button onClick={bulkClearSelected} disabled={bulkBusy}
+            className="px-3 py-1.5 rounded-lg text-[12px] font-semibold transition-all disabled:opacity-40"
+            style={{ background: 'rgba(0,0,0,0.06)', color: '#374151' }}>
+            Clear selected
+          </button>
+          <button onClick={clearSelection}
+            className="px-3 py-1.5 rounded-lg text-[12px] font-semibold transition-all"
+            style={{ background: 'transparent', color: '#6B7280' }}>
+            Deselect
+          </button>
+        </div>
+      )}
 
       {/* ── Filters + board controls ── */}
       <div className="px-6 pb-3 flex flex-wrap items-center gap-2">
@@ -201,16 +272,12 @@ export default function DispatchBoard() {
                   : { background: 'rgba(255,255,255,0.85)', color: '#6B7280' }}>
                 {f.key === 'fire' && <Icon name="flame" size={12} />}
                 {f.key === 'medical' && <Icon name="medical" size={12} />}
-                {f.label}
+                {f.label}{f.key === 'cleared' && cleared.size > 0 ? ` (${cleared.size})` : ''}
               </button>
             )
           })}
         </div>
         <div className="ml-auto flex items-center gap-2">
-          <label className="flex items-center gap-1.5 text-[12px] text-[#6B7280] cursor-pointer">
-            <input type="checkbox" checked={showCleared} onChange={(e) => setShowCleared(e.target.checked)} className="rounded" />
-            Show cleared ({cleared.size})
-          </label>
           {noFacility.length > 0 && (
             <button onClick={clearNoFacility} disabled={bulkBusy}
               className="px-3 py-1.5 rounded-xl text-[12px] font-semibold flex items-center gap-1.5 disabled:opacity-40 transition-all"
@@ -218,10 +285,10 @@ export default function DispatchBoard() {
               <Icon name="alert" size={12} />{bulkBusy ? 'Clearing…' : `No-facility (${noFacility.length})`}
             </button>
           )}
-          <button onClick={restoreCleared}
-            className="px-3 py-1.5 rounded-xl text-[12px] font-semibold transition-all"
+          <button onClick={restoreCleared} disabled={cleared.size === 0}
+            className="px-3 py-1.5 rounded-xl text-[12px] font-semibold transition-all disabled:opacity-40"
             style={{ background: 'rgba(255,255,255,0.85)', color: '#6B7280' }}>
-            Restore
+            Restore all
           </button>
           <button onClick={clearCompleted} disabled={clearableNow.length === 0}
             className="px-3 py-1.5 rounded-xl text-[12px] font-semibold flex items-center gap-1.5 disabled:opacity-40 transition-all"
@@ -232,20 +299,31 @@ export default function DispatchBoard() {
       </div>
 
       {/* ── Dense table ── */}
-      <div className="flex-1 overflow-auto px-6 pb-6">
+      <div className="flex-1 overflow-auto px-6 pb-6 flex flex-col">
         <div className="overflow-hidden card-static" style={{ background: 'rgba(255,255,255,0.92)', borderRadius: '16px', border: '1px solid rgba(0,0,0,0.05)' }}>
           <table className="w-full text-[13px]">
             <thead>
               <tr style={{ borderBottom: '1px solid rgba(0,0,0,0.06)' }}>
-                {['ID / Time', 'Type', 'Severity', 'Pickup', 'Unit', 'Destination', 'Progress', 'ETA', 'Status', ''].map((h) => (
+                <th className="px-4 py-3 w-10">
+                  <input type="checkbox" aria-label="Select all on this page"
+                    checked={pagedRows.length > 0 && pagedRows.every((e) => selected.has(e.id))}
+                    onChange={(ev) => {
+                      setSelected((s) => {
+                        const n = new Set(s)
+                        pagedRows.forEach((e) => ev.target.checked ? n.add(e.id) : n.delete(e.id))
+                        return n
+                      })
+                    }} className="rounded" />
+                </th>
+                {['ID / Time', 'Type', 'Severity', 'Pickup', 'Unit', 'Crew', 'Destination', 'Progress', 'ETA', 'Status', ''].map((h) => (
                   <th key={h} className="text-left font-semibold px-4 py-3"
-                    style={{ fontSize: '10.5px', letterSpacing: '0.06em', color: '#6B7280', textTransform: 'uppercase' }}>{h}</th>
+                    style={{ fontSize: '10.5px', letterSpacing: '0.06em', color: '#6B7280', textTransform: 'uppercase', ...(h === 'ID / Time' ? { width: '120px' } : {}) }}>{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
               {rows.length === 0 && (
-                <tr><td colSpan={10} className="px-4 py-12 text-center text-[13px]" style={{ color: '#6B7280' }}>
+                <tr><td colSpan={12} className="px-4 py-12 text-center text-[13px]" style={{ color: '#6B7280' }}>
                   <div>No responses match {q ? 'this search' : 'this filter'}.</div>
                   {(q || filter !== 'all') && (
                     <button onClick={() => { setQ(''); setFilter('all') }}
@@ -256,7 +334,7 @@ export default function DispatchBoard() {
                   )}
                 </td></tr>
               )}
-              {rows.map((e) => {
+              {pagedRows.map((e) => {
                 const isFire = e.kind === 'fire'
                 const isBlood = e.kind === 'blood'
                 const veh = vehicles.find((v) => v.id === e.ambulanceId)
@@ -269,6 +347,10 @@ export default function DispatchBoard() {
                 return (
                   <tr key={e.id} className={`align-middle group transition-colors hover:bg-[rgba(7,81,77,0.03)] ${isNew ? 'row-flash' : ''}`}
                     style={{ borderBottom: '1px solid rgba(0,0,0,0.04)' }}>
+                    <td className="px-4 py-3.5">
+                      <input type="checkbox" aria-label={`Select ${e.id}`} checked={selected.has(e.id)}
+                        onChange={() => toggleSelected(e.id)} className="rounded" />
+                    </td>
                     <td className="px-4 py-3.5">
                       <div className="font-bold text-[#0C1322] flex items-center gap-1.5">
                         {e.id}
@@ -297,6 +379,9 @@ export default function DispatchBoard() {
                         <span className="font-mono text-[12px] font-semibold text-[#0C1322]">{veh.reg}</span>
                       ) : <span className="text-[#6B7280]">—</span>}
                     </td>
+                    <td className="px-4 py-3.5 max-w-[120px]">
+                      <div className="truncate text-[#374151]">{drivers.find((d) => d.id === veh?.driverId)?.name || '—'}</div>
+                    </td>
                     <td className="px-4 py-3.5 max-w-[160px]">
                       <div className="truncate text-[#374151]" title={shortHospitalName(hosp?.name) || ''}>{isFire ? '—' : (shortHospitalName(hosp?.name) || '—')}</div>
                     </td>
@@ -321,7 +406,24 @@ export default function DispatchBoard() {
             </tbody>
           </table>
         </div>
-        <div className="text-[12px] mt-3 px-1" style={{ color: '#6B7280' }}>Showing {rows.length} {filter !== 'all' ? filter + ' ' : ''}responses</div>
+        <div className="flex items-center justify-between mt-3 px-1 shrink-0">
+          <div className="text-[12px]" style={{ color: '#6B7280' }}>
+            {rows.length === 0 ? '0 responses' : (
+              <>Showing {page * PAGE_SIZE + 1}–{Math.min(rows.length, page * PAGE_SIZE + PAGE_SIZE)} of {rows.length} {filter !== 'all' ? filter + ' ' : ''}responses</>
+            )}
+          </div>
+          {pageCount > 1 && (
+            <div className="flex items-center gap-1">
+              <button onClick={() => setPage((p) => Math.max(0, p - 1))} disabled={page === 0}
+                className="h-7 px-2.5 rounded-lg text-[12px] font-semibold transition-colors disabled:opacity-35"
+                style={{ background: 'rgba(255,255,255,0.9)', color: '#374151' }}>Prev</button>
+              <span className="text-[12px] px-2" style={{ color: '#6B7280' }}>Page {page + 1} of {pageCount}</span>
+              <button onClick={() => setPage((p) => Math.min(pageCount - 1, p + 1))} disabled={page >= pageCount - 1}
+                className="h-7 px-2.5 rounded-lg text-[12px] font-semibold transition-colors disabled:opacity-35"
+                style={{ background: 'rgba(255,255,255,0.9)', color: '#374151' }}>Next</button>
+            </div>
+          )}
+        </div>
       </div>
 
       {override && <OverrideModal em={override} onClose={() => setOverride(null)} />}

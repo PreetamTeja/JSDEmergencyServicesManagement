@@ -1,0 +1,77 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "S3Frontend",
+      "Effect": "Allow",
+      "Action": ["s3:PutObject", "s3:DeleteObject", "s3:GetObject", "s3:ListBucket"],
+      "Resource": [
+        "arn:aws:s3:::psiog-emergency-app",
+        "arn:aws:s3:::psiog-emergency-app/*"
+      ]
+    },
+    {
+      "Sid": "CloudFrontInvalidate",
+      "Effect": "Allow",
+      "Action": ["cloudfront:CreateInvalidation", "cloudfront:GetDistribution", "cloudfront:ListDistributions"],
+      "Resource": "*"
+    },
+    {
+      "Sid": "LambdaDeployAndInspect",
+      "Effect": "Allow",
+      "Action": [
+        "lambda:UpdateFunctionCode",
+        "lambda:UpdateFunctionConfiguration",
+        "lambda:GetFunctionConfiguration",
+        "lambda:GetFunction",
+        "lambda:PublishVersion",
+        "lambda:InvokeFunction"
+      ],
+      "Resource": [
+        "arn:aws:lambda:eu-west-1:992382809089:function:psiog-transport-api",
+        "arn:aws:lambda:eu-west-1:992382809089:function:psiog-voice-agent"
+      ]
+    },
+    {
+      "Sid": "CloudWatchMetricsRead",
+      "Effect": "Allow",
+      "Action": ["cloudwatch:GetMetricData", "cloudwatch:ListMetrics", "cloudwatch:DescribeAlarms"],
+      "Resource": "*"
+    },
+    {
+      "Sid": "CloudWatchLogsDebug",
+      "Effect": "Allow",
+      "Action": [
+        "logs:FilterLogEvents",
+        "logs:GetLogEvents",
+        "logs:DescribeLogGroups",
+        "logs:DescribeLogStreams",
+        "logs:StartQuery",
+        "logs:GetQueryResults",
+        "logs:StopQuery",
+        "logs:TailLogEvents"
+      ],
+      "Resource": [
+        "arn:aws:logs:eu-west-1:992382809089:log-group:/aws/lambda/psiog-transport-api:*",
+        "arn:aws:logs:eu-west-1:992382809089:log-group:/aws/lambda/psiog-voice-agent:*"
+      ]
+    },
+    {
+      "Sid": "XRayRead",
+      "Effect": "Allow",
+      "Action": ["xray:GetTraceSummaries", "xray:BatchGetTraces", "xray:GetServiceGraph"],
+      "Resource": "*"
+    },
+    {
+      "Sid": "DynamoDBReadOnly",
+      "Effect": "Allow",
+      "Action": ["dynamodb:Scan", "dynamodb:GetItem", "dynamodb:Query", "dynamodb:DescribeTable"],
+      "Resource": [
+        "arn:aws:dynamodb:eu-west-1:992382809089:table/TransportRequests",
+        "arn:aws:dynamodb:eu-west-1:992382809089:table/Fleet",
+        "arn:aws:dynamodb:eu-west-1:992382809089:table/ShuttleCards",
+        "arn:aws:dynamodb:eu-west-1:992382809089:table/ReferenceData"
+      ]
+    }
+  ]
+}

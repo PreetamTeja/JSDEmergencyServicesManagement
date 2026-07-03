@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react'
+import React from 'react'
 import {
   ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
   LineChart, Line, PieChart, Pie, Cell,
@@ -6,6 +6,7 @@ import {
 import { api } from '../../services/api'
 import { zoneById } from '../../data/locations'
 import Icon from '../../components/common/Icon'
+import { useCachedApi } from '../../hooks/useCachedApi'
 
 const RAMP = ['#07514D', '#0B6A64', '#2E8B84', '#4A9B96', '#7FB0AB', '#A9CCC8']
 const AXIS = '#9AA3A1'
@@ -16,17 +17,7 @@ const TIP = {
 }
 
 export default function InsightsPage() {
-  const [data, setData] = useState(null)
-  const [err, setErr] = useState(null)
-  const [loading, setLoading] = useState(true)
-
-  useEffect(() => {
-    let cancelled = false
-    api.getInsights()
-      .then((d) => { if (!cancelled) { setData(d); setLoading(false) } })
-      .catch((e) => { if (!cancelled) { setErr(e.message); setLoading(false) } })
-    return () => { cancelled = true }
-  }, [])
+  const { data, loading, refreshing, err } = useCachedApi('psiog_insights_v1', api.getInsights)
 
   const years = data?.date_range
     ? ((new Date(data.date_range.to) - new Date(data.date_range.from)) / (365.25 * 24 * 3600 * 1000)).toFixed(1)
@@ -51,6 +42,7 @@ export default function InsightsPage() {
               <Icon name="alert" size={13} strokeWidth={2} className="text-[#9CA3AF]" />
               <span className="text-[11px]" style={{ color: '#9CA3AF' }}>
                 {data.record_count?.toLocaleString()} seeded historical records · not live dispatch data
+                {refreshing && ' · refreshing…'}
               </span>
             </div>
 

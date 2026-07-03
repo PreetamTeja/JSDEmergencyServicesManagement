@@ -11,6 +11,7 @@ import Icon from '../../components/common/Icon'
 import LiveEta from '../../components/common/LiveEta'
 import PowerBIReport from './PowerBIReport'
 import { api } from '../../services/api'
+import { useCachedApi } from '../../hooks/useCachedApi'
 
 const KIND = { medical: '#0B6A64', fire: '#E8833A' }
 // Cohesive teal ramp for categorical charts (brand-aligned, minimal).
@@ -178,19 +179,9 @@ export default function DashboardPage() {
 // data rather than the live dispatch feed. Clearly labeled as such so it's
 // never mistaken for a real-time number.
 function CoverageGapsCard() {
-  const [data, setData] = useState(null)
-  const [err, setErr] = useState(null)
-  const [loading, setLoading] = useState(true)
+  const { data, loading, refreshing, err } = useCachedApi('psiog_coverage_gaps_v1', api.getCoverageGaps)
 
-  useEffect(() => {
-    let cancelled = false
-    api.getCoverageGaps()
-      .then((d) => { if (!cancelled) { setData(d); setLoading(false) } })
-      .catch((e) => { if (!cancelled) { setErr(e.message); setLoading(false) } })
-    return () => { cancelled = true }
-  }, [])
-
-  if (loading) return null // avoid a flash of an empty card while the one-off fetch resolves
+  if (loading) return null // avoid a flash of an empty card while the very first fetch resolves
   if (err) return null // non-critical insight — fail quietly rather than disrupt the live dashboard
   if (!data || !data.zones?.length) return null
 
@@ -204,6 +195,7 @@ function CoverageGapsCard() {
         <Icon name="alert" size={13} strokeWidth={2} className="text-[#9CA3AF]" />
         <span className="text-[11px]" style={{ color: '#9CA3AF' }}>
           {data.record_count?.toLocaleString()} seeded historical records · not live dispatch data
+          {refreshing && ' · refreshing…'}
         </span>
       </div>
 

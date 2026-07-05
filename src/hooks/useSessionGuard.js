@@ -1,29 +1,29 @@
 import { useEffect, useRef } from 'react'
-import { isTokenExpired } from '../auth'
+import { isTokenExpired, sessionAgeMs } from '../auth'
 
 const ACTIVITY_EVENTS = ['mousemove', 'mousedown', 'keydown', 'touchstart', 'scroll']
-const IDLE_TIMEOUT_MS = 25 * 60 * 1000  // auto sign-out after 25 min of no activity
-// Warn a minute before sign-out rather than clearing the session silently —
-// a dispatcher who steps away mid-shift (or mid-form) deserves a chance to
-// notice and stay signed in before losing whatever they were doing.
-const WARN_AT_MS = IDLE_TIMEOUT_MS - 60 * 1000
-const CHECK_INTERVAL_MS = 30 * 1000
+// Standardized across all services: 5 min idle, 20 min absolute session cap.
+const IDLE_TIMEOUT_MS = 5 * 60 * 1000
+const ABSOLUTE_SESSION_MS = 20 * 60 * 1000
+// Warn shortly before whichever deadline (idle or absolute) is closer, so
+// the tighter 5-minute idle window still gets a meaningful heads-up.
+const WARN_BEFORE_MS = 30 * 1000
+const CHECK_INTERVAL_MS = 5 * 1000
 // If the token dies while the user is still actively clicking around, give a
 // short grace window rather than yanking them out mid-interaction — there's
 // no silent-refresh path in this app's SSO model, so this is the best we can
 // offer without a jarring cross-app redirect.
-const EXPIRED_GRACE_MS = 60 * 1000
+const EXPIRED_GRACE_MS = 30 * 1000
 
-// Auto-clears the session (locally, no redirect) after idle timeout, or
-// shortly after the SSO token expires if the user has stopped interacting.
-// An active user is left alone even past token expiry until either the idle
-// grace window elapses or a real API call surfaces the 401 itself.
+// Expires the session after 5 min of no activity OR 20 min total (whichever
+// comes first — the absolute cap can't be extended by activity, by design),
+// or shortly after the SSO token expires if the user has stopped interacting.
 export function useSessionGuard(onExpire, onIdleWarning) {
   const lastActiveRef = useRef(Date.now())
   const warnedRef = useRef(false)
 
   useEffect(() => {
-    const markActive = () => { lastActiveRef.current = Date.now(); warnedRef.current = false }
+    const markActive = () => { lastActiveRef.current = Date.now() }
     ACTIVITY_EVENTS.forEach((e) => window.addEventListener(e, markActive, { passive: true }))
     return () => ACTIVITY_EVENTS.forEach((e) => window.removeEventListener(e, markActive))
   }, [])
@@ -31,18 +31,21 @@ export function useSessionGuard(onExpire, onIdleWarning) {
   useEffect(() => {
     const id = setInterval(() => {
       const idleMs = Date.now() - lastActiveRef.current
-      const idleTimedOut = idleMs >= IDLE_TIMEOUT_MS
+      const idleRemaining = IDLE_TIMEOUT_MS - idleMs
+      const absRemaining = ABSOLUTE_SESSION_MS - sessionAgeMs()
       const expiredWithGraceElapsed = isTokenExpired() && idleMs >= EXPIRED_GRACE_MS
-      if (idleTimedOut || expiredWithGraceElapsed) { onExpire(); return }
-      if (idleMs >= WARN_AT_MS && !warnedRef.current) {
+      if (idleRemaining <= 0 || absRemaining <= 0 || expiredWithGraceElapsed) { onExpire(); return }
+      const soonestRemaining = Math.min(idleRemaining, absRemaining)
+      if (soonestRemaining <= WARN_BEFORE_MS && !warnedRef.current) {
         warnedRef.current = true
-        onIdleWarning?.(Math.max(0, IDLE_TIMEOUT_MS - idleMs))
+        onIdleWarning?.(Math.max(0, soonestRemaining))
       }
     }, CHECK_INTERVAL_MS)
     return () => clearInterval(id)
   }, [onExpire, onIdleWarning])
 
-  // Exposed so a "stay signed in" action in the UI counts as activity
-  // without needing to synthesize a fake DOM event.
+  // Exposed so a "stay signed in" action in the UI counts as activity without
+  // needing to synthesize a fake DOM event. Only resets the idle clock — the
+  // absolute session cap is deliberately not extendable this way.
   return { extendSession: () => { lastActiveRef.current = Date.now(); warnedRef.current = false } }
 }

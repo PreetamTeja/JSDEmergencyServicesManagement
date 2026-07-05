@@ -20,6 +20,19 @@ const ADMIN_GROUPS = (import.meta.env.VITE_ADMIN_GROUPS || '')
 const ACCESS_KEY = 'sso_token'
 const ID_KEY = 'sso_id_token'
 const DEV_KEY = 'psiog_dev_session'
+const SESSION_START_KEY = 'psiog_session_started_at'
+
+// Absolute session duration is measured from when the session was first
+// established, independent of activity — record it once and never touch it
+// again until the session is cleared, so idle-resets (mouse moves, etc.)
+// can't be used to extend it indefinitely.
+function markSessionStart() {
+  if (!sessionStorage.getItem(SESSION_START_KEY)) sessionStorage.setItem(SESSION_START_KEY, String(Date.now()))
+}
+export function sessionAgeMs() {
+  const t = sessionStorage.getItem(SESSION_START_KEY)
+  return t ? Date.now() - Number(t) : 0
+}
 
 function decode(token) {
   try { return JSON.parse(atob(token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/'))) } catch { return null }
@@ -44,6 +57,7 @@ export function captureTokenFromUrl() {
   if (at) sessionStorage.setItem(ACCESS_KEY, at)
   if (it) sessionStorage.setItem(ID_KEY, it)
   if (at || it) {
+    markSessionStart()
     params.delete(ACCESS_KEY); params.delete(ID_KEY)
     const qs = params.toString()
     history.replaceState({}, '', window.location.pathname + (qs ? `?${qs}` : ''))
@@ -62,9 +76,16 @@ export function getSession() {
   if (valid(access)) {
     const idc = decode(sessionStorage.getItem(ID_KEY) || '') || {}
     const groups = access['cognito:groups'] || idc['cognito:groups'] || []
+    // Broad, ordered fallback across every claim Cognito might actually carry
+    // for this app client — a pool without the profile/email scopes granted
+    // can leave name/email empty, which previously fell straight through to
+    // the literal placeholder string "User" instead of any real identifier.
+    const givenFamily = [idc.given_name, idc.family_name].filter(Boolean).join(' ')
+    const displayName = idc.name || givenFamily || idc.email || idc.preferred_username
+      || access.username || access['cognito:username'] || idc['cognito:username'] || 'User'
     return {
       sub: access.sub,
-      name: idc.name || idc.email || access.username || 'User',
+      name: displayName,
       email: idc.email || null,
       role: roleFromGroups(groups),
       groups: Array.isArray(groups) ? groups : [groups].filter(Boolean),
@@ -84,12 +105,17 @@ export function devLogin(role, name) {
   const s = { sub: `dev-${role}`, name: name || (role === 'admin' ? 'Control Room' : 'Requester'),
     email: `${role}@demo`, role, groups: [role === 'admin' ? 'emergency-admin' : 'emergency-user'] }
   sessionStorage.setItem(DEV_KEY, JSON.stringify(s))
+  markSessionStart()
   return s
 }
 
 // Send the user to the platform to authenticate (the main app owns the login).
+// Returns whether a real redirect was actually triggered — callers that need
+// to show a "redirecting…" transition only while a real navigation is
+// pending (not in local dev, where MAIN_APP_URL is typically unset) check this.
 export function login() {
-  if (MAIN_APP_URL) window.location.href = MAIN_APP_URL
+  if (MAIN_APP_URL) { window.location.href = MAIN_APP_URL; return true }
+  return false
 }
 
 export function logout() {
@@ -104,6 +130,7 @@ export function clearLocalSession() {
   sessionStorage.removeItem(ACCESS_KEY)
   sessionStorage.removeItem(ID_KEY)
   sessionStorage.removeItem(DEV_KEY)
+  sessionStorage.removeItem(SESSION_START_KEY)
 }
 
 export function isAuthed() { return !!getSession() }

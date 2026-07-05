@@ -7,6 +7,7 @@ import { makeVehicleIcon, makeHospitalIcon, makeFirestationIcon } from '../featu
 import LiveEta from '../components/common/LiveEta'
 import Icon from '../components/common/Icon'
 import VoiceAgent from './VoiceAgent'
+import MapControls from '../components/common/MapControls'
 
 const LIGHT_TILES = 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png'
 
@@ -127,7 +128,7 @@ export default function UserPortal({ session, onSignOut }) {
                 {!isFire && (
                   <div className="mb-3 rounded-lg border border-cmd-border p-3">
                     <label className="flex items-center justify-between gap-2 cursor-pointer">
-                      <span className="text-[13px] font-medium">Multiple casualties (mass)</span>
+                      <span className="text-[13px] font-medium">Multiple casualties</span>
                       <input type="checkbox" checked={mass} onChange={(e) => setMass(e.target.checked)} className="h-4 w-4 accent-status-danger" />
                     </label>
                     {mass && (
@@ -365,6 +366,7 @@ function TrackMap({ active, live, vehicles, hospitals, firestations }) {
   return (
     <MapContainer center={[center.lat, center.lng]} zoom={14} zoomControl={false} className="h-full w-full">
       <TileLayer url={LIGHT_TILES} attribution="&copy; OpenStreetMap" />
+      <MapControls className="top-3 right-3" />
 
       {hospitals.map((h) => (
         <Marker key={h.id} position={[h.lat, h.lng]} icon={makeHospitalIcon(h.status === 'full')}>

@@ -306,7 +306,12 @@ export default function DispatchBoard() {
 
       {/* ── Dense table ── */}
       <div className="flex-1 overflow-auto px-6 pb-6 flex flex-col">
-        <div className="overflow-hidden card-static" style={{ background: 'rgba(255,255,255,0.92)', borderRadius: '16px', border: '1px solid rgba(0,0,0,0.05)' }}>
+        <div className="card-static" style={{ background: 'rgba(255,255,255,0.92)', borderRadius: '16px', border: '1px solid rgba(0,0,0,0.05)' }}>
+          {/* With 12 columns this table is wider than most viewports at normal
+              zoom — scroll it horizontally within its own rounded card rather
+              than letting the outer overflow-hidden silently clip columns off
+              the right edge (which read as "the table doesn't fit"). */}
+          <div className="overflow-x-auto rounded-2xl">
           <table className="w-full text-[13px]">
             <thead>
               <tr style={{ borderBottom: '1px solid rgba(0,0,0,0.06)' }}>
@@ -411,6 +416,7 @@ export default function DispatchBoard() {
               })}
             </tbody>
           </table>
+          </div>
         </div>
         <div className="flex items-center justify-between mt-3 px-1 shrink-0">
           <div className="text-[12px]" style={{ color: '#6B7280' }}>

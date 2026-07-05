@@ -65,7 +65,6 @@ export default function InfraHealthPage() {
       <div className="px-7 pt-7 pb-5 flex items-center justify-between gap-4">
         <div>
           <h1 className="text-[22px] font-bold tracking-tight text-[#0C1322]">Infrastructure Health</h1>
-          <p className="text-[13px] text-[#6B7280] mt-0.5">CloudWatch metrics · Lambda + API Gateway</p>
         </div>
         <div className="flex items-center gap-3 shrink-0">
           {lastRefresh && <span className="text-[11px] text-[#6B7280]">Refreshed {lastRefresh.toLocaleTimeString()}</span>}

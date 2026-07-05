@@ -7,7 +7,13 @@
 
 :root { color-scheme: light; }
 
-html, body, #root { height: 100%; margin: 0; }
+/* This is a single-page app shell: every page manages its own internal
+   scrolling (overflow-auto panels, overflow-hidden <main>). The document
+   itself should never scroll — without this, a descendant that briefly
+   exceeds the viewport by a few px (hover transforms, absolutely-positioned
+   menus, a card's shadow bleed) makes the whole page "scrollable" even
+   though there's no real content to reveal. */
+html, body, #root { height: 100%; margin: 0; overflow: hidden; }
 
 /* Form controls: always black text */
 select, option, input, textarea { color: #000000; }
@@ -109,11 +115,7 @@ aside :focus-visible, .on-dark :focus-visible { outline-color: #D6DF27; }
 .ekg-line { stroke-dasharray: 130 390; animation: ekgTrace 2.4s linear infinite; }
 @keyframes bootPulse { 0%, 100% { opacity: 0.55; } 50% { opacity: 1; } }
 .boot-pulse { animation: bootPulse 1.8s ease-in-out infinite; }
-@keyframes bootBeacon {
-  0%, 100% { box-shadow: 0 0 0 0 rgba(214, 223, 39, 0); }
-  50% { box-shadow: 0 0 28px 6px rgba(214, 223, 39, 0.35); }
-}
-.boot-beacon { animation: bootBeacon 2.2s ease-in-out infinite; }
+.boot-beacon { /* glow removed — logo mark no longer pulses a yellow shadow */ }
 @keyframes bootBar { from { transform: translateX(-100%); } to { transform: translateX(260%); } }
 .boot-bar { animation: bootBar 1.4s cubic-bezier(.4,.2,.4,1) infinite; }
 @keyframes radarSweep { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }

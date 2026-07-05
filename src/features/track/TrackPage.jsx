@@ -4,6 +4,7 @@ import { MapContainer, TileLayer, CircleMarker, Polyline, Tooltip } from 'react-
 import { api } from '../../services/api'
 import { getRoute } from '../../services/osrm'
 import { useNow } from '../../hooks/useNow'
+import MapControls from '../../components/common/MapControls'
 
 const TILES = 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png'
 
@@ -104,6 +105,7 @@ export default function TrackPage() {
       <div className="relative flex-1">
         <MapContainer center={center} zoom={13} zoomControl={false} className="h-full w-full">
           <TileLayer url={TILES} attribution='&copy; OpenStreetMap &copy; CARTO' />
+          <MapControls className="top-3 right-3" />
           {route.length > 0 && <Polyline positions={route} pathOptions={{ color: legColor, weight: 5, opacity: 0.8 }} />}
           {data.origin && (
             <CircleMarker center={[data.origin.lat, data.origin.lng]} radius={6}

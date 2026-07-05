@@ -45,13 +45,28 @@ export default function App() {
   const ready = useFleetStore((s) => s.ready)
   const error = useFleetStore((s) => s.error)
   const [session, setSession] = useState(() => { captureTokenFromUrl(); return getSession() })
+  // Set the instant expiry fires so the transition screen renders in the
+  // very same tick — the underlying page must never be visible again once
+  // the session is gone, not even for one frame.
+  const [expiring, setExpiring] = useState(false)
 
-  // Idle timeout: clears the session locally (no cross-app redirect) after
-  // 25 min of no activity, or shortly after the SSO token expires if the
-  // user has also gone idle. An active user is left alone regardless of
-  // token expiry — this app has no silent-refresh path, so the alternative
-  // would be yanking them mid-task, which is worse.
-  const onSessionExpire = useCallback(() => { clearLocalSession(); setSession(null) }, [])
+  // Session timeout, standardized across services: 5 min idle OR 20 min
+  // absolute session length, whichever comes first. On expiry, a real SSO
+  // session is redirected straight back to the platform login (with a
+  // "Session expired, redirecting…" transition covering the navigation);
+  // a local dev session (no real SSO to bounce to) just returns to this
+  // app's own Landing screen, which is never a broken/empty state.
+  const onSessionExpire = useCallback(() => {
+    const wasSso = getSession()?.via === 'sso'
+    clearLocalSession()
+    if (wasSso) {
+      setExpiring(true)
+      const redirected = login()
+      if (!redirected) setSession(null) // no MAIN_APP_URL configured — fall back to Landing instead of hanging
+    } else {
+      setSession(null)
+    }
+  }, [])
   const [idleWarning, setIdleWarning] = useState(false)
   const onIdleWarning = useCallback(() => setIdleWarning(true), [])
   const { extendSession } = useSessionGuard(onSessionExpire, onIdleWarning)
@@ -72,6 +87,13 @@ export default function App() {
     }, 5000)
     return () => clearInterval(id)
   }, [ready])
+
+  // Session just expired and a real cross-app redirect is in flight — cover
+  // it with an explicit transition rather than letting the console/portal
+  // flash a stale or empty frame while navigation happens. Checked before
+  // every other branch, including the track link, so nothing can render
+  // underneath it once expiry starts.
+  if (expiring) return <SessionExpiredScreen />
 
   // Public live-tracking link — no login, no backend bootstrap.
   if (IS_TRACK) return <Routes><Route path="/track/:id" element={<TrackPage />} /></Routes>
@@ -128,6 +150,14 @@ function IdleWarningToast({ onStay, onSignOut }) {
       <button onClick={onStay} className="btn-primary h-8 px-3 text-[12px] shrink-0">Stay signed in</button>
     </div>
   )
+}
+
+// Covers the moment between a session expiring and the real SSO redirect
+// landing — reuses the boot screen's visual so it reads as "transitioning,"
+// not "broken," even though the actual navigation is happening in the
+// background via login()'s window.location.href assignment.
+function SessionExpiredScreen() {
+  return <BootScreen message="Session expired, redirecting…" />
 }
 
 // Branded boot screen shown while live data loads — dispatch radar sweep.
@@ -265,7 +295,6 @@ function Console({ session, onSignOut }) {
             style={{
               background: '#D6DF27',
               color: '#07514D',
-              boxShadow: '0 2px 10px rgba(214,223,39,0.3)',
             }}
           >
             <Icon name="plus" size={14} strokeWidth={2.5} />

@@ -8,6 +8,7 @@ import { zonePoolCounts } from '../../services/dispatchService'
 import { makeVehicleIcon, makeHospitalIcon, makeFirestationIcon } from './vehicleIcon'
 import { STATUS_COLORS, VehicleIcon } from '../../components/common/ui.jsx'
 import VehiclePanel from './VehiclePanel'
+import MapControls from '../../components/common/MapControls'
 
 const LIGHT_TILES = 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png'
 const EMERGENCY_TYPES = ['ambulance', 'firetruck']
@@ -76,6 +77,7 @@ export default function LiveMapPage() {
         zoomControl={false} className="h-full w-full">
         <TileLayer url={LIGHT_TILES} attribution='&copy; OpenStreetMap &copy; CARTO' />
         <FlyTo pos={selected?.pos} />
+        <MapControls className="bottom-4 left-4" align="items-start" />
 
         {showZones && ZONES.map((z) => {
           const hot = hoveredZone === z.id

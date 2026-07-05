@@ -8,6 +8,7 @@ import { makeVehicleIcon, makeHospitalIcon, makeFirestationIcon } from '../map/v
 import LiveEta from '../../components/common/LiveEta'
 import Icon from '../../components/common/Icon'
 import AlertsPanel from './AlertsPanel'
+import MapControls from '../../components/common/MapControls'
 import { useNow } from '../../hooks/useNow'
 import { slaTargets, slaStatus, slaText, SLA_COLOR, SLA_LABEL } from '../../services/sla'
 
@@ -262,6 +263,7 @@ const EmergencyMap = React.memo(function EmergencyMap({ emergencies }) {
   return (
     <MapContainer center={[mapCenter().lat, mapCenter().lng]} zoom={14} zoomControl={false} className="h-full w-full absolute inset-0 z-0">
       <TileLayer url={LIGHT_TILES} attribution='&copy; OpenStreetMap &copy; CARTO' />
+      <MapControls className="top-[80px] right-4" />
 
       {hospitals.map((h) => (
         <Marker key={h.id} position={[h.lat, h.lng]} icon={makeHospitalIcon(false)}>

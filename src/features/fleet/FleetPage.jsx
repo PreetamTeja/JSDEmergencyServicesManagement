@@ -8,6 +8,7 @@ import { hospitalById } from '../../data/hospitals'
 import { StatusDot, STATUS_COLORS, VehicleIcon, Progress } from '../../components/common/ui.jsx'
 import { makeVehicleIcon } from '../map/vehicleIcon'
 import LiveEta from '../../components/common/LiveEta'
+import MapControls from '../../components/common/MapControls'
 
 const TABS = ['Vehicles', 'Crews', 'Service Zones']
 const LIGHT_TILES = 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png'
@@ -97,7 +98,7 @@ function Vehicles() {
   }, [fleet, drivers, type, status, zone, q])
 
   // Pagination — small fixed page instead of a scrolling table.
-  const PAGE_SIZE = 8
+  const PAGE_SIZE = 4
   const [page, setPage] = useState(0)
   const pageCount = Math.max(1, Math.ceil(shown.length / PAGE_SIZE))
   useEffect(() => { setPage(0) }, [q, type, status, zone])
@@ -118,6 +119,7 @@ function Vehicles() {
       <MapContainer center={[mapCenter().lat, mapCenter().lng]} zoom={14}
         zoomControl={false} className="absolute inset-0 z-0 h-full w-full">
         <TileLayer url={LIGHT_TILES} attribution='&copy; OpenStreetMap &copy; CARTO' />
+        <MapControls className="top-[92px] right-4" />
         {ZONES.map((z) => (
           <Polygon key={z.id} positions={z.polygon} pathOptions={{ color: z.color, weight: 1.5, fillOpacity: 0.08 }} />
         ))}
@@ -157,7 +159,7 @@ function Vehicles() {
       )}
 
       {/* ── Floating vehicle list panel — starts below the title/tabs overlay ── */}
-      <div className={`absolute left-4 top-[76px] bottom-4 z-[400] transition-all duration-300 overflow-hidden flex flex-col ${panelOpen ? 'w-[520px] max-w-[calc(100vw-2rem)]' : 'w-0 opacity-0'}`}
+      <div className={`absolute left-4 top-[92px] bottom-4 z-[400] transition-all duration-300 overflow-hidden flex flex-col ${panelOpen ? 'w-[520px] max-w-[calc(100vw-2rem)]' : 'w-0 opacity-0'}`}
         style={{ borderRadius: '20px', background: panelOpen ? 'rgba(255,255,255,0.93)' : 'transparent', backdropFilter: panelOpen ? 'blur(20px)' : 'none', WebkitBackdropFilter: panelOpen ? 'blur(20px)' : 'none', boxShadow: panelOpen ? '0 4px 32px rgba(0,0,0,0.13)' : 'none' }}>
 
         {panelOpen && (<>
@@ -284,7 +286,9 @@ function Vehicles() {
             </table>
           </div>
           <div className="px-4 py-2 text-[11px] shrink-0 flex items-center justify-between" style={{ color: '#6B7280', borderTop: '1px solid rgba(0,0,0,0.05)' }}>
-            <span>{shown.length} of {fleet.length} units</span>
+            <span>
+              {shown.length === 0 ? '0' : `${page * PAGE_SIZE + 1}–${Math.min(shown.length, page * PAGE_SIZE + PAGE_SIZE)}`} of {shown.length === fleet.length ? fleet.length : `${shown.length} (filtered from ${fleet.length})`} units
+            </span>
             {pageCount > 1 && (
               <div className="flex items-center gap-1">
                 <button onClick={() => setPage((p) => Math.max(0, p - 1))} disabled={page === 0}
@@ -304,7 +308,7 @@ function Vehicles() {
       <button onClick={() => setPanelOpen((o) => !o)}
         className="absolute z-[400] flex items-center gap-2 transition-all"
         style={{
-          top: '76px',
+          top: '92px',
           left: panelOpen ? '552px' : '16px',
           background: 'rgba(255,255,255,0.92)',
           backdropFilter: 'blur(12px)',

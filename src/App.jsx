@@ -16,6 +16,7 @@ import InfraHealthPage from './features/admin/InfraHealthPage'
 import InsightsPage from './features/insights/InsightsPage'
 import Icon from './components/common/Icon'
 import CommandPalette from './components/common/CommandPalette'
+import ExplodeLogo from './components/common/ExplodeLogo'
 
 // Public shareable tracking links bypass auth + the authed data load entirely.
 const IS_TRACK = typeof window !== 'undefined' && window.location.pathname.startsWith('/track/')
@@ -166,8 +167,7 @@ export function BootScreen({ message = 'Connecting to live operations…' }) {
   return (
     <div className="h-screen w-full grid place-items-center text-white on-dark" style={{ background: bg }}>
       <div className="boot-in flex flex-col items-center text-center px-6">
-        <div className="h-14 w-14 rounded-2xl grid place-items-center font-bold text-[20px] boot-beacon mb-4"
-          style={{ background: '#D6DF27', color: '#07514D' }}>TS</div>
+        <div className="mb-4"><ExplodeLogo size={56} /></div>
         <div className="text-[22px] font-bold tracking-tight">JSD Emergency Services</div>
         <div className="text-[13px] mb-8" style={{ color: 'rgba(214,223,39,0.8)' }}>Tata Steel · Jamshedpur</div>
 

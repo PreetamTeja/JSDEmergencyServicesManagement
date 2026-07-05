@@ -20,6 +20,19 @@ const ATTENTION = ['QUEUED', 'NO_HOSPITAL', 'NO_BLOODBANK', 'PREEMPTED']
 const NO_FACILITY = ['NO_HOSPITAL', 'NO_BLOODBANK']
 const FINISHED = ['COMPLETED', 'CANCELLED']
 
+// Total wall-clock time a completed/cancelled job actually took, from
+// creation to its last status update — falls back to the originally
+// computed total-trip ETA if updatedAt isn't available (e.g. older records).
+function completedDurationLabel(e) {
+  const start = new Date(e.createdAt)
+  const end = e.updatedAt ? new Date(e.updatedAt) : null
+  if (end && !isNaN(start) && !isNaN(end) && end > start) {
+    const min = (end - start) / 60000
+    return min < 1 ? '<1 min' : `${Math.round(min)} min`
+  }
+  return e.totalEtaMin > 0 ? `${Math.round(e.totalEtaMin)} min` : null
+}
+
 // Trip progress 0..1 — fills dispatch -> en route -> arrived, live by the ETA clock.
 function progressOf(e, now) {
   if (e.state === 'COMPLETED') return 1
@@ -178,7 +191,7 @@ export default function DispatchBoard() {
   // small enough that a page of rows fits without needing to scroll on a
   // typical viewport; overflow-auto below is just a safety net for very
   // short windows, not the primary way through the list anymore.
-  const PAGE_SIZE = 10
+  const PAGE_SIZE = 4
   const [page, setPage] = useState(0)
   const pageCount = Math.max(1, Math.ceil(rows.length / PAGE_SIZE))
   useEffect(() => { setPage(0); setSelected(new Set()) }, [q, filter])
@@ -326,7 +339,11 @@ export default function DispatchBoard() {
                       })
                     }} className="rounded" />
                 </th>
-                {['ID / Time', 'Type', 'Severity', 'Pickup', 'Unit', 'Crew', 'Destination', 'Progress', 'ETA', 'Status', ''].map((h) => (
+                {/* ETA moved right after Severity — with 11 data columns the
+                    table is wider than most viewports, and ETA is the one
+                    time-critical value a dispatcher needs without having to
+                    scroll right to find it. */}
+                {['ID / Time', 'Type', 'Severity', 'ETA', 'Pickup', 'Unit', 'Crew', 'Destination', 'Progress', 'Status', ''].map((h) => (
                   <th key={h} className="text-left font-semibold px-4 py-3"
                     style={{ fontSize: '10.5px', letterSpacing: '0.06em', color: '#6B7280', textTransform: 'uppercase', ...(h === 'ID / Time' ? { width: '120px' } : {}) }}>{h}</th>
                 ))}
@@ -382,6 +399,12 @@ export default function DispatchBoard() {
                         {(!isFire && !isBlood && e.caseType) ? e.caseType : e.severity}
                       </span>
                     </td>
+                    <td className="px-4 py-3.5 font-semibold text-[13px] whitespace-nowrap" style={{ color: '#07514D' }}>
+                      {e.state === 'EN_ROUTE' ? <LiveEta etaComplete={e.etaComplete} fallbackMin={e.etaToPickupMin} />
+                        : e.state === 'COMPLETED' ? (
+                          <span title="Total time from request to arrival">{completedDurationLabel(e) || '—'}</span>
+                        ) : <span className="text-[#6B7280] font-normal">—</span>}
+                    </td>
                     <td className="px-4 py-3.5 max-w-[160px]">
                       <div className="truncate text-[#374151]" title={pickupLabel(e)}>{pickupLabel(e) || '—'}</div>
                     </td>
@@ -397,9 +420,6 @@ export default function DispatchBoard() {
                       <div className="truncate text-[#374151]" title={shortHospitalName(hosp?.name) || ''}>{isFire ? '—' : (shortHospitalName(hosp?.name) || '—')}</div>
                     </td>
                     <td className="px-4 py-3.5 w-44"><ProgressBar e={e} now={now} /></td>
-                    <td className="px-4 py-3.5 font-semibold text-[13px]" style={{ color: '#07514D' }}>
-                      {e.state === 'EN_ROUTE' ? <LiveEta etaComplete={e.etaComplete} fallbackMin={e.etaToPickupMin} /> : <span className="text-[#6B7280] font-normal">—</span>}
-                    </td>
                     <td className="px-4 py-3.5"><StatusChip state={e.state} /></td>
                     <td className="px-4 py-3.5 relative">
                       <button onClick={() => setMenuId(menuId === e.id ? null : e.id)}

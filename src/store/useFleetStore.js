@@ -31,7 +31,7 @@ import { api, API_ENABLED, normalizeVehicle, normalizeDriver } from '../services
 
 /* ---------- normalizers: DynamoDB items -> UI shapes ---------- */
 const nEmg = (i) => ({ id: i.id, kind: i.kind || 'medical', pickup: i.pickup?.ref, caseType: i.case_type, severity: i.severity,
-  state: i.status, createdAt: i.created_at, ambulanceId: i.assigned_vehicle_id || null,
+  state: i.status, createdAt: i.created_at, updatedAt: i.updated_at || null, ambulanceId: i.assigned_vehicle_id || null,
   driverId: i.assigned_driver_id || null, hospitalId: i.hospital_id || null, requestedBy: i.requested_by || null,
   incidentId: i.incident_id || null, patientsCount: i.patients_count || 1, note: i.note || null,
   bloodBankId: i.blood_bank_id || null,

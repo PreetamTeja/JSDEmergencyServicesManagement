@@ -31,6 +31,14 @@ const CONFIGS = {
     outFile: 'JSD-Smoke-Test-Report.pdf',
     favicon: '🔥',
   },
+  mcp: {
+    resultsFile: 'mcp-results.json',
+    title: 'MCP Protocol Test Report',
+    subtitle: 'Direct JSON-RPC protocol testing of the jsd-cloudwatch MCP server — not browser automation',
+    tool: 'Node child_process + line-delimited JSON-RPC over stdio (the same transport Claude Code itself uses)',
+    outFile: 'JSD-MCP-Test-Report.pdf',
+    favicon: '🔌',
+  },
 }
 
 function escapeHtml(s) {

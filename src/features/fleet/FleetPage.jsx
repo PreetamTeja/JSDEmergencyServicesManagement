@@ -264,7 +264,7 @@ function Vehicles() {
                             onMouseEnter={ev => ev.currentTarget.style.background = 'rgba(7,81,77,0.15)'}
                             onMouseLeave={ev => ev.currentTarget.style.background = 'rgba(7,81,77,0.08)'}>Locate</button>
                           {v.status !== 'maintenance'
-                            ? <button onClick={() => setVehicleStatus(v.id, 'maintenance')} disabled={v.status === 'enroute'}
+                            ? <button onClick={() => { if (window.confirm(`Take ${v.reg} out of service for maintenance? It will be removed from the dispatchable pool.`)) setVehicleStatus(v.id, 'maintenance') }} disabled={v.status === 'enroute'}
                                 className="h-6 px-2 rounded-lg text-[10px] font-medium disabled:opacity-40 transition-colors"
                                 style={{ background: 'rgba(217,119,6,0.08)', color: '#d97706' }}
                                 onMouseEnter={ev => !ev.currentTarget.disabled && (ev.currentTarget.style.background = 'rgba(217,119,6,0.15)')}

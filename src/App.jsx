@@ -52,7 +52,10 @@ export default function App() {
   // token expiry — this app has no silent-refresh path, so the alternative
   // would be yanking them mid-task, which is worse.
   const onSessionExpire = useCallback(() => { clearLocalSession(); setSession(null) }, [])
-  useSessionGuard(onSessionExpire)
+  const [idleWarning, setIdleWarning] = useState(false)
+  const onIdleWarning = useCallback(() => setIdleWarning(true), [])
+  const { extendSession } = useSessionGuard(onSessionExpire, onIdleWarning)
+  const staySignedIn = () => { extendSession(); setIdleWarning(false) }
 
   useEffect(() => { if (!IS_TRACK) init() }, [init])
   useEffect(() => {
@@ -97,9 +100,34 @@ export default function App() {
   )
   if (!ready) return <BootScreen />
 
-  const signOut = () => { logout(); setSession(getSession()) }
-  if (session.role === 'user') return <UserPortal session={session} onSignOut={signOut} />
-  return <Console session={session} onSignOut={signOut} />
+  const signOut = () => { if (window.confirm('Sign out?')) { logout(); setSession(getSession()) } }
+  return (
+    <>
+      {session.role === 'user'
+        ? <UserPortal session={session} onSignOut={signOut} />
+        : <Console session={session} onSignOut={signOut} />}
+      {idleWarning && <IdleWarningToast onStay={staySignedIn} onSignOut={signOut} />}
+    </>
+  )
+}
+
+// Warns ~1 minute before the idle-timeout auto-signs-out, so a dispatcher who
+// stepped away (or is mid-form) gets a chance to notice and stay signed in
+// instead of silently losing their session and any unsaved state.
+function IdleWarningToast({ onStay, onSignOut }) {
+  return (
+    <div className="fixed bottom-5 right-5 z-[2000] bg-white rounded-2xl p-4 pr-5 flex items-center gap-3 boot-in"
+      style={{ boxShadow: '0 12px 40px rgba(0,0,0,0.22)', border: '1px solid #E5E7EB', maxWidth: 380 }}>
+      <div className="h-9 w-9 rounded-xl grid place-items-center shrink-0" style={{ background: 'rgba(217,119,6,0.1)', color: '#d97706' }}>
+        <Icon name="clock" size={18} strokeWidth={1.9} />
+      </div>
+      <div className="flex-1 min-w-0">
+        <div className="text-[13px] font-semibold text-[#0C1322]">You'll be signed out soon</div>
+        <div className="text-[12px] text-cmd-muted">No activity detected for a while.</div>
+      </div>
+      <button onClick={onStay} className="btn-primary h-8 px-3 text-[12px] shrink-0">Stay signed in</button>
+    </div>
+  )
 }
 
 // Branded boot screen shown while live data loads — dispatch radar sweep.

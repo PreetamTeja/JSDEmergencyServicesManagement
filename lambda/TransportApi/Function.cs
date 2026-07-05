@@ -139,6 +139,18 @@ public class Function
                 var token = QS(request, "t") ?? QS(request, "token");
                 if (item == null || Str(item, "entity") != "EMG" || string.IsNullOrEmpty(Str(item, "track_token")) || token != Str(item, "track_token"))
                     return ErrResp(404, "NOT_FOUND", "tracking link invalid or expired", corsHeaders);
+                // A shareable public link with no login has no business staying valid
+                // forever — once the response is finished, give family/requester a
+                // short window to see the final status (e.g. "arrived"), then expire
+                // it so a forwarded/screenshotted link can't keep exposing someone's
+                // emergency status indefinitely.
+                var trackStatus = Str(item, "status");
+                if (trackStatus is "COMPLETED" or "CANCELLED")
+                {
+                    var finishedAt = DateTime.TryParse(Str(item, "updated_at"), null, System.Globalization.DateTimeStyles.RoundtripKind, out var u) ? u : (DateTime?)null;
+                    if (finishedAt != null && DateTime.UtcNow - finishedAt.Value > TimeSpan.FromMinutes(30))
+                        return ErrResp(404, "NOT_FOUND", "tracking link invalid or expired", corsHeaders);
+                }
                 var refData = await LoadRef();
                 var pt = ResolvePickup(refData, GetObj(item, "pickup"));
                 var veh = !string.IsNullOrEmpty(Str(item, "assigned_vehicle_id"))

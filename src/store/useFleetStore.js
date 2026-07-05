@@ -8,10 +8,18 @@ import { vehicleHomePos } from '../services/dispatchService'
 
 // Pick the fastest *traffic-adjusted* route among OSRM alternatives (reroute around jams).
 // Returns geometry + free-flow + traffic-adjusted minutes + the average congestion factor.
+// Alternatives more than 1.4x the shortest option's raw distance are excluded from
+// consideration first — the simulated traffic factor is a noisy random walk, not real
+// data, so without this cap a genuinely long detour can occasionally "win" purely by
+// chance, producing a route that looks obviously wrong on the live map.
+const MAX_DETOUR_RATIO = 1.4
 async function bestLeg(a, b) {
   const alts = await getRouteAlternatives([a, b])
+  const shortestKm = Math.min(...alts.map((r) => r.distanceKm))
+  const reasonable = alts.filter((r) => r.distanceKm <= shortestKm * MAX_DETOUR_RATIO)
+  const pool = reasonable.length ? reasonable : alts
   let best = null, bestAdj = Infinity, bestFactor = 1
-  for (const r of alts) {
+  for (const r of pool) {
     const f = factorForPath(r.coordinates)
     const adj = r.durationMin * f
     if (adj < bestAdj) { bestAdj = adj; best = r; bestFactor = f }

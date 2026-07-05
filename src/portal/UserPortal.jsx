@@ -53,7 +53,7 @@ export default function UserPortal({ session, onSignOut }) {
   const mine = useMemo(
     () => [...emergencies].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)),
     [emergencies])
-  const LIVE_STATES = ['EN_ROUTE', 'QUEUED', 'NO_HOSPITAL']
+  const LIVE_STATES = ['EN_ROUTE', 'QUEUED', 'NO_HOSPITAL', 'NO_BLOODBANK']
   const activeMine = mine.filter((e) => LIVE_STATES.includes(e.state))
   const completedMine = mine.filter((e) => !LIVE_STATES.includes(e.state))
   const shownReqs = reqTab === 'live' ? activeMine : completedMine
@@ -212,7 +212,7 @@ const STEPS = ['Requested', 'Unit assigned', 'En route', 'Arrived']
 function stepIndex(state) {
   if (state === 'COMPLETED') return 3
   if (state === 'EN_ROUTE') return 2
-  if (state === 'QUEUED' || state === 'NO_HOSPITAL') return 0
+  if (state === 'QUEUED' || state === 'NO_HOSPITAL' || state === 'NO_BLOODBANK') return 0
   return 0
 }
 function RequestCard({ e, vehicles, onCancel }) {
@@ -221,7 +221,7 @@ function RequestCard({ e, vehicles, onCancel }) {
   const accent = isF ? '#ea580c' : '#07514D'
   const veh = vehicles.find((v) => v.id === e.ambulanceId)
   const cancelled = e.state === 'CANCELLED'
-  const canCancel = ['EN_ROUTE', 'QUEUED', 'NO_HOSPITAL'].includes(e.state)
+  const canCancel = ['EN_ROUTE', 'QUEUED', 'NO_HOSPITAL', 'NO_BLOODBANK'].includes(e.state)
   const [cancelling, setCancelling] = useState(false)
   async function doCancel() {
     if (!window.confirm(`Cancel ${isF ? 'fire truck' : 'ambulance'} for ${e.id}?`)) return
@@ -272,8 +272,12 @@ function RequestCard({ e, vehicles, onCancel }) {
           )}
         </>
       )}
-      {(e.state === 'QUEUED' || e.state === 'NO_HOSPITAL') && (
-        <div className="mt-3 text-xs text-status-maint">{e.state === 'NO_HOSPITAL' ? 'Finding the nearest available hospital…' : 'Finding the nearest available unit…'}</div>
+      {(e.state === 'QUEUED' || e.state === 'NO_HOSPITAL' || e.state === 'NO_BLOODBANK') && (
+        <div className="mt-3 text-xs text-status-maint">
+          {e.state === 'NO_HOSPITAL' ? 'No hospital with the right specialty is free right now — still searching, your request stays queued.'
+            : e.state === 'NO_BLOODBANK' ? 'No blood bank is available right now — still searching, your request stays queued.'
+            : 'Finding the nearest available unit…'}
+        </div>
       )}
 
       {canCancel && (
@@ -411,7 +415,7 @@ const TypeTile = ({ active, onClick, label, color }) => (
 function StatusChip({ state, isFire }) {
   const map = {
     EN_ROUTE: ['#16a34a', 'On the way'], COMPLETED: ['#64748b', isFire ? 'Cleared' : 'Arrived'],
-    QUEUED: ['#d97706', 'Waiting for a unit'], NO_HOSPITAL: ['#dc2626', 'Finding hospital'], CANCELLED: ['#94a3b8', 'Cancelled'],
+    QUEUED: ['#d97706', 'Waiting for a unit'], NO_HOSPITAL: ['#dc2626', 'Finding hospital'], NO_BLOODBANK: ['#dc2626', 'Finding blood bank'], CANCELLED: ['#94a3b8', 'Cancelled'],
   }
   const [c, t] = map[state] || ['#64748b', state]
   return <span className="px-2 py-0.5 rounded-full text-xs font-medium" style={{ background: `${c}22`, color: c }}>{t}</span>

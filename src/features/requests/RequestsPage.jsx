@@ -105,6 +105,7 @@ export default function DispatchBoard() {
   async function bulkCancelSelected() {
     const targets = [...selected].filter((id) => emergencies.find((e) => e.id === id)?.state === 'EN_ROUTE')
     if (!targets.length) return
+    if (!window.confirm(`Cancel ${targets.length} active dispatch${targets.length > 1 ? 'es' : ''}?\n\n${targets.join(', ')}\n\nThis recalls the assigned unit(s) — this cannot be undone.`)) return
     setBulkBusy(true)
     for (const id of targets) { try { await cancelRequest(id) } catch {} }
     setBulkBusy(false)
@@ -184,7 +185,12 @@ export default function DispatchBoard() {
   useEffect(() => { if (page > pageCount - 1) setPage(Math.max(0, pageCount - 1)) }, [pageCount, page])
   const pagedRows = useMemo(() => rows.slice(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE), [rows, page])
 
-  async function onCancel(id) { setMenuId(null); setBusy(id); try { await cancelRequest(id) } finally { setBusy(null) } }
+  async function onCancel(id) {
+    setMenuId(null)
+    if (!window.confirm(`Cancel dispatch ${id}? This recalls the assigned unit — this cannot be undone.`)) return
+    setBusy(id)
+    try { await cancelRequest(id) } finally { setBusy(null) }
+  }
 
   return (
     <div className="flex flex-col h-full page-enter" style={{ background: '#F7F4EF' }}>

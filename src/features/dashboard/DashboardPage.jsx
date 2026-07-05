@@ -1,4 +1,5 @@
 import React, { useMemo, useState, useEffect, useRef } from 'react'
+import { useNavigate } from 'react-router-dom'
 import {
   PieChart, Pie, Cell, ResponsiveContainer, Tooltip, BarChart, Bar, XAxis, YAxis,
   LineChart, Line, CartesianGrid, Legend,
@@ -27,6 +28,7 @@ const TIP = {
 }
 
 export default function DashboardPage() {
+  const navigate = useNavigate()
   const emergencies = useFleetStore((s) => s.emergencies)
   const vehicles = useFleetStore((s) => s.vehicles)
   const hospitals = useFleetStore((s) => s.hospitals)
@@ -78,13 +80,17 @@ export default function DashboardPage() {
         {/* ── KPI cards (neomorphic) ── */}
         <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
           <NeoKpi icon="activity" label="Total responses" value={m.total}
-            sub={`${m.todayCount} today · ${m.yesterdayCount} yesterday`} spark={m.totalSpark} />
-          <NeoKpi icon="pulse" label="Active now" value={m.active} sub={`${m.queued} queued`} accentColor="#16a34a" />
+            sub={`${m.todayCount} today · ${m.yesterdayCount} yesterday`} spark={m.totalSpark}
+            onClick={() => navigate('/requests')} />
+          <NeoKpi icon="pulse" label="Active now" value={m.active} sub={`${m.queued} queued`} accentColor="#16a34a"
+            onClick={() => navigate('/requests')} />
           <NeoKpi icon="clock" label="Avg response" value={m.avgResp} format={(v) => `${v.toFixed(1)}m`}
             sub={`target ≤ ${respTarget}m ${respOk ? '✓ on track' : '· over'}`}
-            accentColor={respOk ? '#16a34a' : '#d97706'} spark={m.respSpark} />
+            accentColor={respOk ? '#16a34a' : '#d97706'} spark={m.respSpark}
+            onClick={() => navigate('/requests')} />
           <NeoKpi icon="route" label="Avg trip" value={m.avgTrip} format={(v) => `${v.toFixed(1)}m`} sub="end to end" />
-          <NeoKpi icon="truck" label="Fleet in use" value={m.utilPct} format={(v) => `${Math.round(v)}%`} sub={`${m.enroute}/${m.fleetTotal} units`} accentColor="#d97706" />
+          <NeoKpi icon="truck" label="Fleet in use" value={m.utilPct} format={(v) => `${Math.round(v)}%`} sub={`${m.enroute}/${m.fleetTotal} units`} accentColor="#d97706"
+            onClick={() => navigate('/fleet')} />
         </div>
 
         {/* ── Row 1 ── */}
@@ -96,7 +102,7 @@ export default function DashboardPage() {
 
         {/* ── Row 2 ── */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-          <NeoCard title="Responses by zone"><Bars data={m.byZone} color={RAMP[1]} /></NeoCard>
+          <NeoCard title="Responses by zone"><Bars data={m.byZone} color={RAMP[1]} onBarClick={(d) => navigate(`/requests?q=${encodeURIComponent(d.name)}`)} /></NeoCard>
           <NeoCard title="Responses over time · 14 days">
             <ResponsiveContainer width="100%" height={210}>
               <LineChart data={m.overTime} margin={{ left: -20, top: 6, right: 6 }}>
@@ -149,7 +155,8 @@ export default function DashboardPage() {
                   const veh = vehicles.find((v) => v.id === e.ambulanceId)
                   const sevColor = SEVERITY_META[e.severity]?.color || '#6B7280'
                   return (
-                    <tr key={e.id} className="transition-colors hover:bg-[rgba(7,81,77,0.03)]" style={{ borderBottom: '1px solid rgba(0,0,0,0.04)' }}>
+                    <tr key={e.id} onClick={() => navigate(`/requests?q=${encodeURIComponent(e.id)}`)}
+                      className="transition-colors cursor-pointer hover:bg-[rgba(7,81,77,0.03)]" style={{ borderBottom: '1px solid rgba(0,0,0,0.04)' }}>
                       <td className="py-2.5 font-semibold text-[#0C1322]">{e.id}</td>
                       <td><span className="px-2.5 py-1 rounded-full text-[11px] font-semibold" style={{ background: isFire ? '#FEF0E6' : '#E6F0EE', color: isFire ? KIND.fire : KIND.medical }}>{isFire ? 'Fire' : e.caseType || 'Medical'}</span></td>
                       <td><span className="px-2.5 py-1 rounded-full text-[11px] font-semibold" style={{ background: `${sevColor}14`, color: sevColor }}>{e.severity}</span></td>
@@ -372,11 +379,13 @@ function Spark({ data, color = '#07514D' }) {
   )
 }
 
-function NeoKpi({ icon, label, value, sub, accentColor, format, spark, sparkColor }) {
+function NeoKpi({ icon, label, value, sub, accentColor, format, spark, sparkColor, onClick }) {
   const animated = useCountUp(typeof value === 'number' ? value : 0)
   const shown = typeof value === 'number' ? (format ? format(animated) : Math.round(animated)) : value
   return (
-    <div className="p-5 flex flex-col gap-3 card-lift" style={CARD}>
+    <div className={`p-5 flex flex-col gap-3 card-lift ${onClick ? 'cursor-pointer' : ''}`} style={CARD}
+      onClick={onClick} role={onClick ? 'button' : undefined} tabIndex={onClick ? 0 : undefined}
+      onKeyDown={onClick ? (e) => { if (e.key === 'Enter' || e.key === ' ') onClick() } : undefined}>
       <div className="flex items-center justify-between">
         <span className="text-[11px] uppercase tracking-widest font-semibold" style={{ color: '#6B7280' }}>{label}</span>
         <div className="h-8 w-8 rounded-xl grid place-items-center"
@@ -430,8 +439,9 @@ function Donut({ data }) {
     </>
   )
 }
-function Bars({ data, color, vertical }) {
+function Bars({ data, color, vertical, onBarClick }) {
   if (!data.length || data.every((d) => !d.value)) return <Empty />
+  const barProps = onBarClick ? { onClick: (entry) => onBarClick(entry), cursor: 'pointer' } : {}
   if (vertical) {
     return (
       <ResponsiveContainer width="100%" height={210}>
@@ -439,7 +449,7 @@ function Bars({ data, color, vertical }) {
           <XAxis type="number" allowDecimals={false} hide />
           <YAxis dataKey="name" type="category" width={110} tickLine={false} axisLine={false} tick={{ fontSize: 11, fill: '#4B5552' }} />
           <Tooltip {...TIP} />
-          <Bar dataKey="value" fill={color || RAMP[0]} />
+          <Bar dataKey="value" fill={color || RAMP[0]} {...barProps} />
         </BarChart>
       </ResponsiveContainer>
     )
@@ -451,7 +461,7 @@ function Bars({ data, color, vertical }) {
         <XAxis dataKey="name" tickLine={false} axisLine={{ stroke: GRID }} tick={{ fontSize: 11, fill: AXIS }} />
         <YAxis allowDecimals={false} tickLine={false} axisLine={false} tick={{ fontSize: 11, fill: AXIS }} />
         <Tooltip {...TIP} />
-        <Bar dataKey="value">
+        <Bar dataKey="value" {...barProps}>
           {data.map((d, i) => <Cell key={i} fill={d.color || color || RAMP[0]} />)}
         </Bar>
       </BarChart>

@@ -16,7 +16,7 @@ import InfraHealthPage from './features/admin/InfraHealthPage'
 import InsightsPage from './features/insights/InsightsPage'
 import Icon from './components/common/Icon'
 import CommandPalette from './components/common/CommandPalette'
-import ExplodeLogo from './components/common/ExplodeLogo'
+import BootScreen from './components/common/BootScreen'
 
 // Public shareable tracking links bypass auth + the authed data load entirely.
 const IS_TRACK = typeof window !== 'undefined' && window.location.pathname.startsWith('/track/')
@@ -159,41 +159,6 @@ function IdleWarningToast({ onStay, onSignOut }) {
 // background via login()'s window.location.href assignment.
 function SessionExpiredScreen() {
   return <BootScreen message="Session expired, redirecting…" />
-}
-
-// Branded boot screen shown while live data loads — dispatch radar sweep.
-export function BootScreen({ message = 'Connecting to live operations…' }) {
-  const bg = 'linear-gradient(160deg,#05201E 0%,#083F3B 55%,#0B5A55 100%)'
-  return (
-    <div className="h-screen w-full grid place-items-center text-white on-dark" style={{ background: bg }}>
-      <div className="boot-in flex flex-col items-center text-center px-6">
-        <div className="mb-4"><ExplodeLogo size={56} /></div>
-        <div className="text-[22px] font-bold tracking-tight">JSD Emergency Services</div>
-        <div className="text-[13px] mb-8" style={{ color: 'rgba(214,223,39,0.8)' }}>Tata Steel · Jamshedpur</div>
-
-        <BootRadar />
-
-        <div className="mt-8 text-[13px] boot-pulse" style={{ color: 'rgba(255,255,255,0.78)' }}>{message}</div>
-        <div className="mt-3 h-1 w-44 rounded-full overflow-hidden" style={{ background: 'rgba(255,255,255,0.14)' }}>
-          <div className="boot-bar h-full w-2/5 rounded-full" style={{ background: '#D6DF27' }} />
-        </div>
-      </div>
-    </div>
-  )
-}
-
-function BootRadar() {
-  return (
-    <div className="relative h-24 w-24 rounded-full shrink-0" style={{ border: '1px solid rgba(255,255,255,0.3)' }}>
-      <div className="absolute inset-3 rounded-full" style={{ border: '1px solid rgba(255,255,255,0.18)' }} />
-      <div className="absolute inset-6 rounded-full" style={{ border: '1px solid rgba(255,255,255,0.12)' }} />
-      <div className="absolute inset-0 rounded-full radar-sweep"
-        style={{ background: 'conic-gradient(from 0deg, rgba(214,223,39,0.55), transparent 75deg)' }} />
-      <span className="absolute h-1.5 w-1.5 rounded-full" style={{ top: '30%', left: '62%', background: '#D6DF27' }} />
-      <span className="absolute h-1.5 w-1.5 rounded-full" style={{ top: '64%', left: '34%', background: '#D6DF27', opacity: 0.7 }} />
-      <span className="absolute h-1 w-1 rounded-full" style={{ top: '48%', left: '48%', background: '#fff', opacity: 0.8 }} />
-    </div>
-  )
 }
 
 // Reached only when there's no SSO token. Normally users arrive from the

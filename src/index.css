@@ -136,10 +136,39 @@ aside :focus-visible, .on-dark :focus-visible { outline-color: #D6DF27; }
 @keyframes explodeMarkIn { from { opacity: 0; transform: scale(0.85); } to { opacity: 1; transform: scale(1); } }
 .explode-mark { animation: explodeMarkIn 350ms ease-out 650ms both; }
 
+/* Vehicle-segment reveal (ambulance/fire truck in VehicleReveal.jsx): each
+   <g> segment pops in from a slightly-shrunk, transparent state with a
+   small overshoot, staggered by the --i custom property so the vehicle
+   visibly assembles part by part (wheels, cab, body, ladder, ...). */
+@keyframes segAssemble {
+  0% { opacity: 0; transform: scale(0.4); }
+  70% { opacity: 1; }
+  100% { opacity: 1; transform: scale(1); }
+}
+.reveal-seg {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: segAssemble 480ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
+  animation-delay: calc(var(--i) * 90ms);
+}
+
+/* Hose-reel loading indicator: the ring "winds closed" from a full gap
+   (fully unspooled) down to a solid circle, while slowly rotating —
+   read as a fire hose reeling back in as the app connects. */
+@keyframes hoseReelClose {
+  from { stroke-dasharray: 4 var(--circ); stroke-dashoffset: 0; }
+  to { stroke-dasharray: var(--circ) 0; stroke-dashoffset: 0; }
+}
+@keyframes hoseReelSpin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+.hose-reel-spin { animation: hoseReelSpin 2.6s linear infinite; }
+.hose-reel-arc { animation: hoseReelClose 1.6s cubic-bezier(0.4, 0, 0.2, 1) 400ms both; }
+
 @media (prefers-reduced-motion: reduce) {
-  .ekg-line, .boot-pulse, .boot-beacon, .boot-bar, .radar-sweep, .row-flash, .page-enter, .drawer-panel, .drawer-overlay, .explode-shard, .explode-mark { animation: none; }
+  .ekg-line, .boot-pulse, .boot-beacon, .boot-bar, .radar-sweep, .row-flash, .page-enter, .drawer-panel, .drawer-overlay, .explode-shard, .explode-mark, .reveal-seg, .hose-reel-spin, .hose-reel-arc { animation: none; }
   .card-lift, .card-lift:hover { transform: none; transition: none; }
   .explode-mark { opacity: 1; }
+  .reveal-seg { opacity: 1; transform: scale(1); }
+  .hose-reel-arc { stroke-dasharray: var(--circ) 0; }
 }
 
 .vehicle-marker { transition: transform 0.9s linear; }

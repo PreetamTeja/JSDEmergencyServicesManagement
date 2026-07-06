@@ -8,6 +8,7 @@ import LiveEta from '../components/common/LiveEta'
 import Icon from '../components/common/Icon'
 import VoiceAgent from './VoiceAgent'
 import MapControls from '../components/common/MapControls'
+import BootScreen from '../components/common/BootScreen'
 
 const LIGHT_TILES = 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png'
 
@@ -94,7 +95,7 @@ export default function UserPortal({ session, onSignOut }) {
           </div>
         </div>
       ) : !ready ? (
-        <LoadingState />
+        <div className="flex-1 min-h-0"><BootScreen /></div>
       ) : (
         <div className="flex-1 flex flex-col lg:flex-row overflow-hidden">
           {/* LEFT — booking + your requests (scrollable) */}
@@ -303,18 +304,6 @@ function EmptyRequests({ tab }) {
     <div className="py-10 text-center">
       <div className="text-sm font-medium text-cmd-text">{tab === 'completed' ? 'Nothing completed yet' : 'No active requests'}</div>
       <div className="text-xs text-cmd-muted mt-1">{tab === 'completed' ? 'Finished trips will show up here.' : 'Tap “Call for help” or use the form to dispatch a unit.'}</div>
-    </div>
-  )
-}
-
-function LoadingState() {
-  return (
-    <div className="flex-1 w-full max-w-5xl mx-auto p-6 space-y-6">
-      <div className="h-32 rounded-2xl bg-cmd-border/50 animate-pulse" />
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div className="h-96 rounded-xl bg-cmd-border/50 animate-pulse" />
-        <div className="h-96 rounded-xl bg-cmd-border/50 animate-pulse" />
-      </div>
     </div>
   )
 }

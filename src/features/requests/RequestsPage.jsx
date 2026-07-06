@@ -73,6 +73,7 @@ export default function DispatchBoard() {
   }, [params, setParams])
   const [busy, setBusy] = useState(null)
   const [override, setOverride] = useState(null)
+  const [timelineEm, setTimelineEm] = useState(null)
   const [menuId, setMenuId] = useState(null)
   const cleared = useFleetStore((s) => s.clearedIds)
   const setClearedIds = useFleetStore((s) => s.setClearedIds)
@@ -320,15 +321,23 @@ export default function DispatchBoard() {
       {/* ── Dense table ── */}
       <div className="flex-1 overflow-auto px-6 pb-6 flex flex-col">
         <div className="card-static" style={{ background: 'rgba(255,255,255,0.92)', borderRadius: '16px', border: '1px solid rgba(0,0,0,0.05)' }}>
-          {/* With 12 columns this table is wider than most viewports at normal
-              zoom — scroll it horizontally within its own rounded card rather
-              than letting the outer overflow-hidden silently clip columns off
-              the right edge (which read as "the table doesn't fit"). */}
-          <div className="overflow-x-auto rounded-2xl">
-          <table className="w-full text-[13px]">
+          {/* Fixed proportional column widths (colgroup + table-fixed) instead
+              of letting content dictate width — this is what guarantees
+              everything fits in one page with no horizontal scroll,
+              regardless of how long a pickup/destination name is (they just
+              truncate, with the full value still on hover via title=). Type
+              is folded into the Severity cell and Crew into the Unit cell to
+              cut two columns entirely. */}
+          <table className="w-full text-[13px]" style={{ tableLayout: 'fixed' }}>
+            <colgroup>
+              <col style={{ width: '4%' }} /><col style={{ width: '11%' }} /><col style={{ width: '13%' }} />
+              <col style={{ width: '8%' }} /><col style={{ width: '14%' }} /><col style={{ width: '14%' }} />
+              <col style={{ width: '11%' }} /><col style={{ width: '13%' }} /><col style={{ width: '8%' }} />
+              <col style={{ width: '4%' }} />
+            </colgroup>
             <thead>
               <tr style={{ borderBottom: '1px solid rgba(0,0,0,0.06)' }}>
-                <th className="px-4 py-3 w-10">
+                <th className="px-4 py-3">
                   <input type="checkbox" aria-label="Select all on this page"
                     checked={pagedRows.length > 0 && pagedRows.every((e) => selected.has(e.id))}
                     onChange={(ev) => {
@@ -339,19 +348,15 @@ export default function DispatchBoard() {
                       })
                     }} className="rounded" />
                 </th>
-                {/* ETA moved right after Severity — with 11 data columns the
-                    table is wider than most viewports, and ETA is the one
-                    time-critical value a dispatcher needs without having to
-                    scroll right to find it. */}
-                {['ID / Time', 'Type', 'Severity', 'ETA', 'Pickup', 'Unit', 'Crew', 'Destination', 'Progress', 'Status', ''].map((h) => (
-                  <th key={h} className="text-left font-semibold px-4 py-3"
-                    style={{ fontSize: '10.5px', letterSpacing: '0.06em', color: '#6B7280', textTransform: 'uppercase', ...(h === 'ID / Time' ? { width: '120px' } : {}) }}>{h}</th>
+                {['ID / Time', 'Severity', 'ETA', 'Pickup', 'Unit', 'Destination', 'Progress', 'Status', ''].map((h) => (
+                  <th key={h} className="text-left font-semibold px-4 py-3 truncate"
+                    style={{ fontSize: '10.5px', letterSpacing: '0.06em', color: '#6B7280', textTransform: 'uppercase' }}>{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
               {rows.length === 0 && (
-                <tr><td colSpan={12} className="px-4 py-12 text-center text-[13px]" style={{ color: '#6B7280' }}>
+                <tr><td colSpan={10} className="px-4 py-12 text-center text-[13px]" style={{ color: '#6B7280' }}>
                   <div>No responses match {q ? 'this search' : 'this filter'}.</div>
                   {(q || filter !== 'all') && (
                     <button onClick={() => { setQ(''); setFilter('all') }}
@@ -372,6 +377,7 @@ export default function DispatchBoard() {
                 const time = isNaN(t) ? '' : t.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
                 const typeColor = isFire ? '#ea580c' : isBlood ? '#b91c1c' : '#2563eb'
                 const isNew = !seenRef.current.has(e.id)
+                const driverName = drivers.find((d) => d.id === veh?.driverId)?.name
                 return (
                   <tr key={e.id} className={`align-middle group transition-colors hover:bg-[rgba(7,81,77,0.03)] ${isNew ? 'row-flash' : ''}`}
                     style={{ borderBottom: '1px solid rgba(0,0,0,0.04)' }}>
@@ -380,24 +386,24 @@ export default function DispatchBoard() {
                         onChange={() => toggleSelected(e.id)} className="rounded" />
                     </td>
                     <td className="px-4 py-3.5">
-                      <div className="font-bold text-[#0C1322] flex items-center gap-1.5">
+                      <div className="font-bold text-[#0C1322] flex items-center gap-1.5 truncate">
                         {e.id}
-                        {e.incidentId && <span className="px-1.5 py-0.5 rounded-full text-[9.5px] font-bold" style={{ background: '#fee2e2', color: '#dc2626' }}>MCI</span>}
-                        {e.patientsCount > 1 && !isBlood && <span className="px-1.5 py-0.5 rounded-full text-[9.5px] font-bold" style={{ background: '#eef2ff', color: '#4338ca' }}>{e.patientsCount}p</span>}
+                        {e.incidentId && <span className="px-1.5 py-0.5 rounded-full text-[9.5px] font-bold shrink-0" style={{ background: '#fee2e2', color: '#dc2626' }}>MCI</span>}
+                        {e.patientsCount > 1 && !isBlood && <span className="px-1.5 py-0.5 rounded-full text-[9.5px] font-bold shrink-0" style={{ background: '#eef2ff', color: '#4338ca' }}>{e.patientsCount}p</span>}
                       </div>
                       <div className="text-[11px] mt-0.5" style={{ color: '#6B7280' }}>{time}</div>
                     </td>
                     <td className="px-4 py-3.5">
-                      <span className="h-8 w-8 rounded-xl grid place-items-center"
-                        style={{ background: `${typeColor}12`, color: typeColor }}>
-                        <Icon name={isFire ? 'flame' : isBlood ? 'droplet' : 'medical'} size={16} />
-                      </span>
-                    </td>
-                    <td className="px-4 py-3.5">
-                      <span className="inline-flex items-center gap-1.5 text-[13px] font-medium" style={{ color: sev?.color || '#6B7280' }}>
-                        <span className="h-2.5 w-2.5 rounded-full shrink-0" style={{ background: sev?.color }} />
-                        {(!isFire && !isBlood && e.caseType) ? e.caseType : e.severity}
-                      </span>
+                      <div className="flex items-center gap-1.5">
+                        <span className="h-6 w-6 rounded-lg grid place-items-center shrink-0"
+                          style={{ background: `${typeColor}12`, color: typeColor }}>
+                          <Icon name={isFire ? 'flame' : isBlood ? 'droplet' : 'medical'} size={12} />
+                        </span>
+                        <span className="inline-flex items-center gap-1.5 text-[13px] font-medium truncate" style={{ color: sev?.color || '#6B7280' }}>
+                          <span className="h-2.5 w-2.5 rounded-full shrink-0" style={{ background: sev?.color }} />
+                          <span className="truncate">{(!isFire && !isBlood && e.caseType) ? e.caseType : e.severity}</span>
+                        </span>
+                      </div>
                     </td>
                     <td className="px-4 py-3.5 font-semibold text-[13px] whitespace-nowrap" style={{ color: '#07514D' }}>
                       {e.state === 'EN_ROUTE' ? <LiveEta etaComplete={e.etaComplete} fallbackMin={e.etaToPickupMin} />
@@ -405,21 +411,21 @@ export default function DispatchBoard() {
                           <span title="Total time from request to arrival">{completedDurationLabel(e) || '—'}</span>
                         ) : <span className="text-[#6B7280] font-normal">—</span>}
                     </td>
-                    <td className="px-4 py-3.5 max-w-[160px]">
+                    <td className="px-4 py-3.5">
                       <div className="truncate text-[#374151]" title={pickupLabel(e)}>{pickupLabel(e) || '—'}</div>
                     </td>
-                    <td className="px-4 py-3.5 whitespace-nowrap">
+                    <td className="px-4 py-3.5">
                       {veh ? (
-                        <span className="font-mono text-[12px] font-semibold text-[#0C1322]">{veh.reg}</span>
+                        <>
+                          <div className="font-mono text-[12px] font-semibold text-[#0C1322] truncate">{veh.reg}</div>
+                          {driverName && <div className="text-[11px] truncate" style={{ color: '#6B7280' }}>{driverName}</div>}
+                        </>
                       ) : <span className="text-[#6B7280]">—</span>}
                     </td>
-                    <td className="px-4 py-3.5 max-w-[120px]">
-                      <div className="truncate text-[#374151]">{drivers.find((d) => d.id === veh?.driverId)?.name || '—'}</div>
-                    </td>
-                    <td className="px-4 py-3.5 max-w-[160px]">
+                    <td className="px-4 py-3.5">
                       <div className="truncate text-[#374151]" title={shortHospitalName(hosp?.name) || ''}>{isFire ? '—' : (shortHospitalName(hosp?.name) || '—')}</div>
                     </td>
-                    <td className="px-4 py-3.5 w-44"><ProgressBar e={e} now={now} /></td>
+                    <td className="px-4 py-3.5"><ProgressBar e={e} now={now} /></td>
                     <td className="px-4 py-3.5"><StatusChip state={e.state} /></td>
                     <td className="px-4 py-3.5 relative">
                       <button onClick={() => setMenuId(menuId === e.id ? null : e.id)}
@@ -428,7 +434,9 @@ export default function DispatchBoard() {
                       {menuId === e.id && (
                         <RowMenu e={e} busy={busy === e.id}
                           onOverride={() => { setMenuId(null); setOverride(e) }}
-                          onCancel={() => onCancel(e.id)} onClose={() => setMenuId(null)} />
+                          onCancel={() => onCancel(e.id)}
+                          onViewTimeline={() => { setMenuId(null); setTimelineEm(e) }}
+                          onClose={() => setMenuId(null)} />
                       )}
                     </td>
                   </tr>
@@ -436,7 +444,6 @@ export default function DispatchBoard() {
               })}
             </tbody>
           </table>
-          </div>
         </div>
         <div className="flex items-center justify-between mt-3 px-1 shrink-0">
           <div className="text-[12px]" style={{ color: '#6B7280' }}>
@@ -459,6 +466,7 @@ export default function DispatchBoard() {
       </div>
 
       {override && <OverrideModal em={override} onClose={() => setOverride(null)} />}
+      {timelineEm && <TimelineModal em={timelineEm} onClose={() => setTimelineEm(null)} />}
     </div>
   )
 }
@@ -471,10 +479,10 @@ function ProgressBar({ e, now }) {
   const queued = ATTENTION.includes(e.state)
   const color = cancelled ? '#CBD5E1' : done ? '#16a34a' : queued ? '#d97706' : (isFire ? '#ea580c' : '#07514D')
   return (
-    <div className="min-w-[130px]">
-      <div className="flex items-center justify-between mb-1.5">
-        <span className="text-[11px] font-semibold" style={{ color }}>{stageLabel(e)}</span>
-        {!cancelled && <span className="text-[11px]" style={{ color: '#6B7280' }}>{pct}%</span>}
+    <div className="w-full min-w-0">
+      <div className="flex items-center justify-between mb-1.5 gap-1">
+        <span className="text-[11px] font-semibold truncate" style={{ color }}>{stageLabel(e)}</span>
+        {!cancelled && <span className="text-[11px] shrink-0" style={{ color: '#6B7280' }}>{pct}%</span>}
       </div>
       <div className="h-1.5 rounded-full overflow-hidden" style={{ background: 'rgba(0,0,0,0.07)' }}>
         <div className={`h-full rounded-full transition-all duration-700 ease-out ${queued ? 'animate-pulse' : ''}`}
@@ -484,7 +492,7 @@ function ProgressBar({ e, now }) {
   )
 }
 
-function RowMenu({ e, busy, onOverride, onCancel, onClose }) {
+function RowMenu({ e, busy, onOverride, onCancel, onViewTimeline, onClose }) {
   const ref = useRef(null)
   useEffect(() => {
     const h = (ev) => { if (ref.current && !ref.current.contains(ev.target)) onClose() }
@@ -495,19 +503,105 @@ function RowMenu({ e, busy, onOverride, onCancel, onClose }) {
   return (
     <div ref={ref} className="absolute right-4 top-10 z-20 w-44 text-[13px] overflow-hidden"
       style={{ background: 'rgba(255,255,255,0.97)', borderRadius: '14px', boxShadow: '0 8px 32px rgba(0,0,0,0.14)', border: '1px solid rgba(0,0,0,0.06)' }}>
-      {enroute ? (
+      {enroute && (
         <>
           <button onClick={onOverride} className="w-full text-left px-4 py-2.5 font-medium transition-colors hover:bg-[rgba(7,81,77,0.05)]"
             style={{ color: '#07514D' }}>Override unit</button>
+          <div style={{ borderTop: '1px solid rgba(0,0,0,0.06)' }} />
+        </>
+      )}
+      <button onClick={onViewTimeline} className="w-full text-left px-4 py-2.5 font-medium transition-colors hover:bg-[rgba(7,81,77,0.05)]"
+        style={{ color: '#07514D' }}>View timeline</button>
+      {enroute && (
+        <>
           <div style={{ borderTop: '1px solid rgba(0,0,0,0.06)' }} />
           <button onClick={onCancel} disabled={busy} className="w-full text-left px-4 py-2.5 font-medium transition-colors disabled:opacity-50 hover:bg-[rgba(220,38,38,0.05)]"
             style={{ color: '#dc2626' }}>
             {busy ? 'Cancelling…' : 'Cancel dispatch'}
           </button>
         </>
-      ) : (
-        <div className="px-4 py-2.5 text-[#6B7280]">No actions available</div>
       )}
+    </div>
+  )
+}
+
+// Chronological milestones for a dispatch, derived from the fields the
+// client actually has (createdAt, updatedAt, computed ETAs) rather than a
+// dedicated event-history endpoint — the backend does write per-transition
+// EVT# audit rows (see Function.cs), but nothing currently exposes them to
+// the frontend, so intermediate steps without a real timestamp are labeled
+// "(estimated)" rather than presented as if they were logged events.
+function buildTimeline(em) {
+  const created = new Date(em.createdAt)
+  if (isNaN(created)) return []
+  const updated = em.updatedAt ? new Date(em.updatedAt) : null
+  const isFire = em.kind === 'fire'
+  const steps = [{ label: 'Requested', time: created, done: true }]
+
+  if (em.ambulanceId) {
+    steps.push({ label: isFire ? 'Fire truck assigned' : 'Ambulance assigned', time: created, done: true })
+  }
+
+  if (['EN_ROUTE', 'COMPLETED'].includes(em.state) && em.etaToPickupMin > 0) {
+    steps.push({
+      label: isFire ? 'Arrived at incident' : 'Arrived at pickup',
+      time: new Date(created.getTime() + em.etaToPickupMin * 60000),
+      done: em.state === 'COMPLETED', estimated: true,
+    })
+  }
+
+  if (em.state === 'COMPLETED') {
+    const real = updated && updated > created ? updated : null
+    steps.push({
+      label: isFire ? 'Cleared scene' : 'Arrived / handover complete',
+      time: real || new Date(created.getTime() + (em.totalEtaMin || 0) * 60000),
+      done: true, estimated: !real,
+    })
+  } else if (em.state === 'CANCELLED') {
+    steps.push({ label: 'Cancelled', time: updated || created, done: true })
+  } else if (['QUEUED', 'NO_HOSPITAL', 'NO_BLOODBANK'].includes(em.state)) {
+    steps.push({ label: em.state === 'QUEUED' ? 'Waiting for a unit' : 'Waiting for a facility', time: null, done: false, current: true })
+  } else if (em.state === 'EN_ROUTE') {
+    steps.push({ label: 'En route', time: null, done: false, current: true })
+  }
+
+  return steps
+}
+
+function TimelineModal({ em, onClose }) {
+  const steps = buildTimeline(em)
+  const fmt = (d) => d.toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ background: 'rgba(0,0,0,0.25)' }} onClick={onClose}>
+      <div className="w-[400px] rounded-2xl overflow-hidden" style={{ background: 'rgba(255,255,255,0.97)', boxShadow: '0 24px 64px rgba(0,0,0,0.2)' }}
+        onClick={(ev) => ev.stopPropagation()}>
+        <div className="px-5 py-4 flex items-center justify-between" style={{ borderBottom: '1px solid rgba(0,0,0,0.07)' }}>
+          <div>
+            <div className="text-[15px] font-bold text-[#0C1322]">Timeline · {em.id}</div>
+            <div className="text-[11px] text-[#6B7280]">Steps without a logged timestamp are estimated from policy ETAs.</div>
+          </div>
+          <button onClick={onClose} aria-label="Close"
+            className="h-8 w-8 rounded-xl grid place-items-center text-[#6B7280] hover:bg-[#E8E8EE] transition-colors shrink-0">
+            <Icon name="x" size={15} strokeWidth={2.2} />
+          </button>
+        </div>
+        <div className="px-5 py-4">
+          {steps.map((s, i) => (
+            <div key={i} className="flex gap-3">
+              <div className="flex flex-col items-center shrink-0">
+                <span className="h-3 w-3 rounded-full mt-0.5" style={{ background: s.done ? '#16a34a' : s.current ? '#d97706' : '#CBD5E1' }} />
+                {i < steps.length - 1 && <span className="w-px flex-1 my-0.5" style={{ background: '#E5E7EB' }} />}
+              </div>
+              <div className="pb-4 min-w-0">
+                <div className="text-[13px] font-semibold text-[#0C1322]">{s.label}</div>
+                <div className="text-[11.5px]" style={{ color: '#6B7280' }}>
+                  {s.time ? `${fmt(s.time)}${s.estimated ? ' (estimated)' : ''}` : 'Pending'}
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
     </div>
   )
 }

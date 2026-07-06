@@ -313,7 +313,13 @@ function Console({ session, onSignOut }) {
                 <div className="text-[13px] font-semibold truncate">{session?.name || 'Dispatcher'}</div>
                 <div className="text-[11px] text-cmd-muted">Control Room · admin</div>
               </div>
-              <PolicyControls />
+              <button onClick={() => { setMenuOpen(false); navigate('/dashboard') }}
+                className="w-full h-9 rounded-xl text-[13px] font-medium flex items-center justify-center gap-2 transition-colors hover:bg-[#EEEFF3]"
+                style={{ border: '1px solid #E5E7EB', color: '#07514D' }}>
+                <Icon name="dashboard" size={15} strokeWidth={1.8} />
+                Return to Dashboard
+              </button>
+              <div className="mt-3"><PolicyControls /></div>
               <button onClick={onSignOut}
                 className="mt-3 w-full h-9 rounded-xl text-[13px] font-medium flex items-center justify-center gap-2 transition-colors hover:bg-[#EEEFF3]"
                 style={{ border: '1px solid #E5E7EB', color: '#475467' }}>

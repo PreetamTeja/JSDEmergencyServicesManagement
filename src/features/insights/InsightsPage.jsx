@@ -151,8 +151,8 @@ function KpiRow({ kpis, staffing }) {
 
       {showBreakdown && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-4"
-          style={{ background: 'rgba(12,19,34,0.45)' }}
+          className="fixed inset-0 flex items-center justify-center p-4"
+          style={{ background: 'rgba(12,19,34,0.45)', zIndex: 5000 }}
           onClick={() => setShowBreakdown(false)}
         >
           <div
@@ -204,7 +204,7 @@ function KpiRow({ kpis, staffing }) {
 function HeatmapCard({ points, hotspot }) {
   const center = mapCenter()
   return (
-    <NeoCard title="Request heatmap" subtitle="Intensity of historical calls across Jamshedpur, by zone">
+    <NeoCard title="Request heatmap" subtitle="Intensity of historical calls across Jamshedpur, by pickup location">
       <div className="grid grid-cols-1 lg:grid-cols-[1fr_220px] gap-4">
         <div className="rounded-xl overflow-hidden relative" style={{ height: 340 }}>
           <MapContainer center={[center.lat, center.lng]} zoom={12} zoomControl={false} className="h-full w-full">

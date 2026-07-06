@@ -1178,18 +1178,35 @@ public class Function
                     var confidencePct = Math.Min(97, 55 + Math.Log10(Math.Max(1, rows.Count)) * 12);
                     var confidenceLabel = confidencePct >= 85 ? "High" : confidencePct >= 65 ? "Medium" : "Low";
 
-                    // ---- 6) zone-level heatmap points (real zone-ref coordinates +
-                    // call volume) for the map overlay — a lightweight stand-in for a
-                    // per-point heatmap, built from data already computed above. ----
-                    var maxZoneCalls = placementRecs.Count > 0 ? placementRecs.Max(z => z!.calls) : 1;
-                    var heatmapPoints = placementRecs.Select(z => new
+                    // ---- 6) location-level heatmap points, not zone-level: each pickup
+                    // is snapped to its nearest named Location (real reference-data
+                    // coordinates), so the map shows genuine density across many real
+                    // points instead of one coarse dot per zone (there are only ~5
+                    // zones vs. dozens of named locations). ----
+                    var locHits = rows
+                        .Select(r => r.GetValueOrDefault("pickup") as Dictionary<string, object?>)
+                        .Where(p => p != null)
+                        .Select(p => new GeoPoint(Dbl(p!, "lat"), Dbl(p!, "lng")))
+                        .Select(pt => refData.Locations
+                            .Select(l => (loc: l, d: HavKm(pt, new GeoPoint(Dbl(l, "lat"), Dbl(l, "lng")))))
+                            .OrderBy(x => x.d).FirstOrDefault())
+                        .Where(x => x.loc != null)
+                        .ToList();
+                    var locGroups = locHits.GroupBy(x => Str(x.loc!, "id")).ToList();
+                    var maxLocCalls = locGroups.Count > 0 ? locGroups.Max(g => g.Count()) : 1;
+                    var heatmapPoints = locGroups.Select(g =>
                     {
-                        zone_id = z!.zone_id,
-                        lat = z.current_staging.lat,
-                        lng = z.current_staging.lng,
-                        calls = z.calls,
-                        intensity = Math.Round((double)z.calls / Math.Max(1, maxZoneCalls), 2),
-                    }).ToList();
+                        var loc = g.First().loc!;
+                        return new
+                        {
+                            location_id = g.Key,
+                            name = Str(loc, "name"),
+                            lat = Dbl(loc, "lat"),
+                            lng = Dbl(loc, "lng"),
+                            calls = g.Count(),
+                            intensity = Math.Round((double)g.Count() / Math.Max(1, maxLocCalls), 2),
+                        };
+                    }).OrderByDescending(p => p.calls).ToList();
                     var topHotspot = placementRecs.OrderByDescending(z => z!.drift_km).FirstOrDefault();
 
                     return Ok(new

@@ -1,8 +1,10 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react'
 import { useSearchParams } from 'react-router-dom'
+import { MapContainer, TileLayer, Marker, Polyline, useMap } from 'react-leaflet'
 import { useFleetStore } from '../../store/useFleetStore'
-import { locById, pickupLabel } from '../../data/locations'
+import { locById, pickupLabel, mapCenter } from '../../data/locations'
 import { hospitalById, shortHospitalName, SEVERITY_META } from '../../data/hospitals'
+import { makeVehicleIcon, makeHospitalIcon } from '../map/vehicleIcon'
 import LiveEta from '../../components/common/LiveEta'
 import { useNow } from '../../hooks/useNow'
 import Icon from '../../components/common/Icon'
@@ -568,12 +570,63 @@ function buildTimeline(em) {
   return steps
 }
 
+// Fits the map view to whatever route/marker geometry is available for this
+// dispatch, once, on mount — the timeline map is a fixed snapshot, not a
+// live-following view, so this only needs to run once per opened modal.
+function FitToRoute({ points }) {
+  const map = useMap()
+  useEffect(() => {
+    if (points?.length > 1) map.fitBounds(points, { padding: [28, 28], maxZoom: 15 })
+    else if (points?.length === 1) map.setView(points[0], 14)
+  }, [map, points])
+  return null
+}
+
+// Real route geometry (leg1: dispatch -> pickup/incident, leg2: pickup ->
+// hospital/facility) comes from the OSRM-backed legs the fleet store already
+// computes for live tracking (see useFleetStore.js) — nothing here is
+// fabricated. Legs are undefined once the emergency ages out of the map's
+// live-geometry cache, in which case the map falls back to straight
+// origin/pickup/destination markers with no drawn path.
+function TimelineMap({ em }) {
+  const vehicles = useFleetStore((s) => s.vehicles)
+  const veh = vehicles.find((v) => v.id === em.ambulanceId)
+  const hosp = em.hospitalId ? hospitalById(em.hospitalId) : null
+  const pickupLoc = locById(em.pickup) || em.pickupPt
+  const pickupPos = pickupLoc && typeof pickupLoc.lat === 'number' ? [pickupLoc.lat, pickupLoc.lng] : null
+  const hospPos = hosp ? [hosp.lat, hosp.lng] : null
+  const startPos = veh?.pos && em.leg1?.length ? em.leg1[0] : null
+
+  const routePoints = [...(em.leg1 || []), ...(em.leg2 || [])]
+  const fitPoints = routePoints.length ? routePoints : [startPos, pickupPos, hospPos].filter(Boolean)
+  const center = fitPoints[0] || [mapCenter().lat, mapCenter().lng]
+
+  return (
+    <div className="h-48 rounded-xl overflow-hidden mb-4" style={{ border: '1px solid #EEF1F0' }}>
+      <MapContainer center={center} zoom={13} zoomControl={false} attributionControl={false} className="h-full w-full" dragging={false} scrollWheelZoom={false}>
+        <TileLayer url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png" />
+        <FitToRoute points={fitPoints.length ? fitPoints : null} />
+        {em.leg1?.length > 0 && <Polyline positions={em.leg1} pathOptions={{ color: '#2563eb', weight: 4, opacity: 0.85 }} />}
+        {em.leg2?.length > 0 && <Polyline positions={em.leg2} pathOptions={{ color: '#dc2626', weight: 4, opacity: 0.85 }} />}
+        {startPos && veh && <Marker position={startPos} icon={makeVehicleIcon(veh, false, false)} />}
+        {pickupPos && <Marker position={pickupPos} icon={makeHospitalIcon(false)} />}
+        {hospPos && <Marker position={hospPos} icon={makeHospitalIcon(false)} />}
+      </MapContainer>
+      {!routePoints.length && (
+        <div className="text-[10.5px] text-center py-1" style={{ color: '#9CA3AF', background: '#FAFBFB' }}>
+          Live route geometry not available for this request — showing known stop locations only.
+        </div>
+      )}
+    </div>
+  )
+}
+
 function TimelineModal({ em, onClose }) {
   const steps = buildTimeline(em)
   const fmt = (d) => d.toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ background: 'rgba(0,0,0,0.25)' }} onClick={onClose}>
-      <div className="w-[400px] rounded-2xl overflow-hidden" style={{ background: 'rgba(255,255,255,0.97)', boxShadow: '0 24px 64px rgba(0,0,0,0.2)' }}
+    <div className="fixed inset-0 flex items-center justify-center" style={{ background: 'rgba(0,0,0,0.25)', zIndex: 5000 }} onClick={onClose}>
+      <div className="w-[440px] rounded-2xl overflow-hidden" style={{ background: 'rgba(255,255,255,0.97)', boxShadow: '0 24px 64px rgba(0,0,0,0.2)' }}
         onClick={(ev) => ev.stopPropagation()}>
         <div className="px-5 py-4 flex items-center justify-between" style={{ borderBottom: '1px solid rgba(0,0,0,0.07)' }}>
           <div>
@@ -586,6 +639,7 @@ function TimelineModal({ em, onClose }) {
           </button>
         </div>
         <div className="px-5 py-4">
+          <TimelineMap em={em} />
           {steps.map((s, i) => (
             <div key={i} className="flex gap-3">
               <div className="flex flex-col items-center shrink-0">

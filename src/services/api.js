@@ -43,6 +43,7 @@ export const api = {
   getOps: () => req('/ops'),
   // mutations
   setVehicleStatus: (id, status) => req(`/fleet/${id}/status`, { method: 'POST', body: { status } }),
+  repositionVehicle: (id, lat, lng) => req(`/fleet/${id}/position`, { method: 'POST', body: { lat, lng } }),
   cancelRequest: (id) => req(`/requests/${id}/cancel`, { method: 'POST' }),
   createEmergency: (payload) => req('/emergencies', { method: 'POST', body: payload }),
   uploadPolicy: (content_base64, filename) => req('/policy', { method: 'POST', body: { content_base64, filename } }),
@@ -69,6 +70,11 @@ export function normalizeVehicle(v) {
     id: v.id, reg: v.reg, type: v.type, status: v.status,
     driverId: v.driver_id, homeZoneId: v.home_zone_id,
     odometer: v.odometer, fuel: v.fuel, nextService: v.next_service, routeId: v.route_id,
+    // Manual drag-to-reposition override (persisted via POST /fleet/:id/position) —
+    // when present, the map should pin the vehicle here instead of the
+    // deterministic zone-jitter position it'd otherwise compute.
+    overrideLat: typeof v.override_lat === 'number' ? v.override_lat : null,
+    overrideLng: typeof v.override_lng === 'number' ? v.override_lng : null,
   }
 }
 export function normalizeDriver(d) {

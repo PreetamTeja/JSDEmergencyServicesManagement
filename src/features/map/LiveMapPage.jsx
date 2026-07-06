@@ -47,10 +47,16 @@ export default function LiveMapPage() {
     () => new Set(emergencies.filter((e) => e.state === 'EN_ROUTE').map((e) => e.ambulanceId)),
     [emergencies])
 
-  // idle vehicles cluster at their home-zone reference point (jittered).
+  const repositionVehicle = useFleetStore((s) => s.repositionVehicle)
+
+  // idle vehicles cluster at their home-zone reference point (jittered),
+  // unless the operator has dragged them to an explicit override position.
   const positioned = useMemo(() => vehicles.map((v, i) => {
     const l = live[v.id]
     if (l?.pos) return { ...v, pos: l.pos, isLive: true }
+    if (typeof v.overrideLat === 'number' && typeof v.overrideLng === 'number') {
+      return { ...v, pos: [v.overrideLat, v.overrideLng], isLive: false }
+    }
     const z = zoneById(v.homeZoneId) || ZONES[0]
     const a = (i % 6) - 2.5
     const b = ((i * 7) % 6) - 2.5
@@ -129,9 +135,20 @@ export default function LiveMapPage() {
           const job = jobFor(v.id)
           const driver = drivers.find((d) => d.id === v.driverId)
           const color = emAmbIds.has(v.id) ? '#dc2626' : STATUS_COLORS[v.status]
+          // Only idle/maintenance units parked at their staging point can be
+          // dragged — a unit that's actually en route to a call shouldn't be
+          // manually relocated out from under its live-tracked position.
+          const canReposition = !v.isLive && v.status !== 'enroute'
           return (
             <Marker key={v.id} position={v.pos} icon={makeVehicleIcon(v, v.id === selectedId, emAmbIds.has(v.id))}
-              eventHandlers={{ click: () => setSelectedId(v.id) }}>
+              draggable={canReposition}
+              eventHandlers={{
+                click: () => setSelectedId(v.id),
+                dragend: (ev) => {
+                  const { lat, lng } = ev.target.getLatLng()
+                  repositionVehicle(v.id, lat, lng)
+                },
+              }}>
               <Tooltip direction="top" offset={[0, -16]} className="veh-tip" opacity={1}>
                 <div className="min-w-[180px]">
                   <div className="flex items-center justify-between gap-3 pb-1.5 mb-1.5 border-b border-cmd-border">
@@ -148,6 +165,7 @@ export default function LiveMapPage() {
                   <Info k="Job" v={job ? job.label : 'None'} />
                   {job?.dest && <Info k="Destination" v={job.dest} />}
                   <Info k="Fuel" v={`${v.fuel}%`} />
+                  {canReposition && <div className="text-[10.5px] mt-1 italic" style={{ color: '#9CA3AF' }}>Drag to reposition</div>}
                 </div>
               </Tooltip>
             </Marker>

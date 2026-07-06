@@ -238,4 +238,14 @@ export const useFleetStore = create((set, get) => ({
 
   // ---------- fleet ----------
   async setVehicleStatus(vehicleId, status) { await api.setVehicleStatus(vehicleId, status); await get().refreshFromApi() },
+
+  // Drag-to-reposition on the Live Map (or after "Reposition" from AI
+  // Insights) — update the marker instantly (no waiting on a refetch) and
+  // persist the new coordinates so they survive a page reload / poll.
+  async repositionVehicle(vehicleId, lat, lng) {
+    set((s) => ({
+      vehicles: s.vehicles.map((v) => v.id === vehicleId ? { ...v, overrideLat: lat, overrideLng: lng } : v),
+    }))
+    await api.repositionVehicle(vehicleId, lat, lng)
+  },
 }))

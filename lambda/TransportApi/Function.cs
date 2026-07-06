@@ -470,6 +470,22 @@ public class Function
                 await SetVehicleStatus(veh, Str(body, "status") ?? "idle");
                 return Ok(new { id = seg[1], status = Str(body, "status") }, corsHeaders);
             }
+            // Manual reposition (drag-on-map from the Live Map, or "Reposition" from AI
+            // Insights): persists an explicit lat/lng override on the vehicle so its
+            // marker no longer falls back to the deterministic zone-jitter position —
+            // it stays put at exactly the coordinates the operator dropped it at.
+            if (method == "POST" && seg[0] == "fleet" && seg.Length > 2 && seg[2] == "position")
+            {
+                if (!admin) return ErrResp(403, "FORBIDDEN", "Admin only", corsHeaders);
+                if (!double.TryParse(body["lat"]?.ToString(), out var lat) || !double.TryParse(body["lng"]?.ToString(), out var lng))
+                    return ErrResp(422, "INVALID", "lat and lng are required numbers", corsHeaders);
+                var veh2 = await Ddb.GetItem(TblFleet, Key($"VEH#{seg[1]}", "META"));
+                if (veh2 == null) return ErrResp(404, "NOT_FOUND", "vehicle not found", corsHeaders);
+                await Ddb.UpdateItem(TblFleet, Key($"VEH#{seg[1]}", "META"),
+                    "SET override_lat = :lat, override_lng = :lng, updated_at = :t",
+                    null, new() { [":lat"] = DynamoService.Av(lat), [":lng"] = DynamoService.Av(lng), [":t"] = DynamoService.Av(Now()) });
+                return Ok(new { id = seg[1], lat, lng }, corsHeaders);
+            }
 
             // ---- shuttle cards ----
             if (method == "GET" && seg[0] == "cards")

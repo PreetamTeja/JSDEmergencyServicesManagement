@@ -989,6 +989,12 @@ public class Function
                     }).Where(x => x.dt.HasValue).ToList();
                     var dates = parsed.Select(x => x.dt!.Value).ToList();
                     var totalDays = dates.Count > 0 ? Math.Max(1, (dates.Max() - dates.Min()).TotalDays) : 1;
+                    // Parse each row's created_at exactly once and reuse it everywhere
+                    // below (by reference) — this endpoint used to re-parse the same
+                    // 5,500 date strings 2-3 more times across staffing sizing and the
+                    // monsoon filter, which was real, measurable CPU waste on a 256MB
+                    // Lambda and a contributor to intermittent timeouts.
+                    var dtByRow = parsed.ToDictionary(x => x.row, x => x.dt);
                     var refData = await LoadRef();
                     double ZLat(Dictionary<string, object?> z) => Dbl((z.GetValueOrDefault("ref") as Dictionary<string, object?>) ?? z, "lat");
                     double ZLng(Dictionary<string, object?> z) => Dbl((z.GetValueOrDefault("ref") as Dictionary<string, object?>) ?? z, "lng");
@@ -1031,7 +1037,7 @@ public class Function
                     var staffingRecs = rows.GroupBy(r => Str(r, "pickup_zone_id") ?? "unknown").Select(g =>
                     {
                         var zoneRows = g.ToList();
-                        var zoneParsed = zoneRows.Select(r => DateTime.TryParse(Str(r, "created_at"), null, System.Globalization.DateTimeStyles.RoundtripKind, out var d) ? d : (DateTime?)null)
+                        var zoneParsed = zoneRows.Select(r => dtByRow.TryGetValue(r, out var d) ? d : null)
                             .Where(d => d.HasValue).Select(d => d!.Value).ToList();
                         var byHour = zoneParsed.GroupBy(d => d.Hour).Select(hg => (hour: hg.Key, count: hg.Count())).OrderByDescending(x => x.count).FirstOrDefault();
                         var completed = zoneRows.Where(r => Str(r, "status") == "COMPLETED" && Dbl(r, "eta_min") > 0).ToList();
@@ -1096,7 +1102,7 @@ public class Function
                             recommendation = $"Call volume runs ~{mult}x an average day during this period historically — pre-position extra units and flag for elevated staffing when the calendar approaches it again.",
                         });
                     }
-                    var monsoonTrauma = rows.Where(r => r.TryGetValue("created_at", out var c) && DateTime.TryParse(Str(r, "created_at"), null, System.Globalization.DateTimeStyles.RoundtripKind, out var d) ? d.Month is >= 6 and <= 9 : false).ToList();
+                    var monsoonTrauma = rows.Where(r => dtByRow.TryGetValue(r, out var d) && d.HasValue && d.Value.Month is >= 6 and <= 9).ToList();
                     var nonMonsoon = rows.Except(monsoonTrauma).ToList();
                     double TraumaShare(List<Dictionary<string, object?>> set) => set.Count > 0 ? (double)set.Count(r => Str(r, "case_type") == "Trauma") / set.Count : 0;
                     var monsoonShare = TraumaShare(monsoonTrauma);

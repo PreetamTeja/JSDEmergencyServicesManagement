@@ -20,7 +20,13 @@ function heatColor(intensity) { return HEAT[Math.min(HEAT.length - 1, Math.floor
 // historical records -> tighter estimates), not a model certainty score —
 // labeled as such below rather than implied to be something it isn't.
 export default function InsightsPage() {
-  const { data, loading, refreshing, err } = useCachedApi('psiog_insights_v3', api.getInsights)
+  // Stable key, deliberately not version-suffixed: every past redesign of
+  // this page bumped this string (v1 -> v2 -> v3), which silently wiped
+  // everyone's cache and forced the full "Computing insights..." screen
+  // again on the next visit. Components below already render safely with
+  // a partial/older-shaped cached object, so there's no need to invalidate
+  // on schema changes — the background refresh fills in the rest.
+  const { data, loading, refreshing, err } = useCachedApi('psiog_insights', api.getInsights)
 
   const years = data?.date_range
     ? ((new Date(data.date_range.to) - new Date(data.date_range.from)) / (365.25 * 24 * 3600 * 1000)).toFixed(1)

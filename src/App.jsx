@@ -3,6 +3,8 @@ import { Routes, Route, NavLink, Navigate, useNavigate } from 'react-router-dom'
 import { useFleetStore } from './store/useFleetStore'
 import { getSession, devLogin, login, logout, clearLocalSession, captureTokenFromUrl } from './auth'
 import { useSessionGuard } from './hooks/useSessionGuard'
+import { prefetchCachedApi } from './hooks/useCachedApi'
+import { api } from './services/api'
 import LiveMapPage from './features/map/LiveMapPage'
 import FleetPage from './features/fleet/FleetPage'
 import DashboardPage from './features/dashboard/DashboardPage'
@@ -88,6 +90,13 @@ export default function App() {
     }, 5000)
     return () => clearInterval(id)
   }, [ready])
+  // Warm the AI Insights cache in the background as soon as the app is
+  // ready, regardless of which page is open — by the time an admin
+  // actually navigates to /insights, useCachedApi there may already find a
+  // fresh entry in localStorage instead of starting a cold fetch.
+  useEffect(() => {
+    if (ready && session?.role !== 'user') prefetchCachedApi('psiog_insights', api.getInsights)
+  }, [ready, session?.role])
 
   // Session just expired and a real cross-app redirect is in flight — cover
   // it with an explicit transition rather than letting the console/portal

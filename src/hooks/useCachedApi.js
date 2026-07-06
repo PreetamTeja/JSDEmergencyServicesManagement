@@ -19,6 +19,14 @@ function writeCache(key, data) {
   try { localStorage.setItem(key, JSON.stringify({ t: Date.now(), d: data })) } catch {}
 }
 
+// Fire-and-forget warm-up, callable outside a component (e.g. once at app
+// boot) — populates the same cache slot useCachedApi reads from, so by the
+// time the user actually navigates to the page that calls useCachedApi(key),
+// the fetch may already be sitting in localStorage instead of starting cold.
+export function prefetchCachedApi(key, fetcher) {
+  fetcher().then((d) => writeCache(key, d)).catch(() => {})
+}
+
 export function useCachedApi(key, fetcher) {
   const [data, setData] = useState(() => readCache(key))
   const [refreshing, setRefreshing] = useState(true)

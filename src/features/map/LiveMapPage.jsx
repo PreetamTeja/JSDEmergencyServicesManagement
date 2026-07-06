@@ -29,8 +29,16 @@ export default function LiveMapPage() {
   useEffect(() => { const f = params.get('focus'); if (f) setSelectedId(f) }, [params])
   const [showZones, setShowZones] = useState(true)
   const [showLegend, setShowLegend] = useState(false)
-  const [showFleet, setShowFleet] = useState(false)
-  const [expanded, setExpanded] = useState(() => new Set())
+  // Deep-linked from AI Insights' "Reposition"/"Monitor" actions (?zone=) —
+  // opens the fleet panel and expands straight to that zone.
+  const [showFleet, setShowFleet] = useState(() => !!params.get('zone'))
+  const [expanded, setExpanded] = useState(() => new Set(params.get('zone') ? [params.get('zone')] : []))
+  const focusZone = useMemo(() => {
+    const zid = params.get('zone')
+    const z = zid ? zoneById(zid) : null
+    return z?.ref ? [z.ref.lat, z.ref.lng] : null
+  }, [params])
+  useEffect(() => { if (params.get('zone')) setShowFleet(true) }, [params])
   const [hoveredZone, setHoveredZone] = useState(null)
   const toggleZone = (id) => setExpanded((s) => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n })
 
@@ -76,7 +84,7 @@ export default function LiveMapPage() {
       <MapContainer center={[mapCenter().lat, mapCenter().lng]} zoom={mapCenter().zoom}
         zoomControl={false} className="h-full w-full">
         <TileLayer url={LIGHT_TILES} attribution='&copy; OpenStreetMap &copy; CARTO' />
-        <FlyTo pos={selected?.pos} />
+        <FlyTo pos={selected?.pos || focusZone} />
         <MapControls className="bottom-4 left-4" align="items-start" />
 
         {showZones && ZONES.map((z) => {

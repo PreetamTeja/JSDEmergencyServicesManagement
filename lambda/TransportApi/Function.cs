@@ -1017,6 +1017,13 @@ public class Function
                         var nearestLoc = refData.Locations
                             .Select(l => (loc: l, d: HavKm(centroid, new GeoPoint(Dbl(l, "lat"), Dbl(l, "lng")))))
                             .OrderBy(x => x.d).FirstOrDefault();
+                        // Last-12-months call counts for this zone, chronological — the
+                        // per-bar sparkline on the staging card, not a single flat bar.
+                        var monthlyBuckets = g.Select(r => dtByRow.TryGetValue(r, out var d) ? d : null)
+                            .Where(d => d.HasValue).Select(d => d!.Value)
+                            .GroupBy(d => new DateTime(d.Year, d.Month, 1))
+                            .OrderBy(mg => mg.Key).Select(mg => mg.Count()).ToList();
+                        var monthlyCalls = monthlyBuckets.Count > 12 ? monthlyBuckets.Skip(monthlyBuckets.Count - 12).ToList() : monthlyBuckets;
                         return new
                         {
                             zone_id = g.Key,
@@ -1025,6 +1032,7 @@ public class Function
                             recommended_staging = new { lat = Math.Round(centroid.Lat, 4), lng = Math.Round(centroid.Lng, 4) },
                             nearest_landmark = nearestLoc.loc != null ? Str(nearestLoc.loc, "name") : null,
                             drift_km = driftKm,
+                            monthly_calls = monthlyCalls,
                             recommendation = driftKm >= 0.4
                                 ? $"Historical pickups in this zone center {driftKm} km from the current staging point, nearest {Str(nearestLoc.loc, "name") ?? "landmark"} — reposition the standby unit there to cut average dispatch distance."
                                 : "Current staging point already tracks where calls actually originate — no repositioning needed.",

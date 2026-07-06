@@ -1,14 +1,17 @@
-import React from 'react'
-import { MapContainer, TileLayer, CircleMarker, Tooltip } from 'react-leaflet'
+import React, { useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { MapContainer, TileLayer, useMap } from 'react-leaflet'
+import L from 'leaflet'
+import 'leaflet.heat'
 import { api } from '../../services/api'
 import { zoneById, mapCenter } from '../../data/locations'
 import Icon from '../../components/common/Icon'
 import { useCachedApi } from '../../hooks/useCachedApi'
 
 const LIGHT_TILES = 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png'
-// Request-density color ramp, low -> high (matches the legend swatches).
+// Request-density color ramp, low -> high (matches the legend swatches and
+// the HeatLayer gradient stops below).
 const HEAT = ['#38bdf8', '#22c55e', '#eab308', '#f97316', '#dc2626']
-function heatColor(intensity) { return HEAT[Math.min(HEAT.length - 1, Math.floor(intensity * HEAT.length))] }
 
 // Every number on this page comes from GET /analytics/insights (live,
 // cached with background revalidation) over the seeded synthetic dataset —
@@ -63,11 +66,11 @@ export default function InsightsPage() {
               </span>
             </div>
 
-            <KpiRow kpis={data.kpis} />
+            <KpiRow kpis={data.kpis} staffing={data.staffing_recommendations} />
             <HeatmapCard points={data.heatmap_points} hotspot={data.top_hotspot} />
             <StagingCards placements={data.placement_recommendations} />
 
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 lg:grid-cols-[2fr_3fr] gap-4">
               <PeakHourTable staffing={data.staffing_recommendations} />
               <ShiftScalingCard windows={data.peak_windows} />
             </div>
@@ -85,7 +88,8 @@ export default function InsightsPage() {
 }
 
 /* ---------- KPI row ---------- */
-function KpiRow({ kpis }) {
+function KpiRow({ kpis, staffing }) {
+  const [showBreakdown, setShowBreakdown] = useState(false)
   if (!kpis) return null
   const trendTag = (pct, goodDirection) => {
     if (!pct) return null
@@ -96,28 +100,103 @@ function KpiRow({ kpis }) {
       </span>
     )
   }
+
+  // "Recommended units" is time-sensitive: only zones currently at their
+  // peak hour actually need the extra units right now, so the headline
+  // number reflects that instead of the flat all-day total.
+  const currentHour = new Date().getHours()
+  const atPeakNow = (staffing || []).filter((s) => s.peak_hour === currentHour)
+  const liveRecommended = atPeakNow.length
+    ? atPeakNow.reduce((sum, s) => sum + s.recommended_units, 0)
+    : kpis.recommended_units_total
+
   const cards = [
     { icon: 'activity', label: 'Total incidents', value: kpis.total_incidents.toLocaleString(), sub: trendTag(kpis.incidents_trend_pct, 'up'), color: '#07514D' },
     { icon: 'clock', label: 'Avg response time', value: `${kpis.avg_response_min} min`, sub: trendTag(kpis.response_trend_pct, 'down'), color: '#2563eb' },
     { icon: 'route', label: 'Peak hour', value: `${String(kpis.peak_hour).padStart(2, '0')}:00`, sub: <span className="text-[11px] font-medium" style={{ color: '#d97706' }}>{kpis.peak_hour_multiplier}x more calls</span>, color: '#d97706' },
-    { icon: 'truck', label: 'Recommended units', value: kpis.recommended_units_total, sub: <span className="text-[11px]" style={{ color: '#6B7280' }}>For current demand</span>, color: '#0B6A64' },
+    {
+      icon: 'truck', label: 'Recommended units', value: liveRecommended,
+      sub: (
+        <span className="text-[11px] font-semibold" style={{ color: atPeakNow.length ? '#16a34a' : '#6B7280' }}>
+          {atPeakNow.length ? `${atPeakNow.length} zone${atPeakNow.length > 1 ? 's' : ''} at peak now · tap to view` : 'For current demand · tap to view'}
+        </span>
+      ),
+      color: '#0B6A64', clickable: true,
+    },
     { icon: 'infra', label: 'AI confidence', value: `${kpis.ai_confidence_pct}%`, sub: <span className="text-[11px] font-semibold" style={{ color: kpis.ai_confidence_label === 'High' ? '#16a34a' : kpis.ai_confidence_label === 'Medium' ? '#d97706' : '#dc2626' }}>{kpis.ai_confidence_label}</span>, color: '#7c3aed' },
   ]
   return (
-    <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
-      {cards.map((c) => (
-        <div key={c.label} className="p-4 card-lift" style={{ background: '#fff', borderRadius: '16px' }}>
-          <div className="flex items-center justify-between mb-2">
-            <div className="h-8 w-8 rounded-xl grid place-items-center" style={{ background: `${c.color}18`, color: c.color }}>
-              <Icon name={c.icon} size={15} strokeWidth={1.8} />
+    <>
+      <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
+        {cards.map((c) => (
+          <div
+            key={c.label}
+            className="p-4 card-lift"
+            style={{ background: '#fff', borderRadius: '16px', cursor: c.clickable ? 'pointer' : 'default' }}
+            onClick={c.clickable ? () => setShowBreakdown(true) : undefined}
+            role={c.clickable ? 'button' : undefined}
+            tabIndex={c.clickable ? 0 : undefined}
+          >
+            <div className="flex items-center justify-between mb-2">
+              <div className="h-8 w-8 rounded-xl grid place-items-center" style={{ background: `${c.color}18`, color: c.color }}>
+                <Icon name={c.icon} size={15} strokeWidth={1.8} />
+              </div>
+            </div>
+            <div className="text-[11px] uppercase tracking-widest font-semibold" style={{ color: '#9CA3AF' }}>{c.label}</div>
+            <div className="text-[24px] font-bold leading-tight mt-0.5" style={{ color: '#0C1322' }}>{c.value}</div>
+            <div className="mt-1">{c.sub}</div>
+          </div>
+        ))}
+      </div>
+
+      {showBreakdown && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4"
+          style={{ background: 'rgba(12,19,34,0.45)' }}
+          onClick={() => setShowBreakdown(false)}
+        >
+          <div
+            className="w-full max-w-md rounded-2xl p-5"
+            style={{ background: '#fff' }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between mb-1">
+              <h3 className="text-[15px] font-bold" style={{ color: '#0C1322' }}>Recommended units by zone</h3>
+              <button onClick={() => setShowBreakdown(false)} className="text-[13px]" style={{ color: '#9CA3AF' }}>✕</button>
+            </div>
+            <p className="text-[12px] mb-3" style={{ color: '#6B7280' }}>
+              Current time {String(currentHour).padStart(2, '0')}:00 — zones at their peak hour right now are highlighted.
+            </p>
+            <div className="space-y-2 max-h-80 overflow-auto">
+              {(staffing || []).map((s) => {
+                const isPeakNow = s.peak_hour === currentHour
+                return (
+                  <div
+                    key={s.zone_id}
+                    className="flex items-center justify-between rounded-xl px-3 py-2.5"
+                    style={{ background: isPeakNow ? 'rgba(22,163,74,0.08)' : '#FAFBFB', border: isPeakNow ? '1px solid rgba(22,163,74,0.3)' : '1px solid #EEF1F0' }}
+                  >
+                    <div>
+                      <div className="text-[13px] font-semibold" style={{ color: '#0C1322' }}>{zoneById(s.zone_id)?.name || s.zone_id}</div>
+                      <div className="text-[11px]" style={{ color: '#6B7280' }}>
+                        Peak hour {String(s.peak_hour).padStart(2, '0')}:00{isPeakNow ? ' · peak now' : ''}
+                      </div>
+                    </div>
+                    <span
+                      className="px-2.5 py-0.5 rounded-full text-[12px] font-bold"
+                      style={{ background: isPeakNow ? 'rgba(22,163,74,0.15)' : 'rgba(7,81,77,0.1)', color: isPeakNow ? '#16a34a' : '#07514D' }}
+                    >
+                      {s.recommended_units}
+                    </span>
+                  </div>
+                )
+              })}
+              {!staffing?.length && <Empty />}
             </div>
           </div>
-          <div className="text-[11px] uppercase tracking-widest font-semibold" style={{ color: '#9CA3AF' }}>{c.label}</div>
-          <div className="text-[24px] font-bold leading-tight mt-0.5" style={{ color: '#0C1322' }}>{c.value}</div>
-          <div className="mt-1">{c.sub}</div>
         </div>
-      ))}
-    </div>
+      )}
+    </>
   )
 }
 
@@ -130,14 +209,7 @@ function HeatmapCard({ points, hotspot }) {
         <div className="rounded-xl overflow-hidden relative" style={{ height: 340 }}>
           <MapContainer center={[center.lat, center.lng]} zoom={12} zoomControl={false} className="h-full w-full">
             <TileLayer url={LIGHT_TILES} attribution='&copy; OpenStreetMap &copy; CARTO' />
-            {(points || []).map((p) => (
-              <CircleMarker key={p.zone_id} center={[p.lat, p.lng]} radius={18 + p.intensity * 30}
-                pathOptions={{ color: heatColor(p.intensity), fillColor: heatColor(p.intensity), fillOpacity: 0.35, weight: 1, opacity: 0.6 }}>
-                <Tooltip direction="top" offset={[0, -10]}>
-                  <b>{zoneById(p.zone_id)?.name || p.zone_id}</b><br />{p.calls.toLocaleString()} historical calls
-                </Tooltip>
-              </CircleMarker>
-            ))}
+            <HeatLayer points={points} />
           </MapContainer>
         </div>
         <div className="flex flex-col gap-3">
@@ -162,20 +234,69 @@ function HeatmapCard({ points, hotspot }) {
   )
 }
 
+// Real kernel-density gradient (leaflet.heat) instead of discrete circles —
+// each zone contributes one weighted point (weight = intensity), with a
+// wide radius/blur so five real zone-level points blend into soft gradient
+// blobs rather than reading as five hard pins. Still genuine data (real
+// call-volume weighting per zone), just rendered as a continuous surface.
+function HeatLayer({ points }) {
+  const map = useMap()
+  useEffect(() => {
+    if (!points?.length) return
+    const layer = L.heatLayer(
+      points.map((p) => [p.lat, p.lng, 0.3 + p.intensity * 0.7]),
+      { radius: 55, blur: 45, maxZoom: 14, max: 1, gradient: { 0.2: '#38bdf8', 0.4: '#22c55e', 0.6: '#eab308', 0.8: '#f97316', 1.0: '#dc2626' } },
+    ).addTo(map)
+    return () => { map.removeLayer(layer) }
+  }, [map, points])
+  return null
+}
+
 /* ---------- staging point analysis ---------- */
 function stagingTier(driftKm) {
   if (driftKm >= 0.6) return { badge: 'Move unit', color: '#dc2626', bg: 'rgba(220,38,38,0.1)', demand: 'High demand' }
   if (driftKm >= 0.3) return { badge: 'Watch', color: '#d97706', bg: 'rgba(217,119,6,0.1)', demand: 'Medium demand' }
   return { badge: 'Optimal', color: '#16a34a', bg: 'rgba(22,163,74,0.1)', demand: 'Well covered' }
 }
+const WATCHLIST_KEY = 'psiog_insights_watchlist'
+function readWatchlist() { try { return new Set(JSON.parse(localStorage.getItem(WATCHLIST_KEY) || '[]')) } catch { return new Set() } }
+function writeWatchlist(set) { try { localStorage.setItem(WATCHLIST_KEY, JSON.stringify([...set])) } catch {} }
+
+// Real month-by-month call counts per zone (server-computed, up to the last
+// 12 months of data) rendered as a bar-per-month sparkline — not a single
+// flat progress bar standing in for "demand."
+function MonthlyBars({ counts, color }) {
+  if (!counts?.length) return <div className="h-9 mb-2.5" />
+  const max = Math.max(...counts, 1)
+  return (
+    <div className="flex items-end gap-[3px] h-9 mb-2.5">
+      {counts.map((n, i) => (
+        <div key={i} className="flex-1 rounded-sm" style={{ height: `${Math.max(8, Math.round((n / max) * 100))}%`, background: color, opacity: 0.35 + 0.65 * (n / max) }} />
+      ))}
+    </div>
+  )
+}
+
 function StagingCards({ placements }) {
+  const navigate = useNavigate()
+  const [watchlist, setWatchlist] = useState(readWatchlist)
   if (!placements?.length) return null
-  const maxCalls = Math.max(...placements.map((p) => p.calls), 1)
+
+  function toggleWatch(zoneId) {
+    setWatchlist((prev) => {
+      const next = new Set(prev)
+      next.has(zoneId) ? next.delete(zoneId) : next.add(zoneId)
+      writeWatchlist(next)
+      return next
+    })
+  }
+
   return (
     <NeoCard title="Staging point analysis">
       <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
         {placements.map((p) => {
           const tier = stagingTier(p.drift_km)
+          const watching = watchlist.has(p.zone_id)
           return (
             <div key={p.zone_id} className="rounded-xl p-3.5" style={{ background: '#FAFBFB', border: '1px solid #EEF1F0' }}>
               <div className="flex items-center justify-between gap-1.5 mb-2">
@@ -183,18 +304,30 @@ function StagingCards({ placements }) {
                 <span className="px-2 py-0.5 rounded-full text-[9.5px] font-bold shrink-0" style={{ background: tier.bg, color: tier.color }}>{tier.badge}</span>
               </div>
               <div className="text-[11px] mb-2" style={{ color: tier.color }}>{tier.demand}</div>
-              <div className="h-1.5 rounded-full overflow-hidden mb-2.5" style={{ background: 'rgba(0,0,0,0.06)' }}>
-                <div className="h-full rounded-full" style={{ width: `${Math.round((p.calls / maxCalls) * 100)}%`, background: tier.color }} />
-              </div>
+              <MonthlyBars counts={p.monthly_calls} color={tier.color} />
               <div className="flex items-center justify-between text-[11px] mb-2.5">
                 <span style={{ color: '#6B7280' }}>{p.drift_km} km drift</span>
                 <span style={{ color: '#6B7280' }}>{p.calls.toLocaleString()} incidents</span>
               </div>
-              <button disabled className="w-full py-1.5 rounded-lg text-[11.5px] font-semibold cursor-default"
-                style={{ background: tier.badge === 'Optimal' ? 'rgba(0,0,0,0.04)' : tier.bg, color: tier.badge === 'Optimal' ? '#6B7280' : tier.color }}
-                title={p.recommendation}>
-                {tier.badge === 'Optimal' ? 'No action' : tier.badge === 'Watch' ? 'Monitor' : 'Reposition'}
-              </button>
+              {tier.badge === 'Optimal' ? (
+                <button disabled className="w-full py-1.5 rounded-lg text-[11.5px] font-semibold cursor-default"
+                  style={{ background: 'rgba(0,0,0,0.04)', color: '#6B7280' }} title={p.recommendation}>
+                  No action
+                </button>
+              ) : tier.badge === 'Watch' ? (
+                <button onClick={() => toggleWatch(p.zone_id)}
+                  className="w-full py-1.5 rounded-lg text-[11.5px] font-semibold transition-colors"
+                  style={{ background: watching ? 'rgba(22,163,74,0.12)' : tier.bg, color: watching ? '#16a34a' : tier.color }}
+                  title={watching ? 'Remove from your watchlist' : p.recommendation}>
+                  {watching ? 'Watching ✓' : 'Monitor'}
+                </button>
+              ) : (
+                <button onClick={() => navigate(`/map?zone=${encodeURIComponent(p.zone_id)}`)}
+                  className="w-full py-1.5 rounded-lg text-[11.5px] font-semibold transition-colors hover:brightness-95"
+                  style={{ background: tier.bg, color: tier.color }} title={p.recommendation}>
+                  Reposition →
+                </button>
+              )}
             </div>
           )
         })}
@@ -208,7 +341,8 @@ function PeakHourTable({ staffing }) {
   return (
     <NeoCard title="Recommended units by peak hour">
       {staffing?.length ? (
-        <table className="w-full text-[13px]">
+        <table className="w-full text-[13px]" style={{ tableLayout: 'fixed' }}>
+          <colgroup><col style={{ width: '46%' }} /><col style={{ width: '28%' }} /><col style={{ width: '26%' }} /></colgroup>
           <thead>
             <tr className="text-[10.5px] uppercase tracking-widest" style={{ color: '#9CA3AF' }}>
               <th className="text-left font-semibold pb-2">Zone</th>

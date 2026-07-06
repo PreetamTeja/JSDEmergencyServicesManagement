@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "leaflet": "^1.9.4",
+    "leaflet.heat": "^0.2.0",
     "lucide-react": "^1.18.0",
     "pdfkit": "^0.19.1",
     "powerbi-client": "^2.23.10",

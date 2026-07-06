@@ -50,13 +50,15 @@ test.describe('Console — golden paths', () => {
     await page.route('**/analytics/insights', (r) => r.fulfill({
       json: {
         record_count: 100, date_range: null,
+        kpis: { total_incidents: 100, incidents_trend_pct: 0, avg_response_min: 4, response_trend_pct: 0, peak_hour: 17, peak_hour_multiplier: 1, recommended_units_total: 1, ai_confidence_pct: 70, ai_confidence_label: 'Medium' },
+        heatmap_points: [], top_hotspot: null,
         placement_recommendations: [], staffing_recommendations: [],
         peak_windows: [], seasonal_alerts: [],
       },
     }))
     await page.goto(adminUrl('http://localhost:5173', '/insights'))
     await expect(page.getByRole('heading', { name: 'AI Insights' })).toBeVisible({ timeout: 15000 })
-    await expect(page.getByText('Ambulance staging placement')).toBeVisible()
+    await expect(page.getByText('Request heatmap')).toBeVisible()
   })
 
   test('Infra Health page loads for admin', async ({ page }) => {

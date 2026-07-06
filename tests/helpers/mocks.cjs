@@ -28,6 +28,9 @@ const SAMPLE_EMERGENCIES = {
 const SAMPLE_INSIGHTS = {
   record_count: 5500,
   date_range: { from: '2021-07-03T00:00:00Z', to: '2026-06-29T00:00:00Z' },
+  kpis: { total_incidents: 5500, incidents_trend_pct: 12, avg_response_min: 3.97, response_trend_pct: -8, peak_hour: 17, peak_hour_multiplier: 2.1, recommended_units_total: 2, ai_confidence_pct: 91, ai_confidence_label: 'High' },
+  heatmap_points: [{ zone_id: 'zone-sonari', lat: 22.786, lng: 86.164, calls: 1496, intensity: 1 }],
+  top_hotspot: { zone_id: 'zone-sonari', drift_km: 0.68 },
   placement_recommendations: [
     { zone_id: 'zone-sonari', calls: 1496, current_staging: { lat: 22.786, lng: 86.164 }, recommended_staging: { lat: 22.79, lng: 86.16 }, nearest_landmark: 'Sonari Colony', drift_km: 0.68, recommendation: 'Reposition the standby unit toward Sonari Colony.' },
   ],
@@ -38,7 +41,7 @@ const SAMPLE_INSIGHTS = {
     { window: 'Evening shift-change · 17:00-20:00', calls_per_hour: 2.4, multiplier_vs_overnight_baseline: 5.3, recommendation: 'Scale up 5.3x.' },
   ],
   seasonal_alerts: [
-    { event_name: 'Diwali fire-cracker season', historical_calls: 87, multiplier_vs_average_day: 1.6, recommendation: 'Pre-position extra units.' },
+    { event_name: 'Diwali fire-cracker season', window_label: 'Oct – Nov', historical_calls: 87, multiplier_vs_average_day: 1.6, risk_level: 'Medium', recommendation: 'Pre-position extra units.' },
   ],
 }
 

@@ -1111,15 +1111,98 @@ public class Function
                             recommendation = $"Road-trauma cases make up {Math.Round(monsoonShare * 100, 0)}% of monsoon-season calls vs {Math.Round(baseShare * 100, 0)}% the rest of the year — trauma-equipped units and wet-road routing matter more in this window.",
                         });
                     }
+                    // Give the client an explicit real-calendar window label and a
+                    // High/Medium/Low risk band per alert, instead of parsing it out
+                    // of the free-text event_name.
+                    string WindowLabelFor(string name) => name switch
+                    {
+                        var n when n.Contains("Respiratory") => "Jan – Feb 2022",
+                        var n when n.Contains("Diwali") => "Oct – Nov",
+                        var n when n.Contains("New Year") => "Dec 31 – Jan 1",
+                        var n when n.Contains("Monsoon") => "Jun – Sep",
+                        _ => "",
+                    };
+                    var seasonalAlertsOut = seasonalAlerts.Select(a =>
+                    {
+                        dynamic d2 = a;
+                        double mult = d2.multiplier_vs_average_day;
+                        string risk = mult >= 1.8 ? "High" : mult >= 1.3 ? "Medium" : "Low";
+                        return new
+                        {
+                            event_name = (string)d2.event_name,
+                            window_label = WindowLabelFor((string)d2.event_name),
+                            historical_calls = (int)d2.historical_calls,
+                            multiplier_vs_average_day = mult,
+                            risk_level = risk,
+                            recommendation = (string)d2.recommendation,
+                        };
+                    }).OrderByDescending(a => a.multiplier_vs_average_day).ToList();
+
+                    // ---- 5) top-line KPIs for the insights dashboard header ----
+                    var completedAll = rows.Where(r => Str(r, "status") == "COMPLETED" && Dbl(r, "eta_to_pickup_min") > 0).ToList();
+                    var overallAvgEta = completedAll.Count > 0 ? completedAll.Average(r => Dbl(r, "eta_to_pickup_min")) : 0;
+                    // First-quartile vs last-quartile of the time range, for simple trend deltas.
+                    var sortedByDate = parsed.OrderBy(x => x.dt).ToList();
+                    var qSize = Math.Max(1, sortedByDate.Count / 4);
+                    var firstQ = sortedByDate.Take(qSize).ToList();
+                    var lastQ = sortedByDate.Skip(Math.Max(0, sortedByDate.Count - qSize)).ToList();
+                    double PctChange(double from, double to) => from > 0 ? Math.Round(((to - from) / from) * 100, 0) : 0;
+                    var incidentsTrendPct = PctChange(firstQ.Count, lastQ.Count);
+                    double AvgEtaOf(IEnumerable<Dictionary<string, object?>> set)
+                    {
+                        var vals = set.Select(row => Dbl(row, "eta_to_pickup_min")).Where(v => v > 0).ToList();
+                        return vals.Count > 0 ? vals.Average() : 0;
+                    }
+                    var respTrendPct = PctChange(AvgEtaOf(firstQ.Select(x => x.row)), AvgEtaOf(lastQ.Select(x => x.row)));
+
+                    var systemPeakHour = byHourAll.OrderByDescending(kv => kv.Value).Select(kv => kv.Key).DefaultIfEmpty(0).First();
+                    var systemPeakMult = offPeakBaseline > 0 ? Math.Round(HourRate(systemPeakHour) / offPeakBaseline, 1) : 0;
+                    var recommendedUnitsTotal = staffingRecs.Sum(x => x.recommended_units);
+                    // Confidence heuristic: purely a function of sample size (more
+                    // historical records -> tighter estimates), not a model score —
+                    // labeled as such on the frontend, not presented as ML certainty.
+                    var confidencePct = Math.Min(97, 55 + Math.Log10(Math.Max(1, rows.Count)) * 12);
+                    var confidenceLabel = confidencePct >= 85 ? "High" : confidencePct >= 65 ? "Medium" : "Low";
+
+                    // ---- 6) zone-level heatmap points (real zone-ref coordinates +
+                    // call volume) for the map overlay — a lightweight stand-in for a
+                    // per-point heatmap, built from data already computed above. ----
+                    var maxZoneCalls = placementRecs.Count > 0 ? placementRecs.Max(z => z!.calls) : 1;
+                    var heatmapPoints = placementRecs.Select(z => new
+                    {
+                        zone_id = z!.zone_id,
+                        lat = z.current_staging.lat,
+                        lng = z.current_staging.lng,
+                        calls = z.calls,
+                        intensity = Math.Round((double)z.calls / Math.Max(1, maxZoneCalls), 2),
+                    }).ToList();
+                    var topHotspot = placementRecs.OrderByDescending(z => z!.drift_km).FirstOrDefault();
 
                     return Ok(new
                     {
                         record_count = rows.Count,
                         date_range = dates.Count > 0 ? new { from = dates.Min().ToString("o"), to = dates.Max().ToString("o") } : null,
+                        kpis = new
+                        {
+                            total_incidents = rows.Count,
+                            incidents_trend_pct = incidentsTrendPct,
+                            avg_response_min = Math.Round(overallAvgEta, 1),
+                            response_trend_pct = respTrendPct,
+                            peak_hour = systemPeakHour,
+                            peak_hour_multiplier = systemPeakMult,
+                            recommended_units_total = recommendedUnitsTotal,
+                            ai_confidence_pct = Math.Round(confidencePct, 0),
+                            ai_confidence_label = confidenceLabel,
+                        },
+                        heatmap_points = heatmapPoints,
+                        top_hotspot = topHotspot == null ? null : new { zone_id = topHotspot.zone_id, drift_km = topHotspot.drift_km },
                         placement_recommendations = placementRecs,
                         staffing_recommendations = staffingRecs,
-                        peak_windows = peakWindows,
-                        seasonal_alerts = seasonalAlerts.OrderByDescending(a => ((dynamic)a).multiplier_vs_average_day).ToList(),
+                        peak_windows = peakWindows.Select(w => new
+                        {
+                            w.window, w.calls_per_hour, w.multiplier_vs_overnight_baseline, w.recommendation,
+                        }).ToList(),
+                        seasonal_alerts = seasonalAlertsOut,
                         note = "Based on synthetic historical data seeded for demonstration — not live dispatch records.",
                         generated_at = DateTime.UtcNow.ToString("o"),
                     }, corsHeaders);

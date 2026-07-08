@@ -8,6 +8,7 @@ import { makeVehicleIcon, makeHospitalIcon } from '../map/vehicleIcon'
 import LiveEta from '../../components/common/LiveEta'
 import { useNow } from '../../hooks/useNow'
 import Icon from '../../components/common/Icon'
+import { usePagination, PaginationBar } from '../../components/common/Pagination'
 
 const FILTERS = [
   { key: 'all', label: 'All' },
@@ -190,16 +191,10 @@ export default function DispatchBoard() {
     return frozenOrderRef.current.map((id) => byId.get(id)).filter(Boolean)
   }, [liveRows, menuId])
 
-  // Pagination — a fixed page of rows instead of a scrolling table. Kept
-  // small enough that a page of rows fits without needing to scroll on a
-  // typical viewport; overflow-auto below is just a safety net for very
-  // short windows, not the primary way through the list anymore.
-  const PAGE_SIZE = 4
-  const [page, setPage] = useState(0)
-  const pageCount = Math.max(1, Math.ceil(rows.length / PAGE_SIZE))
+  // Pagination — user-selectable rows-per-page (5/10/50), same control
+  // everywhere in the app (see components/common/Pagination.jsx).
+  const { page, setPage, pageSize, setPageSize, pageCount, paged: pagedRows } = usePagination(rows, 10)
   useEffect(() => { setPage(0); setSelected(new Set()) }, [q, filter])
-  useEffect(() => { if (page > pageCount - 1) setPage(Math.max(0, pageCount - 1)) }, [pageCount, page])
-  const pagedRows = useMemo(() => rows.slice(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE), [rows, page])
 
   async function onCancel(id) {
     setMenuId(null)
@@ -447,24 +442,8 @@ export default function DispatchBoard() {
             </tbody>
           </table>
         </div>
-        <div className="flex items-center justify-between mt-3 px-1 shrink-0">
-          <div className="text-[12px]" style={{ color: '#6B7280' }}>
-            {rows.length === 0 ? '0 responses' : (
-              <>Showing {page * PAGE_SIZE + 1}–{Math.min(rows.length, page * PAGE_SIZE + PAGE_SIZE)} of {rows.length} {filter !== 'all' ? filter + ' ' : ''}responses</>
-            )}
-          </div>
-          {pageCount > 1 && (
-            <div className="flex items-center gap-1">
-              <button onClick={() => setPage((p) => Math.max(0, p - 1))} disabled={page === 0}
-                className="h-7 px-2.5 rounded-lg text-[12px] font-semibold transition-colors disabled:opacity-35"
-                style={{ background: 'rgba(255,255,255,0.9)', color: '#374151' }}>Prev</button>
-              <span className="text-[12px] px-2" style={{ color: '#6B7280' }}>Page {page + 1} of {pageCount}</span>
-              <button onClick={() => setPage((p) => Math.min(pageCount - 1, p + 1))} disabled={page >= pageCount - 1}
-                className="h-7 px-2.5 rounded-lg text-[12px] font-semibold transition-colors disabled:opacity-35"
-                style={{ background: 'rgba(255,255,255,0.9)', color: '#374151' }}>Next</button>
-            </div>
-          )}
-        </div>
+        <PaginationBar page={page} setPage={setPage} pageCount={pageCount} pageSize={pageSize} setPageSize={setPageSize}
+          total={rows.length} itemLabel="responses" suffix={` ${filter !== 'all' ? filter + ' ' : ''}responses`} />
       </div>
 
       {override && <OverrideModal em={override} onClose={() => setOverride(null)} />}

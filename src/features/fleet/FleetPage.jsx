@@ -9,6 +9,7 @@ import { StatusDot, STATUS_COLORS, VehicleIcon, Progress } from '../../component
 import { makeVehicleIcon } from '../map/vehicleIcon'
 import LiveEta from '../../components/common/LiveEta'
 import MapControls from '../../components/common/MapControls'
+import { usePagination, PaginationBar } from '../../components/common/Pagination'
 
 const TABS = ['Vehicles', 'Crews', 'Service Zones']
 const LIGHT_TILES = 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png'
@@ -104,13 +105,9 @@ function Vehicles() {
     })
   }, [fleet, drivers, type, status, zone, q])
 
-  // Pagination — small fixed page instead of a scrolling table.
-  const PAGE_SIZE = 4
-  const [page, setPage] = useState(0)
-  const pageCount = Math.max(1, Math.ceil(shown.length / PAGE_SIZE))
+  // Pagination — user-selectable rows-per-page (5/10/50).
+  const { page, setPage, pageSize, setPageSize, pageCount, paged: pagedShown } = usePagination(shown, 10)
   useEffect(() => { setPage(0) }, [q, type, status, zone])
-  useEffect(() => { if (page > pageCount - 1) setPage(Math.max(0, pageCount - 1)) }, [pageCount, page])
-  const pagedShown = useMemo(() => shown.slice(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE), [shown, page])
 
   const positioned = useMemo(() => fleet.map((v, i) => {
     const l = live[v.id]
@@ -295,21 +292,10 @@ function Vehicles() {
               </tbody>
             </table>
           </div>
-          <div className="px-4 py-2 text-[11px] shrink-0 flex items-center justify-between" style={{ color: '#6B7280', borderTop: '1px solid rgba(0,0,0,0.05)' }}>
-            <span>
-              {shown.length === 0 ? '0' : `${page * PAGE_SIZE + 1}–${Math.min(shown.length, page * PAGE_SIZE + PAGE_SIZE)}`} of {shown.length === fleet.length ? fleet.length : `${shown.length} (filtered from ${fleet.length})`} units
-            </span>
-            {pageCount > 1 && (
-              <div className="flex items-center gap-1">
-                <button onClick={() => setPage((p) => Math.max(0, p - 1))} disabled={page === 0}
-                  className="h-6 px-2 rounded-lg text-[10.5px] font-semibold transition-colors disabled:opacity-35"
-                  style={{ background: 'rgba(0,0,0,0.04)', color: '#374151' }}>Prev</button>
-                <span className="px-1">Page {page + 1}/{pageCount}</span>
-                <button onClick={() => setPage((p) => Math.min(pageCount - 1, p + 1))} disabled={page >= pageCount - 1}
-                  className="h-6 px-2 rounded-lg text-[10.5px] font-semibold transition-colors disabled:opacity-35"
-                  style={{ background: 'rgba(0,0,0,0.04)', color: '#374151' }}>Next</button>
-              </div>
-            )}
+          <div className="px-3 shrink-0" style={{ borderTop: '1px solid rgba(0,0,0,0.05)' }}>
+            <PaginationBar page={page} setPage={setPage} pageCount={pageCount} pageSize={pageSize} setPageSize={setPageSize}
+              total={shown.length} itemLabel="units"
+              suffix={shown.length === fleet.length ? ' units' : ` units (filtered from ${fleet.length})`} />
           </div>
         </>)}
       </div>
@@ -354,6 +340,9 @@ function Drivers() {
     .filter((d) => vehByDriver.has(d.id))
     .filter((d) => !term || `${d.name} ${d.license}`.toLowerCase().includes(term))
 
+  const { page, setPage, pageSize, setPageSize, pageCount, paged: pagedDrivers } = usePagination(drivers, 10)
+  useEffect(() => { setPage(0) }, [q])
+
   return (
     <div className="px-6 pt-[76px] pb-6 space-y-4 overflow-auto h-full">
       <div className="relative w-60">
@@ -368,7 +357,7 @@ function Drivers() {
             <tr><Th>Crew</Th><Th>Licence</Th><Th>Status</Th><Th>Vehicle</Th><Th>Current job</Th><Th></Th></tr>
           </thead>
           <tbody>
-            {drivers.map((d) => {
+            {pagedDrivers.map((d) => {
               const veh = vehByDriver.get(d.id)
               const job = emergencies.find((e) => e.ambulanceId === veh?.id && e.state === 'EN_ROUTE')
               const statColor = STATUS_COLORS[d.status]
@@ -411,6 +400,10 @@ function Drivers() {
             )}
           </tbody>
         </table>
+        <div className="px-3" style={{ borderTop: '1px solid rgba(0,0,0,0.05)' }}>
+          <PaginationBar page={page} setPage={setPage} pageCount={pageCount} pageSize={pageSize} setPageSize={setPageSize}
+            total={drivers.length} itemLabel="crew" suffix=" crew" />
+        </div>
       </div>
     </div>
   )

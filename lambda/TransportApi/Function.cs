@@ -475,8 +475,28 @@ public class Function
                 if (!admin) return ErrResp(403, "FORBIDDEN", "Admin only", corsHeaders);
                 var veh = await Ddb.GetItem(TblFleet, Key($"VEH#{seg[1]}", "META"));
                 if (veh == null) return ErrResp(404, "NOT_FOUND", "vehicle not found", corsHeaders);
-                await SetVehicleStatus(veh, Str(body, "status") ?? "idle");
-                return Ok(new { id = seg[1], status = Str(body, "status") }, corsHeaders);
+                var newStatus = Str(body, "status") ?? "idle";
+                // Coming back from maintenance (any status other than staying in
+                // maintenance) counts as "service done": stamp the odometer this
+                // happened at and push the next-service date out, so the Fleet
+                // page's service-due warning clears until the next real interval
+                // instead of staying stuck on the odometer reading that sent the
+                // unit to maintenance in the first place.
+                var wasInMaintenance = Str(veh, "status") == "maintenance";
+                var serviceCompleted = wasInMaintenance && newStatus != "maintenance";
+                await SetVehicleStatus(veh, newStatus);
+                if (serviceCompleted)
+                {
+                    await Ddb.UpdateItem(TblFleet, Key($"VEH#{seg[1]}", "META"),
+                        "SET last_service_odometer = :o, last_serviced_at = :t, next_service = :n",
+                        null, new()
+                        {
+                            [":o"] = DynamoService.Av(Dbl(veh, "odometer")),
+                            [":t"] = DynamoService.Av(Now()),
+                            [":n"] = DynamoService.Av(DateTime.UtcNow.AddDays(90).ToString("yyyy-MM-dd")),
+                        });
+                }
+                return Ok(new { id = seg[1], status = newStatus, service_completed = serviceCompleted }, corsHeaders);
             }
             // Manual reposition (drag-on-map from the Live Map, or "Reposition" from AI
             // Insights): persists an explicit lat/lng override on the vehicle so its

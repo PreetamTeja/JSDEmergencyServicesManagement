@@ -237,7 +237,13 @@ export const useFleetStore = create((set, get) => ({
   async cancelRequest(id) { await api.cancelRequest(id); await get().refreshFromApi() },
 
   // ---------- fleet ----------
-  async setVehicleStatus(vehicleId, status) { await api.setVehicleStatus(vehicleId, status); await get().refreshFromApi() },
+  // Returns the API result (includes service_completed when returning a unit
+  // from maintenance) so callers can surface a confirmation without a second round-trip.
+  async setVehicleStatus(vehicleId, status) {
+    const r = await api.setVehicleStatus(vehicleId, status)
+    await get().refreshFromApi()
+    return r
+  },
 
   // Drag-to-reposition on the Live Map (or after "Reposition" from AI
   // Insights) — update the marker instantly (no waiting on a refetch) and

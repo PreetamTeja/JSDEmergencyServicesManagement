@@ -70,6 +70,11 @@ export function normalizeVehicle(v) {
     id: v.id, reg: v.reg, type: v.type, status: v.status,
     driverId: v.driver_id, homeZoneId: v.home_zone_id,
     odometer: v.odometer, fuel: v.fuel, nextService: v.next_service, routeId: v.route_id,
+    // Odometer reading at the last real "return to service from maintenance"
+    // event (see POST /fleet/:id/status) — null until that's happened once,
+    // in which case the Fleet page's service-due check falls back to its old
+    // odometer-modulo estimate instead of assuming a service that never occurred.
+    lastServiceOdometer: typeof v.last_service_odometer === 'number' ? v.last_service_odometer : null,
     // Manual drag-to-reposition override (persisted via POST /fleet/:id/position) —
     // when present, the map should pin the vehicle here instead of the
     // deterministic zone-jitter position it'd otherwise compute.

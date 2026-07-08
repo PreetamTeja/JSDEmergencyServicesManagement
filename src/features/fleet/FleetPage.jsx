@@ -16,9 +16,16 @@ const EMERGENCY_TYPES = ['ambulance', 'firetruck']
 const SERVICE_INTERVAL_KM = 10000   // service every 10,000 km
 const DUE_SOON_KM = 500             // warn within the last 500 km of the cycle
 
-// Odometer-based service schedule: next service at the next 10k boundary.
-const serviceInfo = (odometer = 0) => {
-  const nextKm = Math.ceil((odometer + 1) / SERVICE_INTERVAL_KM) * SERVICE_INTERVAL_KM
+// Odometer-based service schedule: next service 10k km after the last real
+// service. Once a vehicle has actually been through maintenance -> return to
+// service (see setVehicleStatus / POST /fleet/:id/status), lastServiceOdometer
+// is a real stamped baseline and the due window is measured from there. Until
+// that's happened once, fall back to the old odometer-modulo estimate rather
+// than assuming a service that never occurred.
+const serviceInfo = (odometer = 0, lastServiceOdometer = null) => {
+  const nextKm = lastServiceOdometer != null
+    ? lastServiceOdometer + SERVICE_INTERVAL_KM
+    : Math.ceil((odometer + 1) / SERVICE_INTERVAL_KM) * SERVICE_INTERVAL_KM
   const remaining = nextKm - odometer
   return { nextKm, remaining, due: remaining <= DUE_SOON_KM }
 }
@@ -80,7 +87,7 @@ function Vehicles() {
   const responding = fleet.filter((v) => respondingIds.has(v.id)).length
   const crewAvail = drivers.filter((d) => new Set(fleet.map((v) => v.driverId)).has(d.id) && d.status === 'available').length
   const lowFuel = fleet.filter((v) => v.fuel < 25).length
-  const svcDue = fleet.filter((v) => serviceInfo(v.odometer).due).length
+  const svcDue = fleet.filter((v) => serviceInfo(v.odometer, v.lastServiceOdometer).due).length
 
   const shown = useMemo(() => {
     const term = q.trim().toLowerCase()
@@ -222,7 +229,7 @@ function Vehicles() {
                 {pagedShown.map((v) => {
                   const drv = drivers.find((d) => d.id === v.driverId)
                   const job = jobFor(v.id)
-                  const svc = serviceInfo(v.odometer)
+                  const svc = serviceInfo(v.odometer, v.lastServiceOdometer)
                   const isFire = v.type === 'firetruck'
                   const statColor = v.status === 'enroute' ? '#16a34a' : v.status === 'maintenance' ? '#d97706' : '#07514D'
                   const typeColor = isFire ? '#ea580c' : '#2563eb'
@@ -271,7 +278,10 @@ function Vehicles() {
                                 style={{ background: 'rgba(217,119,6,0.08)', color: '#d97706' }}
                                 onMouseEnter={ev => !ev.currentTarget.disabled && (ev.currentTarget.style.background = 'rgba(217,119,6,0.15)')}
                                 onMouseLeave={ev => ev.currentTarget.style.background = 'rgba(217,119,6,0.08)'}>Maint.</button>
-                            : <button onClick={() => setVehicleStatus(v.id, 'idle')}
+                            : <button onClick={async () => {
+                                const r = await setVehicleStatus(v.id, 'idle')
+                                if (r?.service_completed) window.alert(`${v.reg} marked back in service — service cycle reset, next due in ${SERVICE_INTERVAL_KM.toLocaleString()} km.`)
+                              }}
                                 className="h-6 px-2 rounded-lg text-[10px] font-medium transition-colors"
                                 style={{ background: 'rgba(22,163,74,0.1)', color: '#16a34a' }}>Return</button>}
                         </div>

@@ -124,6 +124,14 @@ public class Function
             var authedGet = new[] { "fleet", "ops" }.Concat(adminGet).ToArray();
             if (authedGet.Contains(seg[0]) && !authed) return ErrResp(401, "UNAUTHORIZED", "Authentication required", corsHeaders);
             if (adminGet.Contains(seg[0]) && !admin) return ErrResp(403, "FORBIDDEN", "Admin only", corsHeaders);
+            // /emergencies/status lists across all active dispatches (optionally
+            // hospital-filtered) rather than a single known id like /emergencies/{id}
+            // or /track/{id} - unlike those, it must not be openly enumerable.
+            if (seg[0] == "emergencies" && seg.Length > 1 && seg[1] == "status")
+            {
+                if (!authed) return ErrResp(401, "UNAUTHORIZED", "Authentication required", corsHeaders);
+                if (!admin && apiKeySource != "HOSPITAL") return ErrResp(403, "FORBIDDEN", "HOSPITAL key or admin only", corsHeaders);
+            }
         }
 
         try
@@ -509,6 +517,24 @@ public class Function
                 return Ok(new { requests = Array.Empty<object>(), bookings = Array.Empty<object>(), emergencies = myEmgs }, corsHeaders);
             }
 
+            // ---- hospital-facing dispatch status feed (additive; does not touch any
+            // existing route/response). One HOSPITAL-scoped GET endpoint a hospital's
+            // own system can poll for a normalized dispatched/en_route/arrived/
+            // completed vocabulary, without needing to integrate with the full /ops
+            // or /emergencies/{id} shape everything else already depends on. ----
+            if (method == "GET" && seg[0] == "emergencies" && seg.Length > 1 && seg[1] == "status")
+            {
+                var (_, emgsAll, _) = await GetOps();
+                var hospFilter = QS(request, "hospital_id");
+                var filtered = string.IsNullOrEmpty(hospFilter)
+                    ? emgsAll : emgsAll.Where(e => Str(e, "hospital_id") == hospFilter).ToList();
+                var feed = filtered
+                    .OrderByDescending(e => Str(e, "created_at"))
+                    .Select(DispatchStatusFeedItem)
+                    .ToList();
+                return Ok(feed, corsHeaders);
+            }
+
             // ---- single item status ----
             if (method == "GET" && (seg[0] == "requests" || seg[0] == "emergencies" || seg[0] == "bookings") && seg.Length == 2)
             {
@@ -524,6 +550,11 @@ public class Function
                     assigned_driver_id = Str(item, "assigned_driver_id"),
                     eta_min = Dbl(item, "eta_min"), distance_km = Dbl(item, "distance_km"),
                     created_at = Str(item, "created_at"), updated_at = Str(item, "updated_at"),
+                    // Additive fields for the hospital dispatch-status feed (see
+                    // /emergencies/status) - existing consumers of this endpoint that
+                    // only read the fields above are unaffected.
+                    dispatch_status = DispatchStatusOf(item),
+                    arrived_at = ArrivedAtOf(item),
                 }, corsHeaders);
             }
 
@@ -1853,6 +1884,45 @@ public class Function
         return !string.IsNullOrEmpty(AppBaseUrl) && !string.IsNullOrEmpty(token)
             ? $"{AppBaseUrl}/track/{id}?t={token}" : null;
     }
+
+    // Normalizes the internal status field into the 4-stage vocabulary a
+    // hospital's own system polls for (see /emergencies/status): our system
+    // assigns a unit at creation time (no separate "reviewed"/"assigned"
+    // phase for emergencies), so DISPATCHED covers the first minute after
+    // creation, then EN_ROUTE for the rest of the transit, then ARRIVED is
+    // derived once eta_to_pickup_min has elapsed since created_at - nothing
+    // new is written to the record for this; it's computed on read.
+    private static string DispatchStatusOf(Dictionary<string, object?> item)
+    {
+        var status = Str(item, "status");
+        if (status is "COMPLETED" or "CANCELLED") return status;
+        if (status is "QUEUED" or "NO_HOSPITAL" or "NO_BLOODBANK") return "QUEUED";
+        if (status != "EN_ROUTE") return status ?? "UNKNOWN";
+        if (!DateTime.TryParse(Str(item, "created_at"), null, System.Globalization.DateTimeStyles.RoundtripKind, out var created))
+            return "DISPATCHED";
+        var elapsedMin = (DateTime.UtcNow - created).TotalMinutes;
+        var etaPickup = Dbl(item, "eta_to_pickup_min");
+        if (etaPickup > 0 && elapsedMin >= etaPickup) return "ARRIVED";
+        return elapsedMin >= 1 ? "EN_ROUTE" : "DISPATCHED";
+    }
+
+    private static string? ArrivedAtOf(Dictionary<string, object?> item)
+    {
+        if (DispatchStatusOf(item) is not ("ARRIVED" or "COMPLETED")) return null;
+        var etaPickup = Dbl(item, "eta_to_pickup_min");
+        if (etaPickup <= 0 || !DateTime.TryParse(Str(item, "created_at"), null, System.Globalization.DateTimeStyles.RoundtripKind, out var created))
+            return null;
+        return created.AddMinutes(etaPickup).ToString("o");
+    }
+
+    private static object DispatchStatusFeedItem(Dictionary<string, object?> e) => new
+    {
+        id = Str(e, "id"), kind = Str(e, "kind"), dispatch_status = DispatchStatusOf(e),
+        hospital_id = Str(e, "hospital_id"), case_type = Str(e, "case_type"), severity = Str(e, "severity"),
+        assigned_vehicle_id = Str(e, "assigned_vehicle_id"),
+        eta_to_pickup_min = Dbl(e, "eta_to_pickup_min"), eta_min = Dbl(e, "eta_min"),
+        dispatched_at = Str(e, "created_at"), arrived_at = ArrivedAtOf(e), updated_at = Str(e, "updated_at"),
+    };
 
     private static Dictionary<string, AttributeValue> Key(string pk, string sk) => new()
     {

@@ -45,6 +45,15 @@ public class Function
     // CORS
     private static readonly string[] AllowedOrigins = (Env("ALLOWED_ORIGINS", "*"))
         .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+    // Partner-hospital browser origins allowed ONLY for the hospital-facing
+    // dispatch-status feed (GET /emergencies/status) — kept separate from
+    // ALLOWED_ORIGINS so granting a partner's frontend cross-origin access to
+    // that one feed doesn't also open every other endpoint (fleet, ops, admin
+    // cost/infra data) to it. The endpoint itself still requires a HOSPITAL
+    // api-key or admin auth regardless of origin - this only controls whether
+    // a browser is allowed to read the response.
+    private static readonly string[] HospitalFeedOrigins = (Env("HOSPITAL_FEED_ORIGINS", ""))
+        .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
 
     // Services (reused across warm invocations)
     private static readonly DynamoService Ddb  = new();
@@ -72,9 +81,9 @@ public class Function
     public async Task<APIGatewayHttpApiV2ProxyResponse> FunctionHandler(
         APIGatewayHttpApiV2ProxyRequest request, ILambdaContext context)
     {
-        var corsHeaders = BuildCors(request.Headers);
         var method = request.RequestContext?.Http?.Method?.ToUpperInvariant() ?? "GET";
         var rawPath = request.RawPath ?? "/";
+        var corsHeaders = BuildCors(request.Headers, rawPath);
 
         if (method == "OPTIONS")
             return Resp(204, null, corsHeaders);
@@ -1849,12 +1858,13 @@ public class Function
     // =====================================================================
     // CORS + response helpers
     // =====================================================================
-    private static Dictionary<string, string> BuildCors(IDictionary<string, string>? headers)
+    private static Dictionary<string, string> BuildCors(IDictionary<string, string>? headers, string rawPath)
     {
         var origin = headers?.TryGetValue("origin", out var o) == true ? o : null;
+        var isHospitalFeed = rawPath.Trim('/').StartsWith("emergencies/status", StringComparison.OrdinalIgnoreCase);
         string allow;
         if (AllowedOrigins.Contains("*")) allow = "*";
-        else if (origin != null && AllowedOrigins.Contains(origin)) allow = origin;
+        else if (origin != null && (AllowedOrigins.Contains(origin) || (isHospitalFeed && HospitalFeedOrigins.Contains(origin)))) allow = origin;
         else allow = AllowedOrigins.FirstOrDefault() ?? "null";
         return new Dictionary<string, string>
         {

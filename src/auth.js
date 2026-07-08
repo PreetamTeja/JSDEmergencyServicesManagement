@@ -17,10 +17,22 @@ const MAIN_APP_URL = import.meta.env.VITE_MAIN_APP_URL || ''
 const ADMIN_GROUPS = (import.meta.env.VITE_ADMIN_GROUPS || '')
   .split(',').map((s) => s.trim()).filter(Boolean)
 
-const ACCESS_KEY = 'sso_token'
-const ID_KEY = 'sso_id_token'
 const DEV_KEY = 'psiog_dev_session'
 const SESSION_START_KEY = 'psiog_session_started_at'
+
+// The real Cognito access/id tokens live in memory ONLY — never in
+// localStorage/sessionStorage. The SSO portal team flagged (2026-07) that the
+// previous sessionStorage.setItem(sso_token, ...) put the raw token somewhere
+// any injected/XSS script, or any browser extension with storage access,
+// could read straight off disk for the life of the tab. A module-scope
+// variable has no such API surface — it disappears on reload/tab close, and
+// there's nothing to `sessionStorage.getItem()` for.
+// Trade-off: a hard page refresh loses it, but the portal keeps its own
+// session (its own tokens, its own origin), so refreshing here just bounces
+// through the portal and straight back with a fresh token — no login form,
+// same "already signed in" experience as before, just nothing at rest.
+let inMemoryAccessToken = null
+let inMemoryIdToken = null
 
 // Absolute session duration is measured from when the session was first
 // established, independent of activity — record it once and never touch it
@@ -50,31 +62,32 @@ function roleFromGroups(groups = []) {
 }
 
 // Capture tokens arriving on the URL (?sso_token=&sso_id_token=). Call once at startup.
+// Strips them from the URL immediately either way — a token must not linger
+// in the address bar (browser history, referrer headers, screen-share) even
+// for the one render before this runs.
 export function captureTokenFromUrl() {
   const params = new URLSearchParams(window.location.search)
-  const at = params.get(ACCESS_KEY)
-  const it = params.get(ID_KEY)
-  if (at) sessionStorage.setItem(ACCESS_KEY, at)
-  if (it) sessionStorage.setItem(ID_KEY, it)
+  const at = params.get('sso_token')
+  const it = params.get('sso_id_token')
+  if (at) inMemoryAccessToken = at
+  if (it) inMemoryIdToken = it
   if (at || it) {
     markSessionStart()
-    params.delete(ACCESS_KEY); params.delete(ID_KEY)
+    params.delete('sso_token'); params.delete('sso_id_token')
     const qs = params.toString()
     history.replaceState({}, '', window.location.pathname + (qs ? `?${qs}` : ''))
   }
 }
 
 export function getToken() {
-  const t = sessionStorage.getItem(ACCESS_KEY)
-  return t && valid(decode(t)) ? t : null
+  return inMemoryAccessToken && valid(decode(inMemoryAccessToken)) ? inMemoryAccessToken : null
 }
 
 export function getSession() {
   // 1) real SSO tokens from the platform
-  const at = sessionStorage.getItem(ACCESS_KEY)
-  const access = at && decode(at)
+  const access = inMemoryAccessToken && decode(inMemoryAccessToken)
   if (valid(access)) {
-    const idc = decode(sessionStorage.getItem(ID_KEY) || '') || {}
+    const idc = decode(inMemoryIdToken || '') || {}
     const groups = access['cognito:groups'] || idc['cognito:groups'] || []
     // Broad, ordered fallback across every claim Cognito might actually carry
     // for this app client — a pool without the profile/email scopes granted
@@ -127,8 +140,8 @@ export function logout() {
 // bouncing an unattended screen to another site would be more surprising
 // than just landing back on this app's own sign-in screen.
 export function clearLocalSession() {
-  sessionStorage.removeItem(ACCESS_KEY)
-  sessionStorage.removeItem(ID_KEY)
+  inMemoryAccessToken = null
+  inMemoryIdToken = null
   sessionStorage.removeItem(DEV_KEY)
   sessionStorage.removeItem(SESSION_START_KEY)
 }
@@ -139,7 +152,7 @@ export function isAuthed() { return !!getSession() }
 // no expiry claim and always return false — idle timeout still applies to
 // them, just not token-expiry.
 export function isTokenExpired() {
-  const at = sessionStorage.getItem(ACCESS_KEY)
+  const at = inMemoryAccessToken
   if (!at) return false
   const claims = decode(at)
   return !!claims?.exp && claims.exp * 1000 <= Date.now()

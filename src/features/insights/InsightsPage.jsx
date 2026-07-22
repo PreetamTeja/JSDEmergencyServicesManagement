@@ -77,6 +77,37 @@ export default function InsightsPage() {
 
             <SeasonalAlerts alerts={data.seasonal_alerts} />
 
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              <OutcomeMixCard mix={data.outcome_mix} falseAlarmPct={data.false_alarm_pct} />
+              <ChannelMixCard mix={data.channel_mix} />
+            </div>
+
+            <CostEfficiencyCard cost={data.cost_efficiency} />
+            <WeatherImpactCard weather={data.weather_impact} />
+            <ChannelQualityCard quality={data.channel_quality} />
+
+            <div className="pt-2">
+              <h2 className="text-[15px] font-bold tracking-tight" style={{ color: '#0C1322' }}>Deep business intelligence</h2>
+              <p className="text-[12px] mt-0.5" style={{ color: '#6B7280' }}>Every card below answers a named executive question, not just a metric.</p>
+            </div>
+
+            <DemandHeatmapCard cells={data.demand_heatmap} />
+
+            <ResponseBottleneckCard rows={data.response_bottleneck} />
+            <FleetRightsizingCard fleet={data.fleet_rightsizing} />
+
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              <CaseTypeGrowthCard rows={data.case_type_growth} />
+              <SteelCycleCard rows={data.steel_cycle_impact} />
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              <VoiceAdoptionTrendCard trend={data.voice_adoption_trend} />
+              <DemographicResponseGapCard gap={data.demographic_response_gap} />
+            </div>
+
+            <ShockEventCapacityCard events={data.shock_event_capacity} margin={data.readiness_margin} />
+
             <div className="text-[11.5px] text-center pt-1" style={{ color: '#9CA3AF' }}>
               Insights are generated from {years ? `${years} yrs` : 'seeded'} of historical dispatch data and refresh in the background on each visit.
             </div>
@@ -423,6 +454,507 @@ function SeasonalAlerts({ alerts }) {
           ))}
         </div>
       ) : <Empty msg="No calendar-driven spikes detected in this window." />}
+    </NeoCard>
+  )
+}
+
+/* ---------- outcome mix (what dispatches actually resolve to) ---------- */
+const OUTCOME_COLOR = {
+  'Treated & Transported': '#16a34a', 'Fire Extinguished': '#16a34a',
+  'Treated on Scene': '#2563eb', 'Assisted / No Fire Found': '#2563eb',
+  'False Alarm': '#d97706', 'Refused Transport': '#9CA3AF', 'Cancelled': '#dc2626',
+}
+function OutcomeMixCard({ mix, falseAlarmPct }) {
+  const flagged = falseAlarmPct >= 15
+  return (
+    <NeoCard title="Outcome mix" subtitle="What historical dispatches actually resolved to">
+      {mix?.length ? (
+        <div className="space-y-2.5">
+          {mix.map((m) => (
+            <div key={m.resolution}>
+              <div className="flex items-center justify-between text-[12.5px] mb-1">
+                <span className="font-medium" style={{ color: '#374151' }}>{m.resolution}</span>
+                <span className="font-bold" style={{ color: OUTCOME_COLOR[m.resolution] || '#6B7280' }}>{m.pct}%</span>
+              </div>
+              <div className="h-2 rounded-full overflow-hidden" style={{ background: '#F0F1F0' }}>
+                <div className="h-full rounded-full" style={{ width: `${m.pct}%`, background: OUTCOME_COLOR[m.resolution] || '#9CA3AF' }} />
+              </div>
+            </div>
+          ))}
+          {flagged && (
+            <div className="mt-1 rounded-xl px-3.5 py-2.5 flex items-start gap-2" style={{ background: 'rgba(217,119,6,0.08)', border: '1px solid rgba(217,119,6,0.2)' }}>
+              <Icon name="alert" size={14} strokeWidth={2} className="mt-0.5 shrink-0" style={{ color: '#d97706' }} />
+              <span className="text-[11.5px]" style={{ color: '#92400e' }}>
+                False-alarm rate is {falseAlarmPct}% — worth reviewing intake triage/screening for over-dispatch.
+              </span>
+            </div>
+          )}
+        </div>
+      ) : <Empty />}
+    </NeoCard>
+  )
+}
+
+/* ---------- request channel mix ---------- */
+const CHANNEL_META = {
+  HOSPITAL: { label: 'Hospital-initiated', icon: 'medical', color: '#07514D' },
+  PORTAL: { label: 'Requester portal', icon: 'dashboard', color: '#2563eb' },
+  CONSOLE: { label: 'Control room console', icon: 'infra', color: '#7c3aed' },
+  VOICE: { label: 'Voice emergency line', icon: 'activity', color: '#dc2626' },
+  FIRE: { label: 'Fire report', icon: 'flame', color: '#ea580c' },
+}
+function ChannelMixCard({ mix }) {
+  const voice = mix?.find((m) => m.source === 'VOICE')
+  return (
+    <NeoCard title="Request channels" subtitle="Where dispatches actually originate">
+      {mix?.length ? (
+        <div className="space-y-2.5">
+          {mix.map((m) => {
+            const meta = CHANNEL_META[m.source] || { label: m.source, icon: 'alert', color: '#6B7280' }
+            return (
+              <div key={m.source} className="flex items-center gap-3">
+                <div className="h-8 w-8 rounded-lg grid place-items-center shrink-0" style={{ background: `${meta.color}18`, color: meta.color }}>
+                  <Icon name={meta.icon} size={14} strokeWidth={1.8} />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center justify-between text-[12.5px] mb-1">
+                    <span className="font-medium truncate" style={{ color: '#374151' }}>{meta.label}</span>
+                    <span className="font-bold shrink-0 ml-2" style={{ color: meta.color }}>{m.pct}%</span>
+                  </div>
+                  <div className="h-1.5 rounded-full overflow-hidden" style={{ background: '#F0F1F0' }}>
+                    <div className="h-full rounded-full" style={{ width: `${m.pct}%`, background: meta.color }} />
+                  </div>
+                </div>
+              </div>
+            )
+          })}
+          {voice && (
+            <div className="text-[11px] pt-1" style={{ color: '#9CA3AF' }}>
+              Voice line accounts for {voice.pct}% of dispatches ({voice.count.toLocaleString()} calls) — the automated emergency-line agent.
+            </div>
+          )}
+        </div>
+      ) : <Empty />}
+    </NeoCard>
+  )
+}
+
+/* ---------- fleet cost & efficiency ---------- */
+function CostEfficiencyCard({ cost }) {
+  if (!cost) return null
+  const inr = (n) => `₹${Math.round(n).toLocaleString('en-IN')}`
+  const maxKindCost = Math.max(...(cost.by_kind || []).map((k) => k.total_cost), 1)
+  return (
+    <NeoCard title="Fleet cost & efficiency" subtitle="Modeled operating cost from historical dispatch distance/duration">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
+        {[
+          { label: 'Total modeled cost', value: inr(cost.total_cost_estimate), color: '#07514D' },
+          { label: 'Avg cost / dispatch', value: inr(cost.avg_cost_per_dispatch), color: '#2563eb' },
+          { label: 'Total fuel burned', value: `${cost.total_fuel_l.toLocaleString()} L`, color: '#d97706' },
+          {
+            label: 'Reassignment rate', value: `${cost.reassignment_rate_pct}%`,
+            color: cost.reassignment_rate_pct >= 8 ? '#dc2626' : '#16a34a',
+          },
+        ].map((s) => (
+          <div key={s.label} className="rounded-xl px-3.5 py-3" style={{ background: '#FAFBFB', border: '1px solid #EEF1F0' }}>
+            <div className="text-[10.5px] uppercase tracking-widest font-semibold mb-1" style={{ color: '#9CA3AF' }}>{s.label}</div>
+            <div className="text-[18px] font-bold" style={{ color: s.color }}>{s.value}</div>
+          </div>
+        ))}
+      </div>
+      {cost.by_kind?.length > 0 && (
+        <div className="space-y-2">
+          {cost.by_kind.map((k) => (
+            <div key={k.kind} className="flex items-center gap-3">
+              <span className="text-[12px] font-medium capitalize w-16 shrink-0" style={{ color: '#374151' }}>{k.kind}</span>
+              <div className="flex-1 h-5 rounded-lg overflow-hidden" style={{ background: '#F0F1F0' }}>
+                <div className="h-full rounded-lg flex items-center px-2" style={{ width: `${Math.max(6, (k.total_cost / maxKindCost) * 100)}%`, background: '#07514D' }}>
+                  <span className="text-[10px] font-bold text-white whitespace-nowrap">{inr(k.total_cost)}</span>
+                </div>
+              </div>
+              <span className="text-[11px] w-24 text-right shrink-0" style={{ color: '#9CA3AF' }}>{k.dispatches.toLocaleString()} calls</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </NeoCard>
+  )
+}
+
+/* ---------- weather impact on response ---------- */
+function WeatherImpactCard({ weather }) {
+  if (!weather?.length) return null
+  const best = weather[weather.length - 1]
+  const worst = weather[0]
+  const deltaPct = best.avg_eta_to_pickup_min > 0
+    ? Math.round(((worst.avg_eta_to_pickup_min - best.avg_eta_to_pickup_min) / best.avg_eta_to_pickup_min) * 100)
+    : 0
+  return (
+    <NeoCard title="Weather impact on response" subtitle="Avg time-to-pickup and SLA compliance by condition, worst first">
+      {deltaPct > 15 && (
+        <div className="mb-3 rounded-xl px-3.5 py-2.5" style={{ background: 'rgba(37,99,235,0.06)', border: '1px solid rgba(37,99,235,0.16)' }}>
+          <span className="text-[11.5px]" style={{ color: '#1e3a8a' }}>
+            Response runs {deltaPct}% slower in <b>{worst.weather}</b> vs <b>{best.weather}</b> conditions — worth pre-positioning extra units when severe weather is forecast.
+          </span>
+        </div>
+      )}
+      <table className="w-full text-[12.5px]">
+        <thead>
+          <tr className="text-[10.5px] uppercase tracking-widest" style={{ color: '#9CA3AF' }}>
+            <th className="text-left font-semibold pb-2">Condition</th>
+            <th className="text-right font-semibold pb-2">Calls</th>
+            <th className="text-right font-semibold pb-2">Avg time to pickup</th>
+            <th className="text-right font-semibold pb-2">SLA breach</th>
+          </tr>
+        </thead>
+        <tbody>
+          {weather.map((w) => (
+            <tr key={w.weather} style={{ borderTop: '1px solid #F0F1F0' }}>
+              <td className="py-2 font-medium" style={{ color: '#0C1322' }}>{w.weather}</td>
+              <td className="py-2 text-right" style={{ color: '#6B7280' }}>{w.calls.toLocaleString()}</td>
+              <td className="py-2 text-right" style={{ color: '#374151' }}>{w.avg_eta_to_pickup_min} min</td>
+              <td className="py-2 text-right">
+                <span className="px-2 py-0.5 rounded-full text-[11px] font-bold" style={{
+                  background: w.sla_breach_pct >= 25 ? 'rgba(220,38,38,0.1)' : w.sla_breach_pct >= 12 ? 'rgba(217,119,6,0.1)' : 'rgba(22,163,74,0.1)',
+                  color: w.sla_breach_pct >= 25 ? '#dc2626' : w.sla_breach_pct >= 12 ? '#d97706' : '#16a34a',
+                }}>{w.sla_breach_pct}%</span>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </NeoCard>
+  )
+}
+
+/* ---------- channel intake quality (Q: which channel produces the most false alarms — is voice-agent screening worse than a human?) ---------- */
+function ChannelQualityCard({ quality }) {
+  if (!quality?.length) return null
+  const worst = quality[0]
+  const voice = quality.find((q) => q.source === 'VOICE')
+  const console_ = quality.find((q) => q.source === 'CONSOLE')
+  const maxPct = Math.max(...quality.map((q) => q.false_alarm_pct), 1)
+  return (
+    <NeoCard
+      title="Is voice-agent intake worse than human screening?"
+      subtitle="False-alarm rate and wasted cost, by request channel"
+    >
+      {voice && console_ && (
+        <div className="mb-3 rounded-xl px-3.5 py-2.5" style={{
+          background: voice.false_alarm_pct > console_.false_alarm_pct ? 'rgba(217,119,6,0.08)' : 'rgba(22,163,74,0.06)',
+          border: `1px solid ${voice.false_alarm_pct > console_.false_alarm_pct ? 'rgba(217,119,6,0.2)' : 'rgba(22,163,74,0.18)'}`,
+        }}>
+          <span className="text-[11.5px]" style={{ color: voice.false_alarm_pct > console_.false_alarm_pct ? '#92400e' : '#14532d' }}>
+            <b>Answer:</b> Voice line false-alarms at {voice.false_alarm_pct}% vs {console_.false_alarm_pct}% for the console —
+            {' '}voice screening is {voice.false_alarm_pct > console_.false_alarm_pct ? 'currently worse' : 'holding up as well or better'} than human intake.
+            {' '}Worst overall channel is <b>{worst.source}</b> at {worst.false_alarm_pct}%.
+          </span>
+        </div>
+      )}
+      <div className="space-y-2.5">
+        {quality.map((q) => {
+          const meta = CHANNEL_META[q.source] || { label: q.source, color: '#6B7280' }
+          return (
+            <div key={q.source}>
+              <div className="flex items-center justify-between text-[12.5px] mb-1">
+                <span className="font-medium" style={{ color: '#374151' }}>{meta.label}</span>
+                <span className="flex items-center gap-2">
+                  <span className="font-bold" style={{ color: q.false_alarm_pct >= 15 ? '#dc2626' : '#374151' }}>{q.false_alarm_pct}%</span>
+                  <span className="text-[10.5px]" style={{ color: '#9CA3AF' }}>₹{Math.round(q.wasted_cost_estimate).toLocaleString('en-IN')} wasted</span>
+                </span>
+              </div>
+              <div className="h-2 rounded-full overflow-hidden" style={{ background: '#F0F1F0' }}>
+                <div className="h-full rounded-full" style={{ width: `${(q.false_alarm_pct / maxPct) * 100}%`, background: q.false_alarm_pct >= 15 ? '#dc2626' : meta.color }} />
+              </div>
+            </div>
+          )
+        })}
+      </div>
+    </NeoCard>
+  )
+}
+
+/* ---------- demand heatmap: day-of-week x hour-of-day grid ---------- */
+const DOW_LABEL = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+function heatColor(intensity) {
+  // 0 -> cool, 1 -> hot, matching the HEAT ramp used on the map card
+  const stops = [[56, 189, 248], [34, 197, 94], [234, 179, 8], [249, 115, 22], [220, 38, 38]]
+  const t = Math.min(1, Math.max(0, intensity)) * (stops.length - 1)
+  const i = Math.min(stops.length - 2, Math.floor(t))
+  const f = t - i
+  const [r1, g1, b1] = stops[i], [r2, g2, b2] = stops[i + 1]
+  return `rgb(${Math.round(r1 + (r2 - r1) * f)},${Math.round(g1 + (g2 - g1) * f)},${Math.round(b1 + (b2 - b1) * f)})`
+}
+function DemandHeatmapCard({ cells }) {
+  if (!cells?.length) return null
+  const max = Math.max(...cells.map((c) => c.calls), 1)
+  const grid = {}
+  cells.forEach((c) => { grid[`${c.day_of_week}-${c.hour}`] = c.calls })
+  return (
+    <NeoCard title="Demand heatmap" subtitle="Call volume by day of week x hour of day — where staffing should flex, at a glance">
+      <div className="overflow-x-auto">
+        <div style={{ minWidth: 640 }}>
+          <div className="flex mb-1 pl-9">
+            {Array.from({ length: 24 }, (_, h) => (
+              <div key={h} className="flex-1 text-center text-[9px]" style={{ color: '#9CA3AF' }}>{h % 3 === 0 ? h : ''}</div>
+            ))}
+          </div>
+          {DOW_LABEL.map((label, dow) => (
+            <div key={dow} className="flex items-center mb-[2px]">
+              <div className="w-9 text-[10.5px] font-medium shrink-0" style={{ color: '#6B7280' }}>{label}</div>
+              <div className="flex flex-1 gap-[2px]">
+                {Array.from({ length: 24 }, (_, h) => {
+                  const calls = grid[`${dow}-${h}`] || 0
+                  const intensity = calls / max
+                  return (
+                    <div
+                      key={h}
+                      title={`${label} ${h}:00 — ${calls} calls`}
+                      className="flex-1 rounded-[2px]"
+                      style={{ height: 16, background: calls > 0 ? heatColor(intensity) : '#F0F1F0', opacity: calls > 0 ? 0.55 + intensity * 0.45 : 1 }}
+                    />
+                  )
+                })}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+      <div className="flex items-center justify-end gap-1.5 mt-3">
+        <span className="text-[10px]" style={{ color: '#9CA3AF' }}>Fewer calls</span>
+        {HEAT_LEGEND.map((c) => <div key={c} className="h-2.5 w-4 rounded-sm" style={{ background: c }} />)}
+        <span className="text-[10px]" style={{ color: '#9CA3AF' }}>More calls</span>
+      </div>
+    </NeoCard>
+  )
+}
+const HEAT_LEGEND = ['#38bdf8', '#22c55e', '#eab308', '#f97316', '#dc2626']
+
+function BarRow({ label, pct, max, color }) {
+  return (
+    <div className="flex items-center gap-2">
+      <span className="text-[11px] w-32 truncate shrink-0" style={{ color: '#374151' }}>{label}</span>
+      <div className="flex-1 h-3 rounded-md overflow-hidden" style={{ background: '#F0F1F0' }}>
+        <div className="h-full rounded-md" style={{ width: `${(pct / max) * 100}%`, background: color }} />
+      </div>
+      <span className="text-[10.5px] w-10 text-right shrink-0 font-medium" style={{ color: '#6B7280' }}>{pct}%</span>
+    </div>
+  )
+}
+
+/* ---------- response-time bottleneck decomposition (Q: where does the time actually go?) ---------- */
+function ResponseBottleneckCard({ rows }) {
+  if (!rows?.length) return null
+  const maxTotal = Math.max(...rows.map((r) => r.avg_total_min), 1)
+  return (
+    <NeoCard
+      title="Where does response time actually go?"
+      subtitle="Total trip time decomposed into travel-to-scene, scene/handover, and the traffic-congestion tax, by vehicle type"
+    >
+      <div className="space-y-3">
+        {rows.map((r) => (
+          <div key={r.kind}>
+            <div className="flex items-center justify-between text-[12px] mb-1">
+              <span className="font-medium capitalize" style={{ color: '#374151' }}>{r.kind}</span>
+              <span className="font-bold" style={{ color: '#0C1322' }}>{r.avg_total_min} min total</span>
+            </div>
+            <div className="h-5 rounded-lg overflow-hidden flex" style={{ background: '#F0F1F0', width: `${(r.avg_total_min / maxTotal) * 100}%`, minWidth: '40%' }}>
+              <div className="h-full flex items-center justify-center" style={{ width: `${(r.avg_time_to_pickup_min / r.avg_total_min) * 100}%`, background: '#07514D' }} title={`Travel to scene: ${r.avg_time_to_pickup_min}m`} />
+              <div className="h-full flex items-center justify-center" style={{ width: `${(r.avg_scene_handover_min / r.avg_total_min) * 100}%`, background: '#2563eb' }} title={`Scene/handover: ${r.avg_scene_handover_min}m`} />
+              {r.avg_traffic_delay_min > 0 && (
+                <div className="h-full flex items-center justify-center" style={{ width: `${Math.min(30, (r.avg_traffic_delay_min / r.avg_total_min) * 100)}%`, background: '#dc2626' }} title={`Traffic tax: ${r.avg_traffic_delay_min}m`} />
+              )}
+            </div>
+            <div className="flex gap-3 mt-1 text-[10.5px]" style={{ color: '#9CA3AF' }}>
+              <span><span className="inline-block h-2 w-2 rounded-sm mr-1" style={{ background: '#07514D' }} />Travel {r.avg_time_to_pickup_min}m</span>
+              <span><span className="inline-block h-2 w-2 rounded-sm mr-1" style={{ background: '#2563eb' }} />Handover {r.avg_scene_handover_min}m</span>
+              <span><span className="inline-block h-2 w-2 rounded-sm mr-1" style={{ background: '#dc2626' }} />Traffic tax {r.avg_traffic_delay_min}m</span>
+            </div>
+          </div>
+        ))}
+      </div>
+    </NeoCard>
+  )
+}
+
+/* ---------- fleet right-sizing (Q: is the fleet the right size for demand?) ---------- */
+function FleetRightsizingCard({ fleet }) {
+  if (!fleet) return null
+  const overprovisioned = fleet.status === 'Overprovisioned'
+  return (
+    <NeoCard title="Is the fleet the right size for demand?" subtitle="Vehicles currently in rotation vs. Little's-Law-modeled requirement">
+      <div className="grid grid-cols-3 gap-3 mb-3">
+        <div className="rounded-xl px-3.5 py-3" style={{ background: '#FAFBFB', border: '1px solid #EEF1F0' }}>
+          <div className="text-[10.5px] uppercase tracking-widest font-semibold mb-1" style={{ color: '#9CA3AF' }}>In rotation</div>
+          <div className="text-[18px] font-bold" style={{ color: '#0C1322' }}>{fleet.current_vehicles_in_use}</div>
+        </div>
+        <div className="rounded-xl px-3.5 py-3" style={{ background: '#FAFBFB', border: '1px solid #EEF1F0' }}>
+          <div className="text-[10.5px] uppercase tracking-widest font-semibold mb-1" style={{ color: '#9CA3AF' }}>Modeled requirement</div>
+          <div className="text-[18px] font-bold" style={{ color: '#0C1322' }}>{fleet.recommended_units}</div>
+        </div>
+        <div className="rounded-xl px-3.5 py-3" style={{ background: '#FAFBFB', border: '1px solid #EEF1F0' }}>
+          <div className="text-[10.5px] uppercase tracking-widest font-semibold mb-1" style={{ color: '#9CA3AF' }}>Status</div>
+          <div className="text-[15px] font-bold" style={{ color: overprovisioned ? '#d97706' : fleet.status === 'Underprovisioned' ? '#dc2626' : '#16a34a' }}>{fleet.status}</div>
+        </div>
+      </div>
+      <div className="rounded-xl px-3.5 py-2.5" style={{ background: 'rgba(37,99,235,0.06)', border: '1px solid rgba(37,99,235,0.16)' }}>
+        <span className="text-[11.5px]" style={{ color: '#1e3a8a' }}><b>Answer:</b> {fleet.recommendation}</span>
+      </div>
+    </NeoCard>
+  )
+}
+
+/* ---------- case-type mix growth (Q: which case types are growing as a share of volume?) ---------- */
+function CaseTypeGrowthCard({ rows }) {
+  if (!rows?.length) return null
+  const growing = rows[0]
+  const shrinking = rows[rows.length - 1]
+  return (
+    <NeoCard title="Which case types are growing (or shrinking) as a share of demand?" subtitle="Share of medical dispatches, early vs. recent quartile of the historical window">
+      {growing && shrinking && (
+        <div className="mb-3 rounded-xl px-3.5 py-2.5" style={{ background: 'rgba(22,163,74,0.06)', border: '1px solid rgba(22,163,74,0.18)' }}>
+          <span className="text-[11.5px]" style={{ color: '#14532d' }}>
+            <b>Answer:</b> <b>{growing.case_type}</b> grew {growing.delta_pct_points > 0 ? '+' : ''}{growing.delta_pct_points}pt share; <b>{shrinking.case_type}</b> shrank {shrinking.delta_pct_points}pt.
+          </span>
+        </div>
+      )}
+      <div className="space-y-2">
+        {rows.map((r) => (
+          <div key={r.case_type} className="flex items-center justify-between text-[12px]">
+            <span className="font-medium" style={{ color: '#374151' }}>{r.case_type}</span>
+            <span className="flex items-center gap-2">
+              <span style={{ color: '#9CA3AF' }}>{r.early_share_pct}% → {r.recent_share_pct}%</span>
+              <span className="px-1.5 py-0.5 rounded-md text-[10.5px] font-bold" style={{
+                background: r.delta_pct_points > 0 ? 'rgba(22,163,74,0.1)' : r.delta_pct_points < 0 ? 'rgba(220,38,38,0.1)' : 'rgba(107,114,128,0.1)',
+                color: r.delta_pct_points > 0 ? '#16a34a' : r.delta_pct_points < 0 ? '#dc2626' : '#6B7280',
+              }}>{r.delta_pct_points > 0 ? '+' : ''}{r.delta_pct_points}pt</span>
+            </span>
+          </div>
+        ))}
+      </div>
+    </NeoCard>
+  )
+}
+
+/* ---------- steel-cycle decoupling test (Q: does demand track Tata Steel's own cycle?) ---------- */
+function SteelCycleCard({ rows }) {
+  if (!rows?.length) return null
+  return (
+    <NeoCard title="Does dispatch demand track Tata Steel's industrial cycle, or is it decoupled?" subtitle="Call-volume multiplier during known steel-industry events vs. an average day">
+      <div className="space-y-3">
+        {rows.map((r) => (
+          <div key={r.event_name} className="rounded-xl px-3.5 py-3" style={{ background: '#FAFBFB', border: '1px solid #EEF1F0' }}>
+            <div className="flex items-center justify-between mb-1">
+              <span className="text-[12.5px] font-medium" style={{ color: '#374151' }}>{r.event_name}</span>
+              <span className="text-[13px] font-bold" style={{ color: r.multiplier_vs_average_day >= 1.15 ? '#dc2626' : r.multiplier_vs_average_day <= 0.9 ? '#2563eb' : '#16a34a' }}>{r.multiplier_vs_average_day}x</span>
+            </div>
+            <div className="text-[11px]" style={{ color: '#9CA3AF' }}>{r.interpretation}</div>
+          </div>
+        ))}
+      </div>
+    </NeoCard>
+  )
+}
+
+/* ---------- voice-agent adoption trend (Q: is voice adoption growing, and does quality hold up?) ---------- */
+function VoiceAdoptionTrendCard({ trend }) {
+  if (!trend) return null
+  const growing = trend.share_delta_pct_points > 0
+  const qualityHolding = trend.recent_false_alarm_pct <= trend.early_false_alarm_pct + 2
+  return (
+    <NeoCard title="Is voice-agent adoption growing, and does intake quality hold up as it scales?" subtitle="Voice line's share of dispatches and its false-alarm rate, early vs. recent quartile">
+      <div className="grid grid-cols-2 gap-3 mb-3">
+        <div className="rounded-xl px-3.5 py-3" style={{ background: '#FAFBFB', border: '1px solid #EEF1F0' }}>
+          <div className="text-[10.5px] uppercase tracking-widest font-semibold mb-1" style={{ color: '#9CA3AF' }}>Adoption share</div>
+          <div className="text-[16px] font-bold" style={{ color: '#0C1322' }}>{trend.early_share_pct}% → {trend.recent_share_pct}%</div>
+          <div className="text-[10.5px] mt-0.5" style={{ color: growing ? '#16a34a' : '#dc2626' }}>{growing ? '+' : ''}{trend.share_delta_pct_points}pt</div>
+        </div>
+        <div className="rounded-xl px-3.5 py-3" style={{ background: '#FAFBFB', border: '1px solid #EEF1F0' }}>
+          <div className="text-[10.5px] uppercase tracking-widest font-semibold mb-1" style={{ color: '#9CA3AF' }}>False-alarm rate</div>
+          <div className="text-[16px] font-bold" style={{ color: '#0C1322' }}>{trend.early_false_alarm_pct}% → {trend.recent_false_alarm_pct}%</div>
+        </div>
+      </div>
+      <div className="rounded-xl px-3.5 py-2.5" style={{ background: qualityHolding ? 'rgba(22,163,74,0.06)' : 'rgba(217,119,6,0.08)', border: `1px solid ${qualityHolding ? 'rgba(22,163,74,0.18)' : 'rgba(217,119,6,0.2)'}` }}>
+        <span className="text-[11.5px]" style={{ color: qualityHolding ? '#14532d' : '#92400e' }}>
+          <b>Answer:</b> Adoption has {growing ? 'grown' : 'shrunk'} {Math.abs(trend.share_delta_pct_points)}pt, and screening quality has {qualityHolding ? 'held steady' : 'degraded'} as it scaled.
+        </span>
+      </div>
+    </NeoCard>
+  )
+}
+
+/* ---------- demographic-controlled response gap (equity check) ---------- */
+function DemographicResponseGapCard({ gap }) {
+  if (!gap || (!gap.by_age_band?.length && !gap.by_gender?.length)) return null
+  return (
+    <NeoCard title="Does response time differ by patient demographic?" subtitle="Avg time-to-pickup by age band and gender, for medical dispatches — an equity check">
+      {gap.by_age_band?.length >= 2 && (
+        <div className="mb-3 rounded-xl px-3.5 py-2.5" style={{ background: gap.widest_age_gap_pct >= 10 ? 'rgba(217,119,6,0.08)' : 'rgba(22,163,74,0.06)', border: `1px solid ${gap.widest_age_gap_pct >= 10 ? 'rgba(217,119,6,0.2)' : 'rgba(22,163,74,0.18)'}` }}>
+          <span className="text-[11.5px]" style={{ color: gap.widest_age_gap_pct >= 10 ? '#92400e' : '#14532d' }}>
+            <b>Answer:</b> Widest age-band gap is {gap.widest_age_gap_pct}% — {gap.widest_age_gap_pct >= 10 ? 'a measurable disparity worth investigating' : 'no material disparity detected'}.
+          </span>
+        </div>
+      )}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        {gap.by_age_band?.length > 0 && (
+          <div>
+            <div className="text-[10.5px] uppercase tracking-widest font-semibold mb-2" style={{ color: '#9CA3AF' }}>By age band</div>
+            <div className="space-y-1.5">
+              {gap.by_age_band.map((a) => (
+                <BarRow key={a.age_band} label={a.age_band} pct={a.avg_eta_to_pickup_min} max={Math.max(...gap.by_age_band.map((x) => x.avg_eta_to_pickup_min), 1)} color="#2563eb" />
+              ))}
+            </div>
+          </div>
+        )}
+        {gap.by_gender?.length > 0 && (
+          <div>
+            <div className="text-[10.5px] uppercase tracking-widest font-semibold mb-2" style={{ color: '#9CA3AF' }}>By gender</div>
+            <div className="space-y-1.5">
+              {gap.by_gender.map((gnd) => (
+                <BarRow key={gnd.gender} label={gnd.gender} pct={gnd.avg_eta_to_pickup_min} max={Math.max(...gap.by_gender.map((x) => x.avg_eta_to_pickup_min), 1)} color="#7c3aed" />
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+    </NeoCard>
+  )
+}
+
+/* ---------- shock-event capacity & current readiness margin ---------- */
+function ShockEventCapacityCard({ events, margin }) {
+  if (!events?.length && !margin) return null
+  return (
+    <NeoCard title="How much did response degrade in past shock events, and is today's fleet ready for a repeat?" subtitle="Response-time and SLA-compliance degradation during historical demand spikes vs. baseline">
+      {margin && (
+        <div className="mb-3 rounded-xl px-3.5 py-2.5" style={{ background: 'rgba(37,99,235,0.06)', border: '1px solid rgba(37,99,235,0.16)' }}>
+          <span className="text-[11.5px]" style={{ color: '#1e3a8a' }}><b>Answer:</b> {margin.margin_recommendation}</span>
+        </div>
+      )}
+      {events?.length > 0 && (
+        <table className="w-full text-[12px]">
+          <thead>
+            <tr className="text-[10.5px] uppercase tracking-widest" style={{ color: '#9CA3AF' }}>
+              <th className="text-left font-semibold pb-2">Event</th>
+              <th className="text-right font-semibold pb-2">Calls</th>
+              <th className="text-right font-semibold pb-2">Response degradation</th>
+              <th className="text-right font-semibold pb-2">SLA breach shift</th>
+            </tr>
+          </thead>
+          <tbody>
+            {events.map((e) => (
+              <tr key={e.event_tag} style={{ borderTop: '1px solid #F0F1F0' }}>
+                <td className="py-2 font-medium" style={{ color: '#0C1322' }}>{e.event_tag.replaceAll('_', ' ')}</td>
+                <td className="py-2 text-right" style={{ color: '#6B7280' }}>{e.calls.toLocaleString()}</td>
+                <td className="py-2 text-right font-bold" style={{ color: e.response_degradation_pct > 15 ? '#dc2626' : e.response_degradation_pct > 0 ? '#d97706' : '#16a34a' }}>
+                  {e.response_degradation_pct > 0 ? '+' : ''}{e.response_degradation_pct}%
+                </td>
+                <td className="py-2 text-right" style={{ color: '#6B7280' }}>{e.sla_breach_degradation_pct_points > 0 ? '+' : ''}{e.sla_breach_degradation_pct_points}pt</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
     </NeoCard>
   )
 }

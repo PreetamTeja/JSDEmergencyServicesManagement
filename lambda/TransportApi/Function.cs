@@ -37,6 +37,19 @@ public class Function
     private static readonly string BedrockModelId = Env("BEDROCK_MODEL_ID", "eu.amazon.nova-lite-v1:0");
     private static readonly string AppBaseUrl  = (Env("APP_BASE_URL", "")).TrimEnd('/');
     private static readonly string PolicyBucket  = Env("POLICY_BUCKET", "");
+    // Power BI Web-connector export (GET /analytics/export/{table}.csv) —
+    // streams a CSV out of the private analytics bucket the ETL Lambda
+    // writes to (infra/etl_lambda/), gated by the POWERBI api key rather
+    // than a presigned S3 URL: revocable instantly, logged like every other
+    // request, and scoped to exactly this one endpoint instead of blanket
+    // bucket access.
+    private static readonly string AnalyticsBucket = Env("ANALYTICS_BUCKET", "");
+    private static readonly string AnalyticsPrefix  = Env("ANALYTICS_PREFIX", "analytics/dispatch").Trim('/');
+    private static readonly HashSet<string> AnalyticsTables = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "fact_dispatch", "dim_date", "dim_zone", "dim_hospital", "dim_vehicle", "dim_case_type",
+        "dim_severity", "dim_resolution", "dim_source", "dim_weather", "dim_event", "dim_demographic",
+    };
     private static readonly string PolicySyncFn  = Env("POLICY_SYNC_FUNCTION", "psiog-policy-sync");
     private static readonly string PolicyKey     = Env("POLICY_KEY", "policy.pdf");
 
@@ -88,6 +101,15 @@ public class Function
         if (method == "OPTIONS")
             return Resp(204, null, corsHeaders);
 
+        // SSO session bridge — handled before JSON body parsing since
+        // /sso-callback receives a form-urlencoded POST, not JSON.
+        if (rawPath.Trim('/') == "sso-callback" && method == "POST")
+            return await SsoBridge.HandleCallback(request, corsHeaders);
+        if (rawPath.Trim('/') == "api/me" && method == "GET")
+            return SsoBridge.HandleMe(request, corsHeaders);
+        if (rawPath.Trim('/') == "api/logout" && method == "POST")
+            return SsoBridge.HandleLogout(corsHeaders);
+
         JsonObject body = new();
         try
         {
@@ -105,9 +127,29 @@ public class Function
         JwtPayload? claims = null;
         if (!string.IsNullOrEmpty(bearerToken))
             claims = await Auth.VerifyJwt(bearerToken);
-        var admin = apiKeySource == "CONSOLE" || (claims != null && Auth.IsAdmin(claims));
-        var identity = Auth.IdentityOf(claims);
-        var authed = apiKeySource != null || claims != null;
+
+        // Cookie-based SSO sessions never expose a raw JWT to the frontend,
+        // so there's nothing for it to put in the Authorization header —
+        // fall back to the sso_session cookie set by SsoBridge when there's
+        // no bearer token/api key.
+        string[]? cookieGroups = null;
+        string? cookieIdentity = null;
+        if (claims == null && apiKeySource == null)
+        {
+            var cookieClaims = SsoBridge.TryGetSessionClaims(request);
+            if (cookieClaims != null)
+            {
+                cookieIdentity = cookieClaims["userId"]?.ToString();
+                cookieGroups = cookieClaims["groups"]?.AsArray()
+                    .Select(g => g?.ToString() ?? "").Where(x => x.Length > 0).ToArray() ?? Array.Empty<string>();
+            }
+        }
+        var cookieAuthed = cookieIdentity != null;
+
+        var admin = apiKeySource == "CONSOLE" || (claims != null && Auth.IsAdmin(claims))
+            || (cookieAuthed && Auth.IsAdminGroups(cookieGroups!));
+        var identity = Auth.IdentityOf(claims) ?? cookieIdentity;
+        var authed = apiKeySource != null || claims != null || cookieAuthed;
         var authOn = Auth.KeysEnabled || Auth.JwtEnabled;
 
         // --- Write authorization ---
@@ -116,7 +158,7 @@ public class Function
             if (authOn && !authed) return ErrResp(401, "UNAUTHORIZED", "Authentication required", corsHeaders);
             if (apiKeySource != null && apiKeySource != "CONSOLE" && !Auth.CanPost(apiKeySource, seg[0]))
                 return ErrResp(403, "FORBIDDEN", $"{apiKeySource} key is not permitted to POST /{seg[0]}", corsHeaders);
-            if (apiKeySource == null && claims != null && !admin)
+            if (apiKeySource == null && (claims != null || cookieAuthed) && !admin)
             {
                 var allowed = seg[0] == "emergencies" || (seg[0] == "requests" && seg.Length > 2 && seg[2] == "cancel");
                 if (!allowed) return ErrResp(403, "FORBIDDEN", "Not permitted for this user", corsHeaders);
@@ -124,14 +166,29 @@ public class Function
         }
         // source is server-controlled
         if (apiKeySource != null && apiKeySource != "CONSOLE") body["source"] = apiKeySource;
-        else if (apiKeySource == null && claims != null && !admin) body["source"] = "PORTAL";
+        else if (apiKeySource == null && (claims != null || cookieAuthed) && !admin) body["source"] = "PORTAL";
 
         // --- Read authorization ---
         if (method == "GET" && authOn)
         {
             var adminGet = new[] { "employees", "allotments", "fuel", "cards", "powerbi" };
-            var authedGet = new[] { "fleet", "ops" }.Concat(adminGet).ToArray();
-            if (authedGet.Contains(seg[0]) && !authed) return ErrResp(401, "UNAUTHORIZED", "Authentication required", corsHeaders);
+            // "bookings", "requests" and "emergencies" are here because their
+            // GET routes (list + single item by id) were previously open to
+            // anyone: ops ids are short and guessable (EMG-1xx..9xx), so an
+            // unauthenticated caller could enumerate every emergency's pickup
+            // location/vehicle/status — bypassing the tracking-token gate that
+            // /track/{id} exists to enforce. Public tracking stays on /track.
+            var authedGet = new[] { "fleet", "ops", "bookings", "requests", "emergencies" }.Concat(adminGet).ToArray();
+            if (authedGet.Contains(seg[0]) && !authed)
+            {
+                // Diagnostic only — never logs the cookie/token value, just
+                // enough to tell why authed resolved false: was there a
+                // cookie header at all, and did it parse/verify.
+                headers.TryGetValue("cookie", out var cookieHeaderSeen);
+                var hasSsoCookie = cookieHeaderSeen?.Contains("sso_session=") == true;
+                Console.Error.WriteLine($"ERROR AUTH_401 path=/{seg[0]} hasCookieHeader={cookieHeaderSeen != null} hasSsoCookieName={hasSsoCookie} cookieAuthed={cookieAuthed} hasBearer={!string.IsNullOrEmpty(bearerToken)} apiKeySource={apiKeySource ?? "null"}");
+                return ErrResp(401, "UNAUTHORIZED", "Authentication required", corsHeaders);
+            }
             if (adminGet.Contains(seg[0]) && !admin) return ErrResp(403, "FORBIDDEN", "Admin only", corsHeaders);
             // /emergencies/status lists across all active dispatches (optionally
             // hospital-filtered) rather than a single known id like /emergencies/{id}
@@ -387,6 +444,8 @@ public class Function
             if (method == "POST" && seg[0] == "fuel")
             {
                 if (!admin) return ErrResp(403, "FORBIDDEN", "Admin only", corsHeaders);
+                if (string.IsNullOrEmpty(Str(body, "vehicleId")))
+                    return ErrResp(422, "INVALID", "vehicleId required", corsHeaders);
                 var date = Now()[..10];
                 var id = $"f-{DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()}";
                 var it = new Dictionary<string, object?>
@@ -555,8 +614,10 @@ public class Function
             {
                 var (_, emgsAll, _) = await GetOps();
                 var hospFilter = QS(request, "hospital_id");
-                var filtered = string.IsNullOrEmpty(hospFilter)
-                    ? emgsAll : emgsAll.Where(e => Str(e, "hospital_id") == hospFilter).ToList();
+                var bankFilter = QS(request, "blood_bank_id");
+                var filtered = emgsAll;
+                if (!string.IsNullOrEmpty(hospFilter)) filtered = filtered.Where(e => Str(e, "hospital_id") == hospFilter).ToList();
+                if (!string.IsNullOrEmpty(bankFilter)) filtered = filtered.Where(e => Str(e, "blood_bank_id") == bankFilter).ToList();
                 var feed = filtered
                     .OrderByDescending(e => Str(e, "created_at"))
                     .Select(DispatchStatusFeedItem)
@@ -594,7 +655,7 @@ public class Function
                 var pt = ResolvePickup(refData, GetObj(body, "pickup"));
                 if (pt == null) return ErrResp(404, "UNKNOWN_LOCATION", "pickup not resolvable", corsHeaders);
                 var zoneId = ZonesByProximity(refData, pt).FirstOrDefault()?.Zone?.GetValueOrDefault("id")?.ToString();
-                var id = Rid("REQ", 1000);
+                var id = await NewOpsId("REQ", 1000);
                 var createdAt = Now();
                 var rec = new Dictionary<string, object?>
                 {
@@ -678,17 +739,35 @@ public class Function
                 if (item == null) return ErrResp(404, "NOT_FOUND", "emergency not found", corsHeaders);
                 if (seg[2] == "route")
                 {
+                    // The console (admin) refreshes route display fields for any
+                    // emergency; a portal user's browser does the same but only
+                    // for their own (hydrateLive over /ops, which is already
+                    // scoped to them). Without this check any signed-in portal
+                    // user could overwrite the displayed ETA/distance of ANY
+                    // emergency by id.
+                    var ownsEmg = identity != null && Str(item, "requested_by") == identity;
+                    if (!admin && !ownsEmg && apiKeySource == null)
+                        return ErrResp(403, "FORBIDDEN", "Not your emergency", corsHeaders);
                     double.TryParse(body["eta_min"]?.ToString(), out var etaMin);
                     double.TryParse(body["distance_km"]?.ToString(), out var distKm);
                     double.TryParse(body["eta_to_pickup_min"]?.ToString(), out var etaPickup);
+                    // eta_complete is intentionally NOT overwritten here. The browser
+                    // calls this endpoint every time it re-hydrates client-side OSRM
+                    // geometry (essentially every page load/refresh for any EN_ROUTE
+                    // job), always with the *total* trip eta_min from scratch. Resetting
+                    // eta_complete = now + etaMin on every call kept sliding the trip's
+                    // perceived end-time forward on each refresh, pinning the progress
+                    // bar near its floor forever ("refresh -> goes back to incomplete").
+                    // eta_complete is set once at dispatch (BuildEmergency) and left
+                    // alone afterward; this endpoint only refreshes the display fields.
                     await Ddb.UpdateItem(TblOps, Key(Str(item, "PK")!, "META"),
-                        "SET distance_km = :d, eta_min = :e, eta_to_pickup_min = :p, eta_complete = :c, updated_at = :u",
+                        "SET distance_km = :d, eta_min = :e, eta_to_pickup_min = :p, updated_at = :u",
                         null, new()
                         {
                             [":d"] = DynamoService.Av(distKm > 0 ? distKm : Dbl(item, "distance_km")),
                             [":e"] = DynamoService.Av(etaMin),
                             [":p"] = DynamoService.Av(etaPickup > 0 ? etaPickup : Dbl(item, "eta_to_pickup_min")),
-                            [":c"] = DynamoService.Av(EtaComplete(etaMin)), [":u"] = DynamoService.Av(Now()),
+                            [":u"] = DynamoService.Av(Now()),
                         });
                     return Ok(new { id = seg[1], updated = true }, corsHeaders);
                 }
@@ -752,18 +831,24 @@ public class Function
                 var per = (int)GetPolicyDouble("patients_per_ambulance", 4);
                 var cap = (int)GetPolicyDouble("max_units", 10);
                 var massT = (int)GetPolicyDouble("mass_patient_threshold", 3);
+                // Fire previously always hard-coded to a single truck, even when the
+                // caller explicitly asked for multiple (a large fire, several trucks
+                // needed) — the multi-unit loop below already works generically for
+                // any kind (each iteration re-runs FindNearestVehicle, which only sees
+                // still-available units since the previous iteration's truck was just
+                // marked enroute), so there was no structural reason to special-case it.
                 int units;
-                if (kind == "fire") units = 1;
-                else if (int.TryParse(body["units"]?.ToString(), out var uRaw) && uRaw > 1) units = Math.Min(cap, uRaw);
+                if (int.TryParse(body["units"]?.ToString(), out var uRaw) && uRaw > 1) units = Math.Min(cap, uRaw);
+                else if (kind == "fire") units = 1;
                 else units = patients > massT ? Math.Min(cap, Math.Max(2, (int)Math.Ceiling((double)patients / per))) : 1;
-                var incidentId = units > 1 ? Rid("INC", 100) : null;
+                var incidentId = units > 1 ? Rid("INC", 10000) : null;
                 var records = new List<Dictionary<string, object?>>();
                 for (var i = 0; i < units; i++)
                 {
                     refData = await LoadRef();
                     var rec2 = await BuildEmergency(refData, new Dictionary<string, object?>
                     {
-                        ["id"] = Rid("EMG", 100), ["kind"] = kind, ["case_type"] = caseType,
+                        ["id"] = await NewOpsId("EMG", 100), ["kind"] = kind, ["case_type"] = caseType,
                         ["severity"] = Str(body, "severity"), ["pickup"] = pickupObj,
                         ["blood_bank_id"] = Str(body, "blood_bank_id"),
                         ["requested_by"] = Str(body, "requested_by"), ["source"] = Str(body, "source"),
@@ -823,7 +908,7 @@ public class Function
                     (dropObj != null && dropObj.ContainsKey("lat") ? new GeoPoint(Dbl(dropObj, "lat"), Dbl(dropObj, "lng")) : null);
                 var distKm = dropPt != null ? HavKm(pt, dropPt) : 0;
                 var fare = (int)Math.Round(distKm * 12);
-                var bkId = Rid("BK", 1000);
+                var bkId = await NewOpsId("BK", 1000);
                 // Atomic cap check + increment
                 try
                 {
@@ -976,6 +1061,30 @@ public class Function
                     }, corsHeaders);
                 }
                 catch (Exception ex) { return ErrResp(500, "CW_ERROR", ex.Message, corsHeaders); }
+            }
+
+            // ---- Power BI CSV export — streams one star-schema table out of
+            // the private analytics S3 bucket. Gated by the POWERBI api key
+            // (or admin), never by a presigned/shareable S3 link — see the
+            // AnalyticsBucket comment above for why. ----
+            if (method == "GET" && seg[0] == "analytics" && seg.Length > 2 && seg[1] == "export")
+            {
+                if (!admin && apiKeySource != "POWERBI") return ErrResp(403, "FORBIDDEN", "POWERBI key or admin required", corsHeaders);
+                if (string.IsNullOrEmpty(AnalyticsBucket)) return ErrResp(500, "NOT_CONFIGURED", "ANALYTICS_BUCKET not set", corsHeaders);
+                var table = seg[2].EndsWith(".csv", StringComparison.OrdinalIgnoreCase) ? seg[2][..^4] : seg[2];
+                if (!AnalyticsTables.Contains(table)) return ErrResp(404, "UNKNOWN_TABLE", $"No such table '{table}'", corsHeaders);
+                try
+                {
+                    using var obj = await S3.GetObjectAsync(new GetObjectRequest { BucketName = AnalyticsBucket, Key = $"{AnalyticsPrefix}/{table}.csv" });
+                    using var reader = new System.IO.StreamReader(obj.ResponseStream);
+                    var csv = await reader.ReadToEndAsync();
+                    var csvHeaders = new Dictionary<string, string>(corsHeaders) { ["content-type"] = "text/csv; charset=utf-8" };
+                    return Resp(200, csv, csvHeaders);
+                }
+                catch (Amazon.S3.AmazonS3Exception ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
+                {
+                    return ErrResp(404, "NOT_FOUND", $"{table}.csv not found in the analytics export — has the ETL Lambda run yet?", corsHeaders);
+                }
             }
 
             // ---- coverage-gap analytics (synthetic historical data ONLY —
@@ -1285,6 +1394,363 @@ public class Function
                     }).OrderByDescending(p => p.calls).ToList();
                     var topHotspot = placementRecs.OrderByDescending(z => z!.drift_km).FirstOrDefault();
 
+                    // ---- 7) fleet cost & efficiency: total modeled operating cost,
+                    // fuel burned, and how often units get reassigned mid-dispatch
+                    // (a proxy for dispatch-quality friction — every reassignment is
+                    // wasted travel + a slower response for that caller). ----
+                    var costRows = rows.Where(r => r.ContainsKey("cost_estimate")).ToList();
+                    var totalCost = costRows.Sum(r => Dbl(r, "cost_estimate"));
+                    var totalFuel = costRows.Sum(r => Dbl(r, "fuel_used_l"));
+                    var reassignedN = costRows.Count(r => Dbl(r, "reassigned_count") > 0);
+                    var costByKind = costRows.GroupBy(r => Str(r, "kind") ?? "unknown").Select(g => new
+                    {
+                        kind = g.Key,
+                        dispatches = g.Count(),
+                        total_cost = Math.Round(g.Sum(r => Dbl(r, "cost_estimate")), 0),
+                        avg_cost = Math.Round(g.Average(r => Dbl(r, "cost_estimate")), 0),
+                    }).OrderByDescending(x => x.total_cost).ToList();
+                    var costEfficiency = costRows.Count == 0 ? null : new
+                    {
+                        total_cost_estimate = Math.Round(totalCost, 0),
+                        avg_cost_per_dispatch = Math.Round(totalCost / costRows.Count, 0),
+                        total_fuel_l = Math.Round(totalFuel, 0),
+                        reassignment_rate_pct = Math.Round(100.0 * reassignedN / costRows.Count, 1),
+                        by_kind = costByKind,
+                    };
+
+                    // ---- 8) outcome mix: what dispatches actually resolve to. A high
+                    // false-alarm share is itself an operational signal (screening/
+                    // triage quality at intake), not just a pie-chart curiosity. ----
+                    var resRows = rows.Where(r => r.ContainsKey("resolution_type")).ToList();
+                    var outcomeMix = resRows.Count == 0 ? null : resRows
+                        .GroupBy(r => Str(r, "resolution_type") ?? "Unknown")
+                        .Select(g => new { resolution = g.Key, count = g.Count(), pct = Math.Round(100.0 * g.Count() / resRows.Count, 1) })
+                        .OrderByDescending(x => x.count).ToList();
+                    var falseAlarmPct = outcomeMix?.FirstOrDefault(x => x.resolution == "False Alarm")?.pct ?? 0;
+
+                    // ---- 9) request channel mix: where dispatches actually originate
+                    // (console, hospital-initiated, portal self-service, voice line,
+                    // fire reports) — which channels the system actually depends on. ----
+                    var srcRows = rows.Where(r => r.ContainsKey("requester_source")).ToList();
+                    var channelMix = srcRows.Count == 0 ? null : srcRows
+                        .GroupBy(r => Str(r, "requester_source") ?? "Unknown")
+                        .Select(g => new { source = g.Key, count = g.Count(), pct = Math.Round(100.0 * g.Count() / srcRows.Count, 1) })
+                        .OrderByDescending(x => x.count).ToList();
+
+                    // ---- 10) weather impact: does response time/SLA compliance
+                    // actually degrade in bad weather, and by how much — a concrete,
+                    // checkable claim rather than an assumed seasonal narrative. ----
+                    var wxRows = rows.Where(r => r.ContainsKey("weather_condition") && Str(r, "status") == "COMPLETED" && Dbl(r, "eta_to_pickup_min") > 0).ToList();
+                    var weatherImpact = wxRows.Count == 0 ? null : wxRows
+                        .GroupBy(r => Str(r, "weather_condition") ?? "Unknown")
+                        .Select(g => new
+                        {
+                            weather = g.Key,
+                            calls = g.Count(),
+                            avg_eta_to_pickup_min = Math.Round(g.Average(r => Dbl(r, "eta_to_pickup_min")), 1),
+                            sla_breach_pct = Math.Round(100.0 * g.Count(r => BoolVal(r, "sla_breach")) / g.Count(), 1),
+                        })
+                        .OrderByDescending(x => x.avg_eta_to_pickup_min).ToList();
+
+                    // ---- 11) channel intake quality (Q: which request channel produces
+                    // the highest false-alarm rate — is voice-agent screening worse or
+                    // better than human console staff?). Cross-tabs requester_source
+                    // against resolution outcome instead of leaving channel_mix and
+                    // outcome_mix as two uncorrelated cards. Also prices the waste: a
+                    // false alarm still burns a dispatch's average cost for that channel. ----
+                    var chanResRows = rows.Where(r => r.ContainsKey("requester_source") && r.ContainsKey("resolution_type")).ToList();
+                    var channelQuality = chanResRows.Count == 0 ? null : chanResRows
+                        .GroupBy(r => Str(r, "requester_source") ?? "Unknown")
+                        .Select(g =>
+                        {
+                            var n = g.Count();
+                            var falseAlarms = g.Count(r => Str(r, "resolution_type") == "False Alarm");
+                            var avgCost = g.Average(r => Dbl(r, "cost_estimate"));
+                            return new
+                            {
+                                source = g.Key,
+                                dispatches = n,
+                                false_alarm_count = falseAlarms,
+                                false_alarm_pct = Math.Round(100.0 * falseAlarms / n, 1),
+                                wasted_cost_estimate = Math.Round(falseAlarms * avgCost, 0),
+                            };
+                        })
+                        .OrderByDescending(x => x.false_alarm_pct).ToList();
+
+                    // ---- 12) cost per successful outcome (Q: what's the fully-loaded
+                    // cost per successful response vs. per false alarm, and which zone or
+                    // vehicle type has the worst cost-per-outcome ratio?). "Successful"
+                    // = the dispatch actually did something (treated/transported/
+                    // extinguished), not just completed. ----
+                    bool IsSuccessful(Dictionary<string, object?> r) => Str(r, "resolution_type") is "Treated & Transported" or "Treated on Scene" or "Fire Extinguished";
+                    var outcomeCostRows = rows.Where(r => r.ContainsKey("resolution_type") && r.ContainsKey("cost_estimate")).ToList();
+                    double CostPerSuccess(IEnumerable<Dictionary<string, object?>> grp)
+                    {
+                        var list = grp.ToList();
+                        var successN = list.Count(IsSuccessful);
+                        var totalC = list.Sum(r => Dbl(r, "cost_estimate"));
+                        return successN == 0 ? 0 : Math.Round(totalC / successN, 0);
+                    }
+                    var costPerOutcomeOverall = outcomeCostRows.Count == 0 ? null : new
+                    {
+                        cost_per_successful_outcome = CostPerSuccess(outcomeCostRows),
+                        cost_per_false_alarm = Math.Round(outcomeCostRows.Where(r => Str(r, "resolution_type") == "False Alarm").Sum(r => Dbl(r, "cost_estimate")), 0),
+                        successful_count = outcomeCostRows.Count(IsSuccessful),
+                        false_alarm_count = outcomeCostRows.Count(r => Str(r, "resolution_type") == "False Alarm"),
+                    };
+                    var costPerOutcomeByZone = outcomeCostRows.Count == 0 ? null : outcomeCostRows
+                        .Where(r => r.ContainsKey("pickup_zone_id"))
+                        .GroupBy(r => Str(r, "pickup_zone_id") ?? "Unknown")
+                        .Select(g => new { zone_id = g.Key, cost_per_successful_outcome = CostPerSuccess(g), dispatches = g.Count() })
+                        .OrderByDescending(x => x.cost_per_successful_outcome).ToList();
+                    var costPerOutcomeByKind = outcomeCostRows.Count == 0 ? null : outcomeCostRows
+                        .GroupBy(r => Str(r, "kind") ?? "Unknown")
+                        .Select(g => new { kind = g.Key, cost_per_successful_outcome = CostPerSuccess(g), dispatches = g.Count() })
+                        .OrderByDescending(x => x.cost_per_successful_outcome).ToList();
+
+                    // ---- 13) SLA breach root-cause decomposition (Q: what actually
+                    // drives SLA breaches — zone, severity, weather, or time of day?).
+                    // Ranks each dimension by how far its worst bucket strays from its
+                    // best, so the biggest lever is obvious instead of buried across
+                    // four separate charts, and also doubles as the correlation table. ----
+                    var slaRows = rows.Where(r => r.ContainsKey("sla_breach") && Str(r, "status") == "COMPLETED").ToList();
+                    List<(string bucket, double pct, int n)> BreachByKey(Func<Dictionary<string, object?>, string?> keyFn) =>
+                        slaRows.Where(r => keyFn(r) != null)
+                            .GroupBy(r => keyFn(r)!)
+                            .Select(g => (bucket: g.Key, pct: Math.Round(100.0 * g.Count(r => BoolVal(r, "sla_breach")) / g.Count(), 1), n: g.Count()))
+                            .Where(x => x.n >= 20)
+                            .OrderByDescending(x => x.pct).ToList();
+                    string? HourBucket(Dictionary<string, object?> r) => dtByRow.TryGetValue(r, out var d) && d.HasValue
+                        ? d.Value.Hour switch { >= 6 and < 12 => "Morning (06-12)", >= 12 and < 17 => "Afternoon (12-17)", >= 17 and < 22 => "Evening (17-22)", _ => "Night (22-06)" }
+                        : null;
+                    var breachDimensions = new (string dim, List<(string bucket, double pct, int n)> vals)[]
+                    {
+                        ("Zone", BreachByKey(r => Str(r, "pickup_zone_id"))),
+                        ("Severity", BreachByKey(r => Str(r, "severity"))),
+                        ("Weather", BreachByKey(r => Str(r, "weather_condition"))),
+                        ("Time of day", BreachByKey(HourBucket)),
+                    }
+                    .Where(x => x.vals.Count >= 2)
+                    .Select(x => new
+                    {
+                        dimension = x.dim,
+                        worst_bucket = x.vals.First().bucket,
+                        worst_pct = x.vals.First().pct,
+                        best_bucket = x.vals.Last().bucket,
+                        best_pct = x.vals.Last().pct,
+                        spread_pct = Math.Round(x.vals.First().pct - x.vals.Last().pct, 1),
+                        buckets = x.vals.Select(v => new { bucket = v.bucket, breach_pct = v.pct, calls = v.n }).ToList(),
+                    })
+                    .OrderByDescending(x => x.spread_pct).ToList();
+
+                    // ---- 14) reassignment churn: where and when units get reassigned
+                    // mid-dispatch — wasted travel plus a slower response for that caller. ----
+                    var reassignRows = rows.Where(r => r.ContainsKey("reassigned_count")).ToList();
+                    var reassignByZone = reassignRows.GroupBy(r => Str(r, "pickup_zone_id") ?? "Unknown")
+                        .Select(g => new { zone_id = g.Key, reassignment_rate_pct = Math.Round(100.0 * g.Count(r => Dbl(r, "reassigned_count") > 0) / g.Count(), 1), calls = g.Count() })
+                        .Where(x => x.calls >= 20).OrderByDescending(x => x.reassignment_rate_pct).ToList();
+                    var reassignByTime = reassignRows.Where(r => HourBucket(r) != null).GroupBy(r => HourBucket(r)!)
+                        .Select(g => new { window = g.Key, reassignment_rate_pct = Math.Round(100.0 * g.Count(r => Dbl(r, "reassigned_count") > 0) / g.Count(), 1), calls = g.Count() })
+                        .OrderByDescending(x => x.reassignment_rate_pct).ToList();
+
+                    // ---- 15) response-time bottleneck decomposition: of the total trip
+                    // time, how much is travel-to-scene vs. scene/handover vs. the
+                    // traffic-congestion tax — by vehicle kind. ----
+                    var bottleneckRows = rows.Where(r => Str(r, "status") == "COMPLETED" && Dbl(r, "eta_min") > 0 && Dbl(r, "eta_to_pickup_min") > 0).ToList();
+                    var responseBottleneck = bottleneckRows.GroupBy(r => Str(r, "kind") ?? "unknown").Select(g =>
+                    {
+                        var toPickup = g.Average(r => Dbl(r, "eta_to_pickup_min"));
+                        var total = g.Average(r => Dbl(r, "eta_min"));
+                        var sceneHandover = Math.Max(0, total - toPickup);
+                        var avgTraffic = g.Average(r => Dbl(r, "traffic_factor"));
+                        var trafficDelayMin = Math.Round(toPickup * Math.Max(0, avgTraffic - 1), 1);
+                        return new
+                        {
+                            kind = g.Key,
+                            avg_time_to_pickup_min = Math.Round(toPickup, 1),
+                            avg_scene_handover_min = Math.Round(sceneHandover, 1),
+                            avg_traffic_delay_min = trafficDelayMin,
+                            avg_total_min = Math.Round(total, 1),
+                        };
+                    }).OrderByDescending(x => x.avg_total_min).ToList();
+
+                    // ---- 16) fleet right-sizing: does the fleet currently in rotation
+                    // match what demand actually requires (the Little's Law sizing
+                    // above), and what's the annual cost gap either way. ----
+                    var distinctVehicles = rows.Select(r => Str(r, "assigned_vehicle_id")).Where(v => v != null).Distinct().Count();
+                    var yearsSpan = Math.Max(0.5, totalDays / 365.0);
+                    var avgAnnualCostPerVehicle = distinctVehicles > 0 ? totalCost / distinctVehicles / yearsSpan : 0;
+                    var fleetGap = distinctVehicles - recommendedUnitsTotal;
+                    var fleetRightsizing = new
+                    {
+                        current_vehicles_in_use = distinctVehicles,
+                        recommended_units = recommendedUnitsTotal,
+                        gap = fleetGap,
+                        status = fleetGap > 0 ? "Overprovisioned" : fleetGap < 0 ? "Underprovisioned" : "Right-sized",
+                        estimated_annual_cost_impact = Math.Round(Math.Abs(fleetGap) * avgAnnualCostPerVehicle, 0),
+                        recommendation = fleetGap > 0
+                            ? $"{fleetGap} more vehicles are in rotation than demand-based sizing requires — an estimated ₹{Math.Round(Math.Abs(fleetGap) * avgAnnualCostPerVehicle, 0):N0}/yr in avoidable fleet cost."
+                            : fleetGap < 0
+                                ? $"Demand requires {Math.Abs(fleetGap)} more concurrently staffed units than are currently in rotation — under-provisioning risks SLA breaches at peak."
+                                : "Fleet size currently tracks modeled demand.",
+                    };
+
+                    // ---- 17) case-type mix growth: which medical case types are
+                    // growing (or shrinking) as a share of volume, comparing the first
+                    // and last quartile of the historical window. ----
+                    List<(string bucket, double pct)> CaseShareOf(List<Dictionary<string, object?>> set)
+                    {
+                        var withCase = set.Where(r => Str(r, "case_type") != null).ToList();
+                        if (withCase.Count == 0) return new();
+                        return withCase.GroupBy(r => Str(r, "case_type")!)
+                            .Select(g => (bucket: g.Key, pct: Math.Round(100.0 * g.Count() / withCase.Count, 1))).ToList();
+                    }
+                    var caseShareFirst = CaseShareOf(firstQ.Select(x => x.row).ToList());
+                    var caseShareLast = CaseShareOf(lastQ.Select(x => x.row).ToList());
+                    var caseTypeGrowth = caseShareLast.Select(l =>
+                    {
+                        var f = caseShareFirst.FirstOrDefault(x => x.bucket == l.bucket);
+                        return new
+                        {
+                            case_type = l.bucket,
+                            early_share_pct = f.pct,
+                            recent_share_pct = l.pct,
+                            delta_pct_points = Math.Round(l.pct - f.pct, 1),
+                        };
+                    }).OrderByDescending(x => x.delta_pct_points).ToList();
+
+                    // ---- 18) demand vs. steel-industry cycle: does call volume track
+                    // Tata Steel's own boom/bust cycle, or is dispatch demand actually
+                    // decoupled from it (driven by general population demand instead)? ----
+                    (string tag, string label)[] steelEvents =
+                    [
+                        ("STEEL_CRISIS_BUDGET_TIGHTENING_2016", "2016 steel-price crisis (budget tightening)"),
+                        ("BHUSHAN_STEEL_TRANSFER_COHORT_2018", "2018 Bhushan Steel transfer cohort"),
+                    ];
+                    var steelCycleImpact = steelEvents.Select(e =>
+                    {
+                        var n = rows.Count(r => Str(r, "event_tag") == e.tag);
+                        if (n == 0) return null;
+                        var windowRate = n / 90.0; // these tags represent ~quarter-scale windows
+                        var mult = overallDailyRate > 0 ? Math.Round(windowRate / overallDailyRate, 2) : 0;
+                        return new
+                        {
+                            event_name = e.label,
+                            calls = n,
+                            multiplier_vs_average_day = mult,
+                            interpretation = mult >= 1.15
+                                ? "Demand moved with the steel-cycle event — dispatch volume is at least partly coupled to industrial activity."
+                                : mult <= 0.9
+                                    ? "Demand fell during this steel-cycle event — some coupling, in the opposite direction (fewer industrial-site incidents)."
+                                    : "Demand held roughly flat through this steel-cycle event — dispatch volume looks decoupled from the industrial cycle, driven more by general population demand.",
+                        };
+                    }).Where(x => x != null).ToList();
+
+                    // ---- 19) voice-agent adoption trend: is voice-line usage growing
+                    // as a share of intake, and is quality (false-alarm rate) holding up
+                    // as adoption grows — comparing the first and last quartile. ----
+                    double ShareOf(List<Dictionary<string, object?>> set, string src) =>
+                        set.Count(r => r.ContainsKey("requester_source")) > 0
+                            ? 100.0 * set.Count(r => Str(r, "requester_source") == src) / set.Count(r => r.ContainsKey("requester_source"))
+                            : 0;
+                    double FalseAlarmPctOf(List<Dictionary<string, object?>> set)
+                    {
+                        var withSrc = set.Where(r => Str(r, "requester_source") == "VOICE" && r.ContainsKey("resolution_type")).ToList();
+                        return withSrc.Count > 0 ? Math.Round(100.0 * withSrc.Count(r => Str(r, "resolution_type") == "False Alarm") / withSrc.Count, 1) : 0;
+                    }
+                    var voiceShareFirst = Math.Round(ShareOf(firstQ.Select(x => x.row).ToList(), "VOICE"), 1);
+                    var voiceShareLast = Math.Round(ShareOf(lastQ.Select(x => x.row).ToList(), "VOICE"), 1);
+                    var voiceAdoptionTrend = new
+                    {
+                        early_share_pct = voiceShareFirst,
+                        recent_share_pct = voiceShareLast,
+                        share_delta_pct_points = Math.Round(voiceShareLast - voiceShareFirst, 1),
+                        early_false_alarm_pct = FalseAlarmPctOf(firstQ.Select(x => x.row).ToList()),
+                        recent_false_alarm_pct = FalseAlarmPctOf(lastQ.Select(x => x.row).ToList()),
+                    };
+
+                    // ---- 20) underserved-zone check: dispatches per distinct vehicle
+                    // actually assigned in that zone — a zone with high call volume but
+                    // few distinct vehicles ever assigned there is running thinner than
+                    // its demand implies. ----
+                    var zoneCoverage = rows.GroupBy(r => Str(r, "pickup_zone_id") ?? "Unknown").Select(g =>
+                    {
+                        var vehicles = g.Select(r => Str(r, "assigned_vehicle_id")).Where(v => v != null).Distinct().Count();
+                        return new
+                        {
+                            zone_id = g.Key,
+                            calls = g.Count(),
+                            distinct_vehicles = vehicles,
+                            calls_per_vehicle = vehicles > 0 ? Math.Round((double)g.Count() / vehicles, 1) : 0,
+                        };
+                    }).Where(x => x.calls >= 20).OrderByDescending(x => x.calls_per_vehicle).ToList();
+
+                    // ---- 21) demographic-controlled response gap: does time-to-pickup
+                    // differ by age band or gender for otherwise-comparable medical
+                    // dispatches — an equity check, not just an operational one. ----
+                    var demoRows = rows.Where(r => Str(r, "kind") == "medical" && Str(r, "status") == "COMPLETED" && Dbl(r, "eta_to_pickup_min") > 0).ToList();
+                    var responseByAgeBand = demoRows.Where(r => Str(r, "age_band") != null)
+                        .GroupBy(r => Str(r, "age_band")!)
+                        .Select(g => new { age_band = g.Key, avg_eta_to_pickup_min = Math.Round(g.Average(r => Dbl(r, "eta_to_pickup_min")), 1), calls = g.Count() })
+                        .Where(x => x.calls >= 20).OrderByDescending(x => x.avg_eta_to_pickup_min).ToList();
+                    var responseByGender = demoRows.Where(r => Str(r, "gender") != null)
+                        .GroupBy(r => Str(r, "gender")!)
+                        .Select(g => new { gender = g.Key, avg_eta_to_pickup_min = Math.Round(g.Average(r => Dbl(r, "eta_to_pickup_min")), 1), calls = g.Count() })
+                        .Where(x => x.calls >= 20).OrderByDescending(x => x.avg_eta_to_pickup_min).ToList();
+                    var ageGapPct = responseByAgeBand.Count >= 2 && responseByAgeBand.Last().avg_eta_to_pickup_min > 0
+                        ? Math.Round(100.0 * (responseByAgeBand.First().avg_eta_to_pickup_min - responseByAgeBand.Last().avg_eta_to_pickup_min) / responseByAgeBand.Last().avg_eta_to_pickup_min, 1)
+                        : 0;
+                    var demographicResponseGap = new
+                    {
+                        by_age_band = responseByAgeBand,
+                        by_gender = responseByGender,
+                        widest_age_gap_pct = ageGapPct,
+                    };
+
+                    // ---- 22) historical shock-event capacity: how much response time
+                    // and SLA compliance degraded during the worst historical demand
+                    // spikes, and how much readiness margin exists today against a
+                    // repeat of the worst one. ----
+                    var baselineCompleted = rows.Where(r => Str(r, "event_tag") == null && Str(r, "status") == "COMPLETED" && Dbl(r, "eta_to_pickup_min") > 0).ToList();
+                    var baselineEta = baselineCompleted.Count > 0 ? baselineCompleted.Average(r => Dbl(r, "eta_to_pickup_min")) : overallAvgEta;
+                    var baselineBreach = baselineCompleted.Count > 0 ? 100.0 * baselineCompleted.Count(r => BoolVal(r, "sla_breach")) / baselineCompleted.Count : 0;
+                    var shockEvents = rows.Where(r => Str(r, "event_tag") != null)
+                        .GroupBy(r => Str(r, "event_tag")!)
+                        .Select(g =>
+                        {
+                            var completed = g.Where(r => Str(r, "status") == "COMPLETED" && Dbl(r, "eta_to_pickup_min") > 0).ToList();
+                            if (completed.Count < 15) return null;
+                            var eventEta = completed.Average(r => Dbl(r, "eta_to_pickup_min"));
+                            var eventBreach = 100.0 * completed.Count(r => BoolVal(r, "sla_breach")) / completed.Count;
+                            return new
+                            {
+                                event_tag = g.Key,
+                                calls = g.Count(),
+                                avg_eta_to_pickup_min = Math.Round(eventEta, 1),
+                                sla_breach_pct = Math.Round(eventBreach, 1),
+                                response_degradation_pct = baselineEta > 0 ? Math.Round(100.0 * (eventEta - baselineEta) / baselineEta, 1) : 0,
+                                sla_breach_degradation_pct_points = Math.Round(eventBreach - baselineBreach, 1),
+                            };
+                        }).Where(x => x != null).OrderByDescending(x => x!.response_degradation_pct).ToList();
+                    var worstShock = shockEvents.FirstOrDefault();
+                    var readinessMargin = new
+                    {
+                        baseline_avg_eta_to_pickup_min = Math.Round(baselineEta, 1),
+                        baseline_sla_breach_pct = Math.Round(baselineBreach, 1),
+                        worst_historical_event = worstShock == null ? null : new { worstShock.event_tag, worstShock.response_degradation_pct, worstShock.sla_breach_degradation_pct_points },
+                        current_recommended_units = recommendedUnitsTotal,
+                        current_vehicles_in_use = distinctVehicles,
+                        margin_recommendation = worstShock != null && worstShock.response_degradation_pct > 15
+                            ? $"A repeat of {worstShock.event_tag} would degrade response time by ~{worstShock.response_degradation_pct}% and SLA compliance by {Math.Abs(worstShock.sla_breach_degradation_pct_points)} points on current baseline — the {recommendedUnitsTotal}-unit sizing above already accounts for average peak demand, but doesn't reserve slack for a shock spike this large."
+                            : "No historical shock event degraded response time by more than 15% — current sizing already carries adequate margin for known demand spikes.",
+                    };
+
+                    // ---- 23) demand heatmap: call volume by day-of-week x hour-of-day —
+                    // the grid behind the heatmap visualization on the Insights page. ----
+                    var demandHeatmap = parsed.GroupBy(x => (dow: (int)x.dt!.Value.DayOfWeek, hour: x.dt!.Value.Hour))
+                        .Select(g => new { day_of_week = g.Key.dow, hour = g.Key.hour, calls = g.Count() })
+                        .ToList();
+
                     return Ok(new
                     {
                         record_count = rows.Count,
@@ -1310,6 +1776,28 @@ public class Function
                             w.window, w.calls_per_hour, w.multiplier_vs_overnight_baseline, w.recommendation,
                         }).ToList(),
                         seasonal_alerts = seasonalAlertsOut,
+                        cost_efficiency = costEfficiency,
+                        outcome_mix = outcomeMix,
+                        false_alarm_pct = falseAlarmPct,
+                        channel_mix = channelMix,
+                        weather_impact = weatherImpact,
+                        channel_quality = channelQuality,
+                        cost_per_outcome = costPerOutcomeOverall,
+                        cost_per_outcome_by_zone = costPerOutcomeByZone,
+                        cost_per_outcome_by_kind = costPerOutcomeByKind,
+                        sla_breach_drivers = breachDimensions,
+                        reassignment_by_zone = reassignByZone,
+                        reassignment_by_time = reassignByTime,
+                        response_bottleneck = responseBottleneck,
+                        fleet_rightsizing = fleetRightsizing,
+                        case_type_growth = caseTypeGrowth,
+                        steel_cycle_impact = steelCycleImpact,
+                        voice_adoption_trend = voiceAdoptionTrend,
+                        zone_coverage = zoneCoverage,
+                        demographic_response_gap = demographicResponseGap,
+                        shock_event_capacity = shockEvents,
+                        readiness_margin = readinessMargin,
+                        demand_heatmap = demandHeatmap,
                         note = "Based on synthetic historical data seeded for demonstration — not live dispatch records.",
                         generated_at = DateTime.UtcNow.ToString("o"),
                     }, corsHeaders);
@@ -1551,9 +2039,117 @@ public class Function
             var createdAt = Str(it, "created_at");
             var due = (etaComplete > 0 && etaComplete <= nowSec)
                 || (etaComplete == 0 && createdAt != null && DateTimeOffset.TryParse(createdAt, out var cAt) && DateTimeOffset.UtcNow - cAt > TimeSpan.FromMinutes(10));
-            if (due) try { await CompleteOp(it); } catch { }
+            if (due) { try { await CompleteOp(it); } catch { } continue; }
+            // Not due yet - opportunistically refresh eta/distance so the
+            // hospital-facing feed (and everything else reading eta_min)
+            // reflects current traffic + any vehicle repositioning, instead
+            // of staying frozen at whatever was computed at dispatch time.
+            // Throttled so this doesn't re-hit OSRM on every single poll.
+            long.TryParse(it.GetValueOrDefault("eta_refreshed_at")?.ToString(), out var refreshedAt);
+            if (nowSec - refreshedAt >= EtaRefreshIntervalSec)
+                try { await RefreshEnRouteEta(it); } catch { }
         }
         try { await TryDispatchQueued(); } catch { }
+        try { await ReconcileOrphanedVehicles(items); } catch { }
+    }
+
+    // Self-heals a real orphaning bug: BuildEmergency marks a vehicle
+    // "enroute" *before* the caller persists the emergency record
+    // (PutOps/PutItem) — those two steps aren't atomic. If anything throws
+    // in between (a transient DynamoDB error, a cold-start hiccup, a
+    // throttle), the vehicle is left stuck "enroute" forever with no
+    // dispatch that will ever complete to free it — reported live as
+    // "this truck shows enroute but isn't actually on a call, and my fleet
+    // count is short." Runs on every /ops poll (same cadence as the other
+    // sweep checks): any vehicle whose status is "enroute" but isn't
+    // actually referenced by one of the currently-active EN_ROUTE items
+    // gets reset to idle (and its driver, if stuck "on-trip", to available).
+    private async Task ReconcileOrphanedVehicles(List<Dictionary<string, object?>> activeEnRouteItems)
+    {
+        var claimedVehicleIds = activeEnRouteItems
+            .Select(it => Str(it, "assigned_vehicle_id"))
+            .Where(id => !string.IsNullOrEmpty(id))
+            .ToHashSet();
+        var (vehicles, drivers) = await ListFleet();
+        foreach (var v in vehicles)
+        {
+            if (Str(v, "status") != "enroute") continue;
+            var vehId = Str(v, "id");
+            if (vehId != null && claimedVehicleIds.Contains(vehId)) continue; // genuinely on a live dispatch
+            try
+            {
+                await SetVehicleStatus(v, "idle");
+                var drv = drivers.FirstOrDefault(d => Str(d, "id") == Str(v, "driver_id"));
+                if (drv != null && Str(drv, "status") == "on-trip")
+                    await SetDriverStatus(Str(drv, "id")!, "available", null);
+                Console.Error.WriteLine($"ERROR ORPHANED_VEHICLE_RECONCILED vehicle={vehId} reg={Str(v, "reg")} — reset enroute->idle, no matching active dispatch");
+            }
+            catch { }
+        }
+    }
+
+    private const int EtaRefreshIntervalSec = 60;
+
+    private async Task RefreshEnRouteEta(Dictionary<string, object?> it)
+    {
+        var vehId = Str(it, "assigned_vehicle_id");
+        if (string.IsNullOrEmpty(vehId)) return;
+        var refData = await LoadRef();
+        var pt = ResolvePickup(refData, GetObj(it, "pickup"));
+        if (pt == null) return;
+
+        // Prefer the vehicle's live/manually-repositioned location if set
+        // (POST /fleet/{id}/position); otherwise fall back to the fixed
+        // origin point recorded at dispatch time (this backend has no other
+        // source of vehicle position).
+        var veh = await Ddb.GetItem(TblFleet, Key($"VEH#{vehId}", "META"));
+        double? ovLat = veh != null && double.TryParse(veh.GetValueOrDefault("override_lat")?.ToString(), out var ol) ? ol : null;
+        double? ovLng = veh != null && double.TryParse(veh.GetValueOrDefault("override_lng")?.ToString(), out var og) ? og : null;
+        var origLat = Dbl(it, "origin_lat"); var origLng = Dbl(it, "origin_lng");
+        if (ovLat == null && origLat == 0 && origLng == 0) return; // nothing to route from
+        var origin = new GeoPoint(ovLat ?? origLat, ovLng ?? origLng);
+
+        var kind = Str(it, "kind") ?? "medical";
+        var prevDistanceKm = Dbl(it, "distance_km");
+        RouteEtaResult eta;
+        if (kind == "fire")
+        {
+            eta = await ComputeRouteEta([origin, pt], prevDistanceKm, prevDistanceKm);
+        }
+        else if (kind == "blood")
+        {
+            var bankId = Str(it, "blood_bank_id");
+            var bank = bankId != null ? refData.Locations.FirstOrDefault(l => Str(l, "id") == bankId) : null;
+            if (bank == null) return;
+            var bankPt = new GeoPoint(Dbl(bank, "lat"), Dbl(bank, "lng"));
+            eta = await ComputeRouteEta([origin, pt, bankPt, pt], prevDistanceKm, prevDistanceKm);
+        }
+        else
+        {
+            var hospId = Str(it, "hospital_id");
+            var hosp = hospId != null ? refData.Hospitals.FirstOrDefault(h => Str(h, "id") == hospId) : null;
+            if (hosp == null) return;
+            var hospPt = new GeoPoint(Dbl(hosp, "lat"), Dbl(hosp, "lng"));
+            eta = await ComputeRouteEta([origin, pt, hospPt], prevDistanceKm, prevDistanceKm);
+        }
+
+        var nowSec = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+        // Deliberately NOT touching eta_complete here. eta_complete is the trip's
+        // actual end-time, set once at dispatch (BuildEmergency) — the client's
+        // progress bar derives trip-start as eta_complete - totalEtaMin, so
+        // resetting eta_complete to "now + eta.EtaMin" on every 60s refresh tick
+        // would keep sliding the perceived start back to "now" and pin progress
+        // near its floor forever. This sweep only keeps distance/eta/traffic
+        // fresh for display (e.g. the hospital feed) without touching the clock.
+        await Ddb.UpdateItem(TblOps, Key(Str(it, "PK") ?? $"EMG#{Str(it, "id")}", "META"),
+            "SET distance_km = :d, eta_min = :e, eta_to_pickup_min = :p, traffic_factor = :f, eta_refreshed_at = :r, updated_at = :u",
+            null, new()
+            {
+                [":d"] = DynamoService.Av(eta.DistanceKm), [":e"] = DynamoService.Av(eta.EtaMin),
+                [":p"] = DynamoService.Av(eta.EtaToPickupMin), [":f"] = DynamoService.Av(eta.TrafficFactor),
+                [":r"] = DynamoService.Av(nowSec),
+                [":u"] = DynamoService.Av(Now()),
+            });
     }
 
     private async Task TryDispatchQueued()
@@ -1630,7 +2226,7 @@ public class Function
         var pickupObj = GetObj(item, "pickup");
         var pt = ResolvePickup(refData, pickupObj);
         var zoneId = ZonesByProximity(refData, pt).FirstOrDefault()?.Zone.GetValueOrDefault("id")?.ToString();
-        var id = Str(item, "id") ?? Rid("EMG", 100);
+        var id = Str(item, "id") ?? await NewOpsId("EMG", 100);
         var kind = Str(item, "kind") ?? "medical";
         var trackToken = Str(item, "track_token") ?? Guid.NewGuid().ToString("N");
         int.TryParse(item.GetValueOrDefault("patients_count")?.ToString(), out var patientsCount);
@@ -1641,8 +2237,17 @@ public class Function
         {
             ["PK"] = $"EMG#{id}", ["SK"] = "META", ["entity"] = "EMG", ["id"] = id,
             ["kind"] = kind, ["severity"] = severity,
-            ["pickup"] = pickupObj != null && Str(pickupObj, "name") == null && pt != null
-                ? new Dictionary<string, object?>(pickupObj) { ["name"] = $"{pt.Lat:F4}, {pt.Lng:F4}" }
+            // Some senders (e.g. the hospital feed) submit lat/lng as JSON strings
+            // rather than numbers. DynamoDB stores whatever type is handed to it
+            // (Av() maps string -> S, double -> N), and the frontend's live-map
+            // hydration only treats a numeric pickup.lat as a usable point — so an
+            // unnormalized string pickup silently drops out of tracking. `pt` is
+            // already the parsed GeoPoint, so always write lat/lng back as doubles.
+            ["pickup"] = pt != null
+                ? new Dictionary<string, object?>(pickupObj ?? new()) {
+                    ["lat"] = pt.Lat, ["lng"] = pt.Lng,
+                    ["name"] = Str(pickupObj, "name") ?? $"{pt.Lat:F4}, {pt.Lng:F4}",
+                  }
                 : pickupObj,
             ["pickup_zone_id"] = zoneId,
             ["requested_by"] = Str(item, "requested_by"), ["source"] = source,
@@ -1680,8 +2285,15 @@ public class Function
             baseRec["distance_km"] = eta.DistanceKm;
             baseRec["eta_min"] = eta.EtaMin;
             baseRec["eta_to_pickup_min"] = eta.EtaToPickupMin;
+            baseRec["pickup_eta_at"] = EtaComplete(eta.EtaToPickupMin);
             baseRec["traffic_factor"] = eta.TrafficFactor;
             baseRec["eta_complete"] = EtaComplete(eta.EtaMin);
+            // Origin point at dispatch time, kept so RefreshEnRouteEtas can
+            // re-run the same route later without needing live vehicle GPS
+            // (which this backend doesn't track) - falls back to this fixed
+            // start point, or the vehicle's own override position if it's
+            // since been manually repositioned.
+            baseRec["origin_lat"] = origin.Lat; baseRec["origin_lng"] = origin.Lng;
             MergeIndexAttrs(baseRec, "EMG", "EN_ROUTE", zoneId, source, createdAt, sevR, Str(truck.Vehicle, "id"));
             return baseRec;
         }
@@ -1729,8 +2341,10 @@ public class Function
             baseRec["distance_km"] = eta.DistanceKm;
             baseRec["eta_min"] = eta.EtaMin;
             baseRec["eta_to_pickup_min"] = eta.EtaToPickupMin;
+            baseRec["pickup_eta_at"] = EtaComplete(eta.EtaToPickupMin);
             baseRec["traffic_factor"] = eta.TrafficFactor;
             baseRec["eta_complete"] = EtaComplete(eta.EtaMin);
+            baseRec["origin_lat"] = foundZonePt.Lat; baseRec["origin_lng"] = foundZonePt.Lng;
             MergeIndexAttrs(baseRec, "EMG", "EN_ROUTE", zoneId, source, createdAt, sevR, Str(found.Vehicle, "id"));
             return baseRec;
         }
@@ -1781,8 +2395,10 @@ public class Function
         baseRec["distance_km"] = medEta.DistanceKm;
         baseRec["eta_min"] = medEta.EtaMin;
         baseRec["eta_to_pickup_min"] = medEta.EtaToPickupMin;
+        baseRec["pickup_eta_at"] = EtaComplete(medEta.EtaToPickupMin);
         baseRec["traffic_factor"] = medEta.TrafficFactor;
         baseRec["eta_complete"] = EtaComplete(medEta.EtaMin);
+        baseRec["origin_lat"] = medZonePt.Lat; baseRec["origin_lng"] = medZonePt.Lng;
         MergeIndexAttrs(baseRec, "EMG", "EN_ROUTE", zoneId, source, createdAt, sevR, Str(medFound.Vehicle, "id"));
         return baseRec;
     }
@@ -1907,6 +2523,23 @@ public class Function
     private static string Now() => DateTime.UtcNow.ToString("o");
     private static long EtaComplete(double mins) => DateTimeOffset.UtcNow.ToUnixTimeSeconds() + Math.Max(120, (long)Math.Round(mins * 60));
     private static string Rid(string prefix, int n) => $"{prefix}-{n + (int)(new Random().NextDouble() * 9 * n)}";
+
+    // Rid alone is NOT safe as a primary key: Rid("EMG", 100) has only ~900
+    // possible values, and PutItem replaces silently — by the ~35th live
+    // dispatch there's a coin-flip chance a new emergency overwrites (and
+    // effectively deletes) an old record, stranding its vehicle "enroute"
+    // forever. Check the id is actually free before using it; on repeated
+    // collisions (id space filling up) fall back to a timestamp id that
+    // can't collide with the numeric form.
+    private async Task<string> NewOpsId(string prefix, int n)
+    {
+        for (var i = 0; i < 6; i++)
+        {
+            var id = Rid(prefix, n);
+            if (await GetOpsItem(id) == null) return id;
+        }
+        return $"{prefix}-{DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()}";
+    }
     private static string? TrackUrl(Dictionary<string, object?> rec)
     {
         var id = Str(rec, "id");
@@ -1931,28 +2564,59 @@ public class Function
         if (!DateTime.TryParse(Str(item, "created_at"), null, System.Globalization.DateTimeStyles.RoundtripKind, out var created))
             return "DISPATCHED";
         var elapsedMin = (DateTime.UtcNow - created).TotalMinutes;
-        var etaPickup = Dbl(item, "eta_to_pickup_min");
-        if (etaPickup > 0 && elapsedMin >= etaPickup) return "ARRIVED";
+        // pickup_eta_at is set ONCE at dispatch (see BuildEmergency) and never
+        // touched again, unlike eta_to_pickup_min which is legitimately
+        // refreshed to the current traffic-adjusted estimate on every poll/
+        // reload. Comparing ever-growing elapsedMin against that fluctuating
+        // field meant that once elapsedMin happened to exceed whatever small
+        // value eta_to_pickup_min had last been refreshed to, this would
+        // latch to ARRIVED forever (elapsed time only grows) — the reported
+        // "dispatch_status is always arrived" bug. pickup_eta_at is a stable,
+        // one-time timestamp, so this is now a proper due-check.
+        long.TryParse(item.GetValueOrDefault("pickup_eta_at")?.ToString(), out var pickupEtaAt);
+        if (pickupEtaAt > 0 && DateTimeOffset.UtcNow.ToUnixTimeSeconds() >= pickupEtaAt) return "ARRIVED";
         return elapsedMin >= 1 ? "EN_ROUTE" : "DISPATCHED";
     }
 
     private static string? ArrivedAtOf(Dictionary<string, object?> item)
     {
         if (DispatchStatusOf(item) is not ("ARRIVED" or "COMPLETED")) return null;
-        var etaPickup = Dbl(item, "eta_to_pickup_min");
-        if (etaPickup <= 0 || !DateTime.TryParse(Str(item, "created_at"), null, System.Globalization.DateTimeStyles.RoundtripKind, out var created))
-            return null;
-        return created.AddMinutes(etaPickup).ToString("o");
+        long.TryParse(item.GetValueOrDefault("pickup_eta_at")?.ToString(), out var pickupEtaAt);
+        if (pickupEtaAt <= 0) return null;
+        return DateTimeOffset.FromUnixTimeSeconds(pickupEtaAt).ToString("o");
     }
 
     private static object DispatchStatusFeedItem(Dictionary<string, object?> e) => new
     {
         id = Str(e, "id"), kind = Str(e, "kind"), dispatch_status = DispatchStatusOf(e),
-        hospital_id = Str(e, "hospital_id"), case_type = Str(e, "case_type"), severity = Str(e, "severity"),
+        hospital_id = Str(e, "hospital_id"), blood_bank_id = Str(e, "blood_bank_id"),
+        case_type = Str(e, "case_type"), severity = Str(e, "severity"),
         assigned_vehicle_id = Str(e, "assigned_vehicle_id"),
+        // eta_min is the last-recomputed *total* trip duration (refreshed
+        // periodically for traffic, not decremented over time) — it does not
+        // match what the console shows, which is a live countdown ticking
+        // down every second (see LiveEta.jsx: eta_complete - now). Recipients
+        // comparing eta_min against the console will always see it drift.
+        // eta_remaining_min is computed the same way the console computes its
+        // countdown, so this is the number that actually matches the app.
         eta_to_pickup_min = Dbl(e, "eta_to_pickup_min"), eta_min = Dbl(e, "eta_min"),
+        eta_remaining_min = EtaRemainingMin(e),
+        distance_km = Dbl(e, "distance_km"),
+        // Previously only returned once, in the immediate POST /emergencies
+        // response — anyone polling this feed instead (the actual integration
+        // pattern for hospitals/blood banks) had no way to get a working
+        // shareable link at all.
+        tracking_url = TrackUrl(e),
         dispatched_at = Str(e, "created_at"), arrived_at = ArrivedAtOf(e), updated_at = Str(e, "updated_at"),
     };
+
+    private static double EtaRemainingMin(Dictionary<string, object?> e)
+    {
+        long.TryParse(e.GetValueOrDefault("eta_complete")?.ToString(), out var etaComplete);
+        if (etaComplete <= 0) return Dbl(e, "eta_min");
+        var secs = etaComplete - DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+        return Math.Round(Math.Max(0, secs / 60.0), 1);
+    }
 
     private static Dictionary<string, AttributeValue> Key(string pk, string sk) => new()
     {

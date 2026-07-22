@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react'
+import React, { useState, useRef, useEffect } from 'react'
 import { useMap } from 'react-leaflet'
 
 // Shared floating zoom + place-search controls, dropped into every Leaflet
@@ -18,7 +18,30 @@ export default function MapControls({ className = 'top-3 right-3', align = 'item
   const [results, setResults] = useState([])
   const [loading, setLoading] = useState(false)
   const debounceRef = useRef(null)
+  const aliveRef = useRef(true)
+  const boxRef = useRef(null)
   const posClass = className
+
+  // The debounced fetch can resolve after this component has already
+  // unmounted (map page navigated away from while a search was in flight) —
+  // without this guard, setResults/setLoading fire on an unmounted
+  // component (React warning, and a wasted render race). Also clears any
+  // still-pending debounce timer so it can't fire post-unmount at all.
+  useEffect(() => {
+    aliveRef.current = true
+    return () => { aliveRef.current = false; clearTimeout(debounceRef.current) }
+  }, [])
+
+  // Click anywhere outside the search box dismisses the results dropdown —
+  // every other dropdown/menu in this app (RowMenu, CommandPalette, the
+  // profile popover) already does this; this one was the odd one out and
+  // could stay open floating over the map indefinitely.
+  useEffect(() => {
+    if (!results.length) return
+    const onDocClick = (e) => { if (boxRef.current && !boxRef.current.contains(e.target)) setResults([]) }
+    document.addEventListener('mousedown', onDocClick)
+    return () => document.removeEventListener('mousedown', onDocClick)
+  }, [results.length])
 
   async function search(text) {
     if (!text.trim()) { setResults([]); return }
@@ -29,11 +52,12 @@ export default function MapControls({ className = 'top-3 right-3', align = 'item
       const url = `https://nominatim.openstreetmap.org/search?format=json&limit=6&viewbox=${viewbox}&bounded=0&q=${encodeURIComponent(text)}`
       const res = await fetch(url, { headers: { Accept: 'application/json' } })
       const data = await res.json()
+      if (!aliveRef.current) return
       setResults(Array.isArray(data) ? data : [])
     } catch {
-      setResults([])
+      if (aliveRef.current) setResults([])
     } finally {
-      setLoading(false)
+      if (aliveRef.current) setLoading(false)
     }
   }
 
@@ -51,9 +75,15 @@ export default function MapControls({ className = 'top-3 right-3', align = 'item
   }
 
   return (
-    <div className={`absolute z-[500] flex flex-col ${align} gap-2 ${posClass}`}>
+    // z-[1000]: this is rendered as a child of <MapContainer>, sharing a
+    // stacking context with Leaflet's own internal panes (tilePane 200,
+    // overlayPane 400, markerPane 600, tooltipPane 650, popupPane 700) — a
+    // lower z-index here loses to any vehicle marker/tooltip that happens to
+    // render near this corner, hiding the panel under map UI most of the
+    // time and only flashing visible mid-zoom while markers reposition.
+    <div className={`absolute z-[1000] flex flex-col ${align} gap-2 ${posClass}`}>
       {/* search */}
-      <div className="w-56">
+      <div className="w-56" ref={boxRef}>
         <div className="relative">
           <svg className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[#6B7280]" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><circle cx="11" cy="11" r="8" /><path d="m21 21-4.35-4.35" /></svg>
           <input value={q} onChange={onChange} placeholder="Search places…" aria-label="Search places on map"

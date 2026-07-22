@@ -8,9 +8,9 @@ import { useFleetStore } from '../../store/useFleetStore'
 import { locById, zoneById, ZONES } from '../../data/locations'
 import { hospitalById, shortHospitalName, SEVERITY_META } from '../../data/hospitals'
 import { slaTargets } from '../../services/sla'
+import { istDateKey } from '../../services/time'
 import Icon from '../../components/common/Icon'
 import LiveEta from '../../components/common/LiveEta'
-import PowerBIReport from './PowerBIReport'
 import { api } from '../../services/api'
 import { useCachedApi } from '../../hooks/useCachedApi'
 
@@ -37,18 +37,6 @@ export default function DashboardPage() {
   // Reference target for the response-time KPI (Urgent is the common case).
   const respTarget = slaTargets(policy).Urgent
   const respOk = m.avgResp <= respTarget
-
-  // Secure Power BI embed (App-owns-data) — preferred for production.
-  if (import.meta.env.VITE_POWERBI_SECURE === 'true') return <PowerBIReport />
-  // Public "Publish to web" fallback (plain iframe).
-  const pbiUrl = import.meta.env.VITE_POWERBI_EMBED_URL
-  if (pbiUrl) {
-    return (
-      <div className="h-full bg-cmd-bg">
-        <iframe title="Analytics (Power BI)" src={pbiUrl} className="w-full h-full border-0" allowFullScreen />
-      </div>
-    )
-  }
 
   const now = new Date()
   const dateLabel = now.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })
@@ -260,9 +248,12 @@ function CoverageGapsCard() {
 
 /* ---------- metrics (unchanged data model) ---------- */
 function buildMetrics(emergencies, vehicles, hospitals) {
-  // Computed per refresh (not at module load) so counts stay correct past midnight.
-  const TODAY = new Date().toISOString().slice(0, 10)
-  const YESTERDAY = (() => { const d = new Date(); d.setDate(d.getDate() - 1); return d.toISOString().slice(0, 10) })()
+  // Computed per refresh (not at module load) so counts stay correct past
+  // midnight — in IST (this is a Jamshedpur dispatch center), not UTC. Using
+  // the UTC day here attributed any dispatch between 00:00-05:29 IST to
+  // "yesterday" on the dashboard.
+  const TODAY = istDateKey()
+  const YESTERDAY = istDateKey(new Date(Date.now() - 86400000))
   const list = emergencies
   const active = list.filter((e) => e.state === 'EN_ROUTE')
   const completed = list.filter((e) => e.state === 'COMPLETED')
@@ -286,8 +277,13 @@ function buildMetrics(emergencies, vehicles, hospitals) {
   list.forEach((e) => { const z = zoneById(locById(e.pickup)?.zone_id)?.name || 'Unknown'; zoneCounts[z] = (zoneCounts[z] || 0) + 1 })
   const byZone = ZONES.map((z) => ({ name: z.name, value: zoneCounts[z.name] || 0, color: z.color })).filter((d) => d.value > 0)
 
+  // Pure ms-arithmetic (not Date#setDate/#getDate, which read/write the
+  // *browser's local* timezone — on a machine not set to IST, mutating a
+  // UTC-midnight-parsed `TODAY` with local setDate could silently land on
+  // the wrong calendar day). Subtracting whole days in ms and re-deriving
+  // the IST key each time is timezone-independent.
   const days = []
-  for (let i = 13; i >= 0; i--) { const d = new Date(TODAY); d.setDate(d.getDate() - i); days.push(d.toISOString().slice(0, 10)) }
+  for (let i = 13; i >= 0; i--) days.push(istDateKey(new Date(Date.now() - i * 86400000)))
   const overTime = days.map((day) => ({
     day: day.slice(5),
     medical: list.filter((e) => (e.createdAt || '').startsWith(day) && e.kind !== 'fire').length,

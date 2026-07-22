@@ -1,10 +1,18 @@
 import React from 'react'
+import PowerBIReport from './PowerBIReport'
 
-// Standalone Power BI view (public "Publish to web" embed) — kept separate from
-// the native Dashboard so we can demo the BI report without touching the main UI.
-// Set VITE_POWERBI_EMBED_URL to the iframe `src` from Power BI → File → Embed report
-// → Publish to web (public).
+// Standalone Power BI view, kept separate from the native Dashboard so we can
+// demo the BI report without touching the main UI. Two embed modes:
+//   - VITE_POWERBI_SECURE=true: "App owns data" — the backend mints a
+//     short-lived embed token gated by the viewer's own Cognito JWT/admin
+//     group, so access is governed by the same auth as the rest of the app
+//     rather than a separate Power BI workspace access list.
+//   - otherwise: plain iframe pointed at VITE_POWERBI_EMBED_URL (the
+//     "Website or portal" secure embed, org-authenticated but a second,
+//     independent identity check from our own login).
 export default function PowerBIPage() {
+  if (import.meta.env.VITE_POWERBI_SECURE === 'true') return <PowerBIReport />
+
   const url = import.meta.env.VITE_POWERBI_EMBED_URL
 
   if (!url) {

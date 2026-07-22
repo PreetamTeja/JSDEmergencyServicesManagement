@@ -4,6 +4,7 @@ using System.IdentityModel.Tokens.Jwt;
 using System.IO;
 using System.Linq;
 using System.Net.Http;
+using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
@@ -34,6 +35,15 @@ public class Function
         ? $"https://cognito-idp.{CognitoRegion}.amazonaws.com/{CognitoPool}" : "";
     private static readonly bool JwtEnabled = Issuer.Length > 0;
 
+    // sso_session cookie verification (shared secret with the main TransportApi
+    // Lambda's SsoBridge — must be the SAME value, so a cookie signed there
+    // verifies here too). This is a second, independent Lambda/API Gateway that
+    // was never wired up when the app moved to cookie-based SSO sessions, so
+    // anyone signed in via SSO (no raw JWT ever exposed to JS, by design) got
+    // permanently 401'd here ("please sign in") even while fully signed in
+    // everywhere else in the app.
+    private static readonly string SsoSessionSecret = Env("SSO_SESSION_SECRET", "");
+
     // CORS
     private static readonly string[] AllowedOrigins = Env("ALLOWED_ORIGINS", "*")
         .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
@@ -62,15 +72,26 @@ public class Function
             var knowledgeDir = Path.Combine(AppContext.BaseDirectory, "knowledge");
             if (!Directory.Exists(knowledgeDir)) return "";
             var sections = new List<string>();
-            foreach (var relPath in new[] { "emergency-types/index.md", "vehicles/index.md" })
+            // Root overview + the per-case-type files (cardiac/trauma/maternity/
+            // pediatric/general) were authored and shipped in the package but
+            // never loaded here — the index alone lists the case types while the
+            // per-type files carry the actual triage guidance the prompt needs.
+            var rootIndex = Path.Combine(knowledgeDir, "index.md");
+            if (File.Exists(rootIndex)) sections.Add(File.ReadAllText(rootIndex));
+            var etDir = Path.Combine(knowledgeDir, "emergency-types");
+            if (Directory.Exists(etDir))
             {
-                var full = Path.Combine(knowledgeDir, relPath);
-                if (File.Exists(full)) sections.Add(File.ReadAllText(full));
+                var etIndex = Path.Combine(etDir, "index.md");
+                if (File.Exists(etIndex)) sections.Add(File.ReadAllText(etIndex));
+                foreach (var f in Directory.GetFiles(etDir, "*.md").OrderBy(x => x))
+                    if (!f.EndsWith("index.md")) sections.Add(File.ReadAllText(f));
             }
+            var vehIndex = Path.Combine(knowledgeDir, "vehicles", "index.md");
+            if (File.Exists(vehIndex)) sections.Add(File.ReadAllText(vehIndex));
             var locsDir = Path.Combine(knowledgeDir, "locations");
             if (Directory.Exists(locsDir))
             {
-                foreach (var f in Directory.GetFiles(locsDir, "*.md"))
+                foreach (var f in Directory.GetFiles(locsDir, "*.md").OrderBy(x => x))
                     if (!f.EndsWith("index.md")) sections.Add(File.ReadAllText(f));
             }
             return string.Join("\n\n---\n\n", sections.Where(s => s.Length > 0));
@@ -91,7 +112,8 @@ public class Function
             .Replace("Bearer ", "", StringComparison.OrdinalIgnoreCase).Trim();
         JwtPayload? claims = null;
         if (!string.IsNullOrEmpty(bearer)) claims = await VerifyJwt(bearer);
-        if (JwtEnabled && claims == null)
+        var cookieAuthed = claims == null && TryGetCookieSession(request) != null;
+        if (JwtEnabled && claims == null && !cookieAuthed)
             return Reply(new { reply = "Please sign in to use the emergency voice line.", booked = (object?)null }, cors, 401);
 
         JsonObject payload = new();
@@ -134,7 +156,16 @@ public class Function
             var slots = await ExtractSlots(transcript, locs);
             Console.WriteLine($"slots {JsonSerializer.Serialize(slots)}");
 
-            var kind = slots.Kind == "fire" || slots.Kind == "medical" ? slots.Kind : "";
+            // The LLM's kind field is compared with a strict, case-sensitive
+            // equality check ("fire"/"medical" exactly) — any near-miss (wrong
+            // case, a stray word, an occasional off-schema response from the
+            // model) silently falls through to "" and re-asks the same question
+            // forever, which is what was being reported. KindOf() is a
+            // deterministic keyword fallback over the raw transcript so an
+            // unambiguous "ambulance"/"fire truck" mention always resolves even
+            // if the LLM's structured extraction has an off day.
+            var kind = NormalizeKind(slots.Kind);
+            if (kind.Length == 0) kind = KindFromTranscript(transcript);
             string? pid = KnownId(locs, slots.PickupId)
                 ? slots.PickupId
                 : (ResolveLocation(slots.PickupId, locs)
@@ -143,7 +174,16 @@ public class Function
             var caseType = ValidCases.Contains(slots.CaseType) ? slots.CaseType : "";
             var severity = ValidSev.Contains(slots.Severity) ? slots.Severity : "";
             var patients = Math.Max(1, (int)Math.Round((double)slots.Patients));
-            var mass = kind == "medical" && patients > 3;
+            // An explicit vehicle count ("send two fire trucks", "three
+            // ambulances") wasn't captured anywhere before — ExtractSlots always
+            // hard-coded Units to 1, so a caller asking for multiple units had no
+            // way to express that over voice. UnitsFromTranscript() picks up a
+            // stated count for either kind; the backend itself also auto-scales
+            // medical units from patient count independently, so this only
+            // matters when the caller states a count directly (mainly fire,
+            // which previously could never dispatch more than one truck at all).
+            var requestedUnits = Math.Max(slots.Units, UnitsFromTranscript(transcript));
+            var mass = patients > 3 || requestedUnits > 1;
 
             if (finalize) { if (severity.Length == 0) severity = "Urgent"; if (kind == "medical" && caseType.Length == 0) caseType = "General"; }
 
@@ -156,22 +196,23 @@ public class Function
 
             // Confirm before dispatch
             var place = locs.FirstOrDefault(l => l.Id == pid)?.Name ?? "the location";
+            var unitWord = kind == "fire" ? "fire truck" : "ambulance";
             if (!confirmed)
             {
-                var summary = kind == "fire"
-                    ? $"a fire truck to {place}, severity {severity}"
-                    : mass
-                        ? $"a mass casualty response to {place} for {patients} people, severity {severity}"
+                var summary = mass
+                    ? $"a mass casualty response to {place} — multiple {unitWord}s, severity {severity}" + (kind == "medical" ? $" for {patients} people" : "")
+                    : kind == "fire"
+                        ? $"a fire truck to {place}, severity {severity}"
                         : $"an ambulance to {place} for a {caseType.ToLowerInvariant()} case, severity {severity}";
                 return Reply(new
                 {
                     reply = $"I have {summary}. Should I dispatch? Say yes to confirm or no to change something.",
                     booked = (object?)null,
-                    pending = new { kind, pickup_id = pid, case_type = caseType, severity, units = 1, patients, mass, summary },
+                    pending = new { kind, pickup_id = pid, case_type = caseType, severity, units = Math.Max(requestedUnits, 1), patients, mass, summary },
                 }, cors);
             }
 
-            return await DoDispatch(new SlotData(kind, pid, caseType, severity, 1, patients), requestedBy, locs, cors);
+            return await DoDispatch(new SlotData(kind, pid, caseType, severity, Math.Max(requestedUnits, 1), patients), requestedBy, locs, cors);
         }
         catch (Exception ex)
         {
@@ -221,10 +262,14 @@ public class Function
 
         if (root.TryGetProperty("incident_id", out _))
         {
+            // Previously hard-coded "ambulance" regardless of kind — a mass
+            // fire-truck dispatch (multiple trucks requested/needed) would
+            // reply "ambulances dispatched", which is simply wrong.
+            var unitNoun = kind == "fire" ? "fire truck" : "ambulance";
             var dispatched = root.TryGetProperty("dispatched", out var dp) ? dp.GetInt32() : 0;
             var replyText = dispatched > 0
-                ? $"Mass casualty — {dispatched} ambulance{(dispatched > 1 ? "s" : "")} dispatched to {place} for {patients} people."
-                : "No ambulances are available right now.";
+                ? $"Mass casualty — {dispatched} {unitNoun}{(dispatched > 1 ? "s" : "")} dispatched to {place}" + (kind == "fire" ? "." : $" for {patients} people.")
+                : $"No {unitNoun}s are available right now.";
             return Reply(new
             {
                 reply = replyText,
@@ -257,14 +302,29 @@ public class Function
             ? $"Use the Open Knowledge Format bundle below to resolve locations and emergency types.\n\n{OkfKnowledge}"
             : "Locations (id=name): " + string.Join("; ", locs.Select(l => $"{l.Id}={l.Name}"));
 
+        // NOTE: earlier this prompt showed the JSON example with pipe-separated
+        // enum options inline in the field value, e.g. "kind":"medical|fire|" —
+        // Nova Lite would sometimes echo that literal placeholder text back as
+        // the answer ("Kind":"medical|fire|", "Severity":"Normal|Critical|")
+        // instead of picking one option, which silently broke slot-filling
+        // (kind always failed the caller's expected value, so the agent kept
+        // re-asking "ambulance or fire truck?" forever). Enum options are now
+        // described in prose instead of embedded in the example JSON, and the
+        // example itself only shows valid, already-chosen sample values.
         var systemText =
-            "You read an emergency phone call transcript and extract structured fields. Output ONLY minified JSON, nothing else:\n" +
-            "{\"kind\":\"medical|fire|\",\"pickup_id\":\"a location id from the list or empty\",\"pickup_text\":\"the place the caller said or empty\",\"case_type\":\"Cardiac|Trauma|General|Maternity|Pediatric|\",\"severity\":\"Critical|Urgent|Normal|\",\"patients\":0}\n" +
-            "Rules: kind=fire for any fire/smoke/blaze, otherwise medical if it's a medical/health emergency, else empty. " +
-            "Map the spoken place to the closest location id using the aliases and context in the knowledge bundle; also copy the spoken place into pickup_text. " +
-            "\"patients\" = number of people affected/injured (integer); use 0 if unknown. " +
+            "You read an emergency phone call transcript and extract structured fields. Output ONLY minified JSON, nothing else, matching this exact shape (this is an EXAMPLE — replace every value with what the transcript actually says, never copy these example values):\n" +
+            "{\"kind\":\"medical\",\"pickup_id\":\"loc-xyz\",\"pickup_text\":\"the place the caller said\",\"case_type\":\"General\",\"severity\":\"Urgent\",\"patients\":1,\"units\":1}\n" +
+            "Field rules:\n" +
+            "- kind: exactly \"fire\" (any fire/smoke/blaze) or exactly \"medical\" (any medical/health emergency), or \"\" if genuinely neither is indicated yet. Never output anything else in this field.\n" +
+            "- case_type: exactly one of Cardiac, Trauma, General, Maternity, Pediatric, or \"\" if not yet known.\n" +
+            "- severity: exactly one of Critical, Urgent, Normal, or \"\" if not yet known.\n" +
+            "- pickup_id: a location id from the knowledge bundle below, or \"\" if it doesn't match one.\n" +
+            "- pickup_text: the place the caller said, verbatim, or \"\" if none.\n" +
+            "- patients: number of people affected/injured (integer); 0 if unknown.\n" +
+            "- units: number of vehicles the caller explicitly asked for (integer, e.g. \"send two fire trucks\" = 2); 1 if not stated.\n" +
+            "Map the spoken place to the closest location id using the aliases and context in the knowledge bundle. " +
             "A bomb blast, explosion, building collapse, stampede, gas leak, or \"many/multiple people injured\" is a MASS CASUALTY — set case_type to Trauma, severity to Critical, and patients to the stated count (estimate generously if they say \"many\"). " +
-            "Leave a field \"\" or 0 ONLY if the caller truly has not indicated it. Do not invent values that weren't implied.\n\n" +
+            "Leave a field empty/zero ONLY if the caller truly has not indicated it. Do not invent values that weren't implied.\n\n" +
             locationContext;
 
         var converseReq = new ConverseRequest
@@ -293,7 +353,7 @@ public class Function
                 PickupId: r.TryGetProperty("pickup_id", out var pi) ? pi.GetString() : null,
                 CaseType: r.TryGetProperty("case_type", out var ct) ? ct.GetString() ?? "" : "",
                 Severity: r.TryGetProperty("severity", out var sv) ? sv.GetString() ?? "" : "",
-                Units: 1,
+                Units: r.TryGetProperty("units", out var un) && un.TryGetInt32(out var unI) && unI > 0 ? unI : 1,
                 Patients: r.TryGetProperty("patients", out var pt) && pt.TryGetDouble(out var ptD) ? ptD : 0
             ) with { PickupText = r.TryGetProperty("pickup_text", out var pxt) ? pxt.GetString() : null };
         }
@@ -324,15 +384,20 @@ public class Function
         {
             var resp = await Http.GetStringAsync($"{ApiBase}/reference/locations");
             var arr = JsonSerializer.Deserialize<JsonElement[]>(resp) ?? [];
-            _locsCache = arr
+            var locs = arr
                 .Where(e => e.TryGetProperty("id", out _))
                 .Select(e => new LocInfo(
                     e.GetProperty("id").GetString() ?? "",
                     e.TryGetProperty("name", out var n) ? n.GetString() ?? "" : ""))
                 .ToList();
+            // Never cache a failed/empty fetch: with an empty list cached, no
+            // caller-spoken location can ever resolve again for this container's
+            // whole warm lifetime — the agent would re-ask "what is the
+            // location?" forever after one transient network blip at startup.
+            if (locs.Count > 0) _locsCache = locs;
+            return locs;
         }
-        catch { _locsCache = []; }
-        return _locsCache;
+        catch { return _locsCache ?? []; }
     }
 
     private static bool KnownId(List<LocInfo> locs, string? id)
@@ -422,12 +487,103 @@ public class Function
         finally { JwksLock.Release(); }
     }
 
+    private static string NormalizeKind(string? raw)
+    {
+        var k = (raw ?? "").Trim().ToLowerInvariant();
+        return k == "fire" || k == "medical" ? k : "";
+    }
+
+    // Deterministic keyword fallback for when the LLM's structured "kind"
+    // field comes back empty/unparseable — scans the raw transcript directly
+    // rather than trusting a second model round-trip to get it right. Fire
+    // keywords checked first since "fire truck" mentions "truck", which is
+    // unambiguous, while "ambulance" is checked as the medical signal;
+    // "medical"/"hurt"/"injured"/"sick" catch common medical phrasing that
+    // doesn't literally say "ambulance".
+    private static readonly Regex FireWords = new(@"\b(fire|firetruck|fire truck|blaze|smoke|burning)\b", RegexOptions.IgnoreCase);
+    private static readonly Regex MedicalWords = new(@"\b(ambulance|medical|hurt|injured|injury|sick|unconscious|bleeding|pain|cardiac|maternity|pregnant)\b", RegexOptions.IgnoreCase);
+    private static string KindFromTranscript(string transcript)
+    {
+        var callerText = string.Join(" ", transcript.Split('\n').Where(l => l.StartsWith("Caller:")));
+        var text = callerText.Length > 0 ? callerText : transcript;
+        var fire = FireWords.IsMatch(text);
+        var medical = MedicalWords.IsMatch(text);
+        if (fire && !medical) return "fire";
+        if (medical && !fire) return "medical";
+        return "";
+    }
+
+    // Picks up an explicit vehicle count ("send two fire trucks", "3
+    // ambulances") from the caller's own turns. Small spoken numbers (one..ten)
+    // are matched by word since a caller says "two", not "2".
+    private static readonly string[] NumberWords =
+        ["zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten"];
+    private static readonly Regex UnitCountWords = new(
+        @"\b(\d{1,2}|zero|one|two|three|four|five|six|seven|eight|nine|ten)\s+(fire\s*trucks?|ambulances?|units?)\b",
+        RegexOptions.IgnoreCase);
+    private static int UnitsFromTranscript(string transcript)
+    {
+        var callerText = string.Join(" ", transcript.Split('\n').Where(l => l.StartsWith("Caller:")));
+        var text = callerText.Length > 0 ? callerText : transcript;
+        var m = UnitCountWords.Match(text);
+        if (!m.Success) return 1;
+        var raw = m.Groups[1].Value.ToLowerInvariant();
+        if (int.TryParse(raw, out var n)) return Math.Max(1, n);
+        var idx = Array.IndexOf(NumberWords, raw);
+        return idx > 0 ? idx : 1;
+    }
+
     private static string? IdentityOf(JwtPayload? claims)
     {
         if (claims == null) return null;
         foreach (var key in new[] { "sub", "username", "email", "name" })
             if (claims.TryGetValue(key, out var v) && v is string s && s.Length > 0) return s;
         return null;
+    }
+
+    // Ported from TransportApi/SsoBridge.cs's Verify()/ReadCookie() — kept
+    // minimal since this Lambda only needs a yes/no "is this a valid session",
+    // not the full claims object (requestedBy already comes from the request
+    // body, sent by the frontend regardless of auth method).
+    private static JsonObject? TryGetCookieSession(APIGatewayHttpApiV2ProxyRequest request)
+    {
+        if (SsoSessionSecret.Length == 0) return null;
+        string? cookieHeader = null;
+        request.Headers?.TryGetValue("cookie", out cookieHeader);
+        var cookies = request.Cookies ?? cookieHeader?.Split("; ");
+        if (cookies == null) return null;
+        string? cookieValue = null;
+        foreach (var c in cookies)
+        {
+            var idx = c.IndexOf('=');
+            if (idx > 0 && c[..idx] == "sso_session") { cookieValue = c[(idx + 1)..]; break; }
+        }
+        if (cookieValue == null) return null;
+
+        var parts = cookieValue.Split('.');
+        if (parts.Length != 2) return null;
+        using var h = new HMACSHA256(Encoding.UTF8.GetBytes(SsoSessionSecret));
+        var expectedSig = Base64UrlEncode(h.ComputeHash(Encoding.UTF8.GetBytes(parts[0])));
+        if (!CryptographicOperations.FixedTimeEquals(Encoding.UTF8.GetBytes(expectedSig), Encoding.UTF8.GetBytes(parts[1])))
+            return null;
+        try
+        {
+            var obj = JsonNode.Parse(Encoding.UTF8.GetString(Base64UrlDecode(parts[0])))?.AsObject();
+            if (obj == null) return null;
+            var exp = obj["exp"]?.GetValue<long>() ?? 0;
+            if (exp <= DateTimeOffset.UtcNow.ToUnixTimeSeconds()) return null;
+            return obj;
+        }
+        catch { return null; }
+    }
+
+    private static string Base64UrlEncode(byte[] bytes) =>
+        Convert.ToBase64String(bytes).Replace('+', '-').Replace('/', '_').TrimEnd('=');
+
+    private static byte[] Base64UrlDecode(string s)
+    {
+        var b64 = s.Replace('-', '+').Replace('_', '/').PadRight(s.Length + (4 - s.Length % 4) % 4, '=');
+        return Convert.FromBase64String(b64);
     }
 
     // =====================================================================

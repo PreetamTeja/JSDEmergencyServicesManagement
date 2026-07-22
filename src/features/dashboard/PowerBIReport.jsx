@@ -26,7 +26,20 @@ export default function PowerBIReport() {
           accessToken: token,
           embedUrl,
           id: reportId,
-          settings: { panes: { filters: { visible: false } }, background: models.BackgroundType.Transparent },
+          settings: {
+            panes: { filters: { visible: false } },
+            background: models.BackgroundType.Transparent,
+            // Without this, the embed SDK renders the report at its
+            // authored 16:9 design size and letterboxes/crops inside
+            // this fluid w-full/h-full container instead of actually
+            // filling it — FitToPage scales the whole canvas (all
+            // visuals together, proportions preserved) to the
+            // container's real dimensions at render time, whatever
+            // those turn out to be (admin console today, a different
+            // website's iframe later).
+            layoutType: models.LayoutType.Custom,
+            customLayout: { displayOption: models.DisplayOption.FitToPage },
+          },
         })
         // Refresh the token ~2 min before it expires so the report never drops out.
         if (expiry) {

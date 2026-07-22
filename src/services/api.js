@@ -6,12 +6,16 @@ import { getToken } from '../auth'
 const BASE = import.meta.env.VITE_API_URL || ''
 export const API_ENABLED = !!BASE
 
-// SECURITY: the browser authenticates with the user's Cognito JWT only.
-// API keys are for server-to-server callers (e.g. the hospital app) and must
-// never be shipped in the frontend bundle.
+// SECURITY: the browser authenticates with the user's Cognito JWT (bearer
+// header, legacy flow) OR the sso_session cookie (SsoBridge flow). A cookie
+// session never exposes a raw JWT to JS, so there's nothing to put in the
+// Authorization header for it — instead these requests go to a *relative*
+// path (same origin as the app, routed to API Gateway via a CloudFront
+// behavior) so the browser attaches the SameSite=Strict cookie itself.
 async function req(path, opts = {}) {
   const bearer = getToken()
-  const res = await fetch(`${BASE}${path}`, {
+  const res = await fetch(path, {
+    credentials: 'same-origin',
     headers: {
       'content-type': 'application/json',
       ...(bearer ? { authorization: `Bearer ${bearer}` } : {}),
@@ -19,6 +23,21 @@ async function req(path, opts = {}) {
     ...opts,
     body: opts.body ? JSON.stringify(opts.body) : undefined,
   })
+  if (!res.ok) {
+    let detail = {}
+    try { detail = await res.json() } catch {}
+    throw new Error(detail.message || `API ${res.status}`)
+  }
+  return res.status === 204 ? null : res.json()
+}
+
+// Public, unauthenticated calls (shareable tracking links) go straight to
+// API Gateway's own domain — no cookie involved, and staying off the app's
+// own origin avoids colliding with the SPA route CloudFront must still
+// serve index.html for at this same path (/track/:id is both a page route
+// and a data endpoint).
+async function reqPublic(path) {
+  const res = await fetch(`${BASE}${path}`, { headers: { 'content-type': 'application/json' } })
   if (!res.ok) {
     let detail = {}
     try { detail = await res.json() } catch {}
@@ -37,7 +56,7 @@ export const api = {
   getHealth: () => req('/health').catch(() => ({})),
   getPowerbiToken: () => req('/powerbi/embed-token'),
   // Public tokenized live tracking (no auth) — for shareable links.
-  getTrack: (id, token) => req(`/track/${id}?t=${encodeURIComponent(token || '')}`),
+  getTrack: (id, token) => reqPublic(`/track/${id}?t=${encodeURIComponent(token || '')}`),
   // operational reads
   getFleet: () => req('/fleet'),
   getOps: () => req('/ops'),

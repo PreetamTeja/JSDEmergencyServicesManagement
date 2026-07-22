@@ -53,7 +53,7 @@ const valid = (claims) => !!claims && (!claims.exp || claims.exp * 1000 > Date.n
 
 // Map Cognito groups -> app role. Admin if the group is allow-listed, or (when no
 // allow-list is configured) if any group ends with "-admin".
-function roleFromGroups(groups = []) {
+export function roleFromGroups(groups = []) {
   const list = Array.isArray(groups) ? groups : [groups]
   const isAdmin = ADMIN_GROUPS.length
     ? list.some((g) => ADMIN_GROUPS.includes(g))

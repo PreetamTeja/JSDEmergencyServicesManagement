@@ -46,7 +46,16 @@ public static class OsrmService
             result = new RouteResult(distM / 1000.0, durS / 60.0, legs);
         }
         catch { result = null; }
-        Cache[key] = result;
+        // Only cache successes. A cached null would pin this route to the
+        // straight-line fallback for the container's entire warm lifetime
+        // after one transient OSRM hiccup. Also cap the cache — it's static
+        // (survives across invocations, not just within one), so without a
+        // bound it grows for as long as the container lives.
+        if (result != null)
+        {
+            if (Cache.Count >= 500) Cache.Clear();
+            Cache[key] = result;
+        }
         return result;
     }
 }

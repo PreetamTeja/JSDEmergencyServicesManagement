@@ -113,9 +113,12 @@ public static class Auth
         return [];
     }
 
-    public static bool IsAdmin(JwtPayload? claims)
+    public static bool IsAdmin(JwtPayload? claims) => IsAdminGroups(GroupsOf(claims));
+
+    // Extracted so callers with groups from a non-JWT source (e.g. the
+    // sso_session cookie claims) can reuse the same admin-group logic.
+    public static bool IsAdminGroups(string[] groups)
     {
-        var groups = GroupsOf(claims);
         if (AdminGroups.Count > 0)
             return groups.Any(g => AdminGroups.Contains(g));
         return groups.Any(g => g.EndsWith("-admin", StringComparison.OrdinalIgnoreCase));

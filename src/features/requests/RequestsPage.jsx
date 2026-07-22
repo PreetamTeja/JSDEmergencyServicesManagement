@@ -9,6 +9,21 @@ import LiveEta from '../../components/common/LiveEta'
 import { useNow } from '../../hooks/useNow'
 import Icon from '../../components/common/Icon'
 import { usePagination, PaginationBar } from '../../components/common/Pagination'
+import { istDateKey } from '../../services/time'
+
+// The app had no first-party way to hand someone a working /track/:id link —
+// the only place track_token existed was raw in the DynamoDB record, so
+// anyone sharing a link had to construct the URL by hand without the real
+// token, which always fails the same generic "invalid or expired" check
+// (the backend deliberately doesn't distinguish "wrong token" from "actually
+// expired" for security — see Function.cs's /track handler). This is the
+// actual, correct way to build a working link.
+function copyTrackingLink(e) {
+  if (!e.trackToken) return
+  const url = `${window.location.origin}/track/${e.id}?t=${encodeURIComponent(e.trackToken)}`
+  navigator.clipboard?.writeText(url).catch(() => {})
+  return url
+}
 
 const FILTERS = [
   { key: 'all', label: 'All' },
@@ -42,10 +57,14 @@ function progressOf(e, now) {
   if (ATTENTION.includes(e.state)) return 0.06
   if (e.state === 'CANCELLED') return 0
   if (e.state === 'EN_ROUTE') {
-    const totalMin = e.totalEtaMin || e.etaToPickupMin || 0
-    if (e.etaComplete && totalMin > 0) {
-      const end = e.etaComplete * 1000
-      const start = end - totalMin * 60000
+    // Anchor on createdAt + etaComplete, both stable once dispatched — NOT
+    // totalEtaMin/etaToPickupMin, which legitimately keep refreshing (traffic-
+    // adjusted OSRM recompute on every page load) for display purposes. Deriving
+    // "start" from a fluctuating total duration against a fixed etaComplete made
+    // progress jump non-monotonically (e.g. 49% -> 28% -> 6%) on every reload.
+    const start = new Date(e.createdAt).getTime()
+    const end = e.etaComplete ? e.etaComplete * 1000 : null
+    if (end && end > start && !isNaN(start)) {
       return Math.min(0.98, Math.max(0.06, (now - start) / (end - start)))
     }
     return 0.5
@@ -143,8 +162,10 @@ export default function DispatchBoard() {
     [emergencies, cleared])
 
   const kpis = useMemo(() => {
-    // Recomputed with `now` so "today" rolls over correctly past midnight.
-    const today = new Date(now).toISOString().slice(0, 10)
+    // Recomputed with `now` so "today" rolls over correctly past midnight —
+    // in IST (this is a Jamshedpur dispatch board), not UTC. The UTC day
+    // attributed any 00:00-05:29 IST dispatch to "yesterday" here too.
+    const today = istDateKey(new Date(now))
     const live = visible.filter((e) => e.state === 'EN_ROUTE' || ATTENTION.includes(e.state))
     return {
       active: visible.filter((e) => e.state === 'EN_ROUTE').length,
@@ -432,6 +453,7 @@ export default function DispatchBoard() {
                         <RowMenu e={e} busy={busy === e.id}
                           onOverride={() => { setMenuId(null); setOverride(e) }}
                           onCancel={() => onCancel(e.id)}
+                          onCopyLink={() => { setMenuId(null); copyTrackingLink(e) }}
                           onViewTimeline={() => { setMenuId(null); setTimelineEm(e) }}
                           onClose={() => setMenuId(null)} />
                       )}
@@ -473,7 +495,7 @@ function ProgressBar({ e, now }) {
   )
 }
 
-function RowMenu({ e, busy, onOverride, onCancel, onViewTimeline, onClose }) {
+function RowMenu({ e, busy, onOverride, onCancel, onCopyLink, onViewTimeline, onClose }) {
   const ref = useRef(null)
   useEffect(() => {
     const h = (ev) => { if (ref.current && !ref.current.contains(ev.target)) onClose() }
@@ -493,6 +515,13 @@ function RowMenu({ e, busy, onOverride, onCancel, onViewTimeline, onClose }) {
       )}
       <button onClick={onViewTimeline} className="w-full text-left px-4 py-2.5 font-medium transition-colors hover:bg-[rgba(7,81,77,0.05)]"
         style={{ color: '#07514D' }}>View timeline</button>
+      {e.trackToken && (
+        <>
+          <div style={{ borderTop: '1px solid rgba(0,0,0,0.06)' }} />
+          <button onClick={onCopyLink} className="w-full text-left px-4 py-2.5 font-medium transition-colors hover:bg-[rgba(7,81,77,0.05)]"
+            style={{ color: '#07514D' }}>Copy tracking link</button>
+        </>
+      )}
       {enroute && (
         <>
           <div style={{ borderTop: '1px solid rgba(0,0,0,0.06)' }} />

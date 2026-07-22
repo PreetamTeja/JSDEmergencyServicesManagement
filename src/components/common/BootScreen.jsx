@@ -1,6 +1,5 @@
 import React from 'react'
-import ExplodeLogo from './ExplodeLogo'
-import { AmbulanceIcon, FireTruckIcon, HoseReel } from './VehicleReveal'
+import { AmbulanceBlueprint, FireTruckBlueprint } from './VehicleBlueprint'
 
 // Shared branded loading screen — used both by the admin Console (App.jsx,
 // while the fleet/ops data loads) and the requester Portal (in place of its
@@ -8,28 +7,36 @@ import { AmbulanceIcon, FireTruckIcon, HoseReel } from './VehicleReveal'
 // arrival experience through SSO. Extracted to its own file rather than
 // living in App.jsx so UserPortal.jsx can import it without a circular
 // App.jsx <-> UserPortal.jsx dependency.
+//
+// Full-page CAD/blueprint-style technical line art of the fleet (ambulance
+// top+side, fire truck side+front) on a paper-white ground, with a single
+// spinner in the bottom-right corner — intentionally minimal rather than
+// the previous dark branded panel, so the drawing itself is the screen.
 export default function BootScreen({ message = 'Connecting to live operations…' }) {
-  const bg = 'linear-gradient(160deg,#05201E 0%,#083F3B 55%,#0B5A55 100%)'
   return (
-    <div className="h-full w-full grid place-items-center text-white on-dark" style={{ background: bg }}>
-      <div className="boot-in flex flex-col items-center text-center px-6">
-        <div className="mb-2"><ExplodeLogo size={48} /></div>
-        <div className="text-[22px] font-bold tracking-tight">JSD Emergency Services</div>
-        <div className="text-[13px] mb-6" style={{ color: 'rgba(214,223,39,0.8)' }}>Tata Steel · Jamshedpur</div>
+    <div className="h-full w-full relative overflow-hidden" style={{ background: '#FBFBF9' }}>
+      {/* Faint graph-paper grid, the one nod to "blueprint" beyond the linework itself. */}
+      <div className="pointer-events-none absolute inset-0" style={{
+        backgroundImage: 'linear-gradient(rgba(31,41,55,0.05) 1px, transparent 1px), linear-gradient(90deg, rgba(31,41,55,0.05) 1px, transparent 1px)',
+        backgroundSize: '28px 28px',
+      }} />
 
-        {/* Ambulance + fire truck assemble segment-by-segment, either side of
-            the hose-reel loading indicator — the fleet this app dispatches,
-            arriving before the console/portal itself does. */}
-        <div className="flex items-end justify-center gap-5">
-          <AmbulanceIcon width={118} className="shrink-0" />
-          <HoseReel size={64} />
-          <FireTruckIcon width={130} className="shrink-0" />
+      <div className="h-full w-full flex flex-col px-8 py-6 gap-3">
+        <div className="boot-in flex-1 min-h-0 flex items-center justify-center">
+          <AmbulanceBlueprint className="h-full w-auto max-w-full" />
         </div>
+        <div className="boot-in flex-1 min-h-0 flex items-center justify-center">
+          <FireTruckBlueprint className="h-full w-auto max-w-full" />
+        </div>
+      </div>
 
-        <div className="mt-7 text-[13px] boot-pulse" style={{ color: 'rgba(255,255,255,0.78)' }}>{message}</div>
-        <div className="mt-3 h-1 w-44 rounded-full overflow-hidden" style={{ background: 'rgba(255,255,255,0.14)' }}>
-          <div className="boot-bar h-full w-2/5 rounded-full" style={{ background: '#D6DF27' }} />
-        </div>
+      <div className="absolute right-6 bottom-6 flex items-center gap-3">
+        <span className="text-[12px] boot-pulse" style={{ color: '#1f2937', opacity: 0.65 }}>{message}</span>
+        <svg width="30" height="30" viewBox="0 0 30 30" className="blueprint-spin" aria-hidden="true">
+          <circle cx="15" cy="15" r="12" fill="none" stroke="rgba(31,41,55,0.15)" strokeWidth="2.4" />
+          <circle cx="15" cy="15" r="12" fill="none" stroke="#0B6A64" strokeWidth="2.4" strokeLinecap="round"
+            strokeDasharray="18 75.4" transform="rotate(-90 15 15)" />
+        </svg>
       </div>
     </div>
   )

@@ -5,7 +5,14 @@ import { locById } from '../data/locations'
 import { hospitalById } from '../data/hospitals'
 import LiveEta from '../components/common/LiveEta'
 
-const VOICE_URL = import.meta.env.VITE_VOICE_URL || ''
+// Relative path (routed via a CloudFront behavior to the VoiceAgent API
+// Gateway, same-origin as the app) instead of the raw cross-origin
+// VITE_VOICE_URL — a SameSite=Strict sso_session cookie is never sent
+// cross-origin no matter what, so a user signed in via SSO (no bearer JWT
+// ever exposed to JS) would otherwise always get 401'd here even while
+// fully signed in everywhere else in the app. Same fix pattern as
+// services/api.js's req() for the main TransportApi calls.
+const VOICE_URL = '/voice'
 const SR = typeof window !== 'undefined' ? (window.SpeechRecognition || window.webkitSpeechRecognition) : null
 // strip any <thinking>…</thinking> / stray tags the model may emit
 const clean = (t) => String(t || '').replace(/<thinking>[\s\S]*?<\/thinking>/gi, '').replace(/<\/?[a-z_]+>/gi, '').trim()
@@ -80,6 +87,7 @@ export default function VoiceAgent({ session, onClose }) {
       const bearer = getToken()
       const r = await fetch(VOICE_URL, {
         method: 'POST',
+        credentials: 'same-origin',
         headers: { 'content-type': 'application/json', ...(bearer ? { authorization: `Bearer ${bearer}` } : {}) },
         body: JSON.stringify({ messages: history, requestedBy: session?.sub || session?.name, finalize, confirmed, slots }),
       })
@@ -146,7 +154,8 @@ export default function VoiceAgent({ session, onClose }) {
   }, [])
 
   useEffect(() => { if (phase !== 'incall') return; const id = setInterval(() => setSeconds((s) => s + 1), 1000); return () => clearInterval(id) }, [phase])
-  useEffect(() => { endRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [messages, booked])
+  // scrollIntoView is optional-called: jsdom (tests) doesn't implement it.
+  useEffect(() => { endRef.current?.scrollIntoView?.({ behavior: 'smooth' }) }, [messages, booked])
 
   // Hang up: if there's a pending confirmed dispatch, submit it first; otherwise close.
   function endCall() {
@@ -178,10 +187,9 @@ export default function VoiceAgent({ session, onClose }) {
           {phase === 'incall' && <div className="text-[11px] text-white/70">{ending ? 'Dispatching…' : ended ? 'Call ended' : busy ? 'Processing…' : speaking ? 'Speaking…' : pending ? 'Awaiting your approval' : '● Listening'}</div>}
         </div>
 
-        {!VOICE_URL ? (
-          <div className="p-6 text-sm text-status-danger">Voice service not configured (VITE_VOICE_URL missing).</div>
-        ) : (
-          <>
+        {/* VOICE_URL is a hard-coded same-origin path now (no env fallback), so
+            the old "voice service not configured" branch is unreachable. */}
+        <>
             <div className="flex-1 overflow-auto p-4 space-y-2 min-h-[140px]">
               {phase === 'connecting' && (
                 <div className="h-full grid place-items-center text-cmd-muted text-sm">
@@ -260,8 +268,7 @@ export default function VoiceAgent({ session, onClose }) {
                     </>
                   )}
             </div>
-          </>
-        )}
+        </>
       </div>
     </div>
   )

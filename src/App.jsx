@@ -1,8 +1,9 @@
 import React, { useEffect, useState, useRef, useCallback } from 'react'
 import { Routes, Route, NavLink, Navigate, useNavigate } from 'react-router-dom'
 import { useFleetStore } from './store/useFleetStore'
-import { getSession, devLogin, login, logout, clearLocalSession, captureTokenFromUrl } from './auth'
+import { getSession, devLogin, login, logout, clearLocalSession, captureTokenFromUrl, roleFromGroups } from './auth'
 import { useSessionGuard } from './hooks/useSessionGuard'
+import { useSsoSession } from './hooks/useSsoSession'
 import { prefetchCachedApi } from './hooks/useCachedApi'
 import { api } from './services/api'
 import LiveMapPage from './features/map/LiveMapPage'
@@ -48,6 +49,27 @@ export default function App() {
   const ready = useFleetStore((s) => s.ready)
   const error = useFleetStore((s) => s.error)
   const [session, setSession] = useState(() => { captureTokenFromUrl(); return getSession() })
+  // New cookie-based SSO path (set by the /sso-callback bridge). Checked
+  // whenever there's no session from the legacy query-param/dev-login path
+  // above — additive, not a replacement, so the old flow still works if the
+  // portal ever falls back to it.
+  const { session: cookieSession, loading: cookieLoading } = useSsoSession()
+  useEffect(() => {
+    if (session || !cookieSession) return
+    setSession({
+      sub: cookieSession.userId,
+      name: cookieSession.email || cookieSession.userId,
+      email: cookieSession.email || null,
+      role: roleFromGroups(cookieSession.groups || []),
+      groups: cookieSession.groups || [],
+      via: 'sso-cookie',
+    })
+  }, [session, cookieSession])
+  // onSessionExpire (below) has empty deps so it stays stable across
+  // renders — a ref keeps it able to read the current session's `via`
+  // without going stale, unlike a value captured in its closure.
+  const sessionViaRef = useRef(null)
+  useEffect(() => { sessionViaRef.current = session?.via ?? null }, [session])
   // Set the instant expiry fires so the transition screen renders in the
   // very same tick — the underlying page must never be visible again once
   // the session is gone, not even for one frame.
@@ -60,8 +82,10 @@ export default function App() {
   // a local dev session (no real SSO to bounce to) just returns to this
   // app's own Landing screen, which is never a broken/empty state.
   const onSessionExpire = useCallback(() => {
-    const wasSso = getSession()?.via === 'sso'
+    const via = sessionViaRef.current
+    const wasSso = via === 'sso' || via === 'sso-cookie'
     clearLocalSession()
+    if (via === 'sso-cookie') fetch('/api/logout', { method: 'POST', credentials: 'same-origin' }).catch(() => {})
     if (wasSso) {
       setExpiring(true)
       const redirected = login()
@@ -108,7 +132,10 @@ export default function App() {
   // Public live-tracking link — no login, no backend bootstrap.
   if (IS_TRACK) return <Routes><Route path="/track/:id" element={<TrackPage />} /></Routes>
 
-  // No session yet → SSO placeholder (replaced by the real redirect later).
+  // No session yet — wait for the cookie check to resolve before showing
+  // the SSO landing screen, so a valid cookie session doesn't flash a
+  // "sign in" prompt for the one render before it resolves.
+  if (!session && cookieLoading) return <BootScreen />
   if (!session) return <Landing onPick={(role) => { devLogin(role); setSession(getSession()) }} />
 
   // Data is loaded exclusively from the backend (DynamoDB). No mock fallback.
@@ -132,7 +159,14 @@ export default function App() {
   )
   if (!ready) return <BootScreen />
 
-  const signOut = () => { if (window.confirm('Sign out?')) { logout(); setSession(getSession()) } }
+  const signOut = () => {
+    if (!window.confirm('Sign out?')) return
+    if (session.via === 'sso-cookie') {
+      fetch('/api/logout', { method: 'POST', credentials: 'same-origin' }).finally(login)
+    } else {
+      logout(); setSession(getSession())
+    }
+  }
   return (
     <>
       {session.role === 'user'

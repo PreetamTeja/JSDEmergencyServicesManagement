@@ -84,15 +84,15 @@ beforeAll(() => {
   }
 })
 
-// We need to stub import.meta.env in the module.
-// The cleanest approach: jest.mock the VoiceAgent module's internal env reads
-// by providing a manual mock. Since VoiceAgent reads `import.meta.env.VITE_VOICE_URL`
-// at the top of the file, Babel will try to transform that. We stub via a module
-// factory approach — we can't directly mock import.meta but we CAN test the
-// rendered JSX when VOICE_URL evaluates to empty string (which is the fallback).
+// VOICE_URL is a hard-coded same-origin path ('/voice', routed via a
+// CloudFront behavior) — no env fallback anymore, so the component always
+// opens the call by POSTing the greeting on mount. Tests mock fetch to
+// answer that greeting deterministically.
 
 // Import after all mocks are registered
 const VoiceAgent = require('../portal/VoiceAgent').default
+
+const GREETING = 'Emergency line. Ambulance or fire truck, and where?'
 
 describe('VoiceAgent', () => {
   const defaultProps = {
@@ -102,49 +102,50 @@ describe('VoiceAgent', () => {
 
   beforeEach(() => {
     jest.clearAllMocks()
-    global.fetch = jest.fn()
+    global.fetch = jest.fn().mockResolvedValue({
+      json: async () => ({ reply: GREETING, booked: null }),
+    })
   })
 
-  test('renders the overlay container', () => {
+  test('renders the overlay container', async () => {
     const { container } = render(<VoiceAgent {...defaultProps} />)
-    // The outer fixed overlay div should always render
     expect(container.firstChild).toHaveClass('fixed')
+    await waitFor(() => expect(global.fetch).toHaveBeenCalled())
   })
 
-  test('shows "Emergency Services" header text', () => {
+  test('shows "Emergency Services" header text', async () => {
     render(<VoiceAgent {...defaultProps} />)
     expect(screen.getByText('Emergency Services')).toBeInTheDocument()
+    await waitFor(() => expect(global.fetch).toHaveBeenCalled())
   })
 
-  test('shows voice-not-configured message when VITE_VOICE_URL is empty', () => {
-    // When VOICE_URL is falsy the component renders an error message instead of the call UI
+  test('opens the call by POSTing the greeting to the same-origin /voice path', async () => {
     render(<VoiceAgent {...defaultProps} />)
-    expect(screen.getByText(/Voice service not configured/i)).toBeInTheDocument()
+    await waitFor(() => expect(global.fetch).toHaveBeenCalled())
+    const [url, opts] = global.fetch.mock.calls[0]
+    expect(url).toBe('/voice')
+    expect(opts.method).toBe('POST')
+    // SameSite=Strict sso_session cookie must ride along for SSO users.
+    expect(opts.credentials).toBe('same-origin')
+    expect(JSON.parse(opts.body).requestedBy).toBe('user-1')
   })
 
-  test('shows "Close" button when dispatched state is true (mocked booked)', () => {
-    // We test the branch via mocking useState to pre-set dispatched=true.
-    // Simplest: use a wrapper that exercises the Close-button branch by mocking React.useState.
-    const useStateSpy = jest.spyOn(React, 'useState')
-
-    // We need to intercept the specific useState calls. The component has multiple
-    // useState calls; we mock them in order. This is fragile — instead test via
-    // rendering with booked state set through a fetch mock that returns a booked object.
-    useStateSpy.mockRestore()
-
-    // The Close button is rendered when (dispatched || ended). We verify the button
-    // exists in the non-VOICE_URL path (not shown), so we confirm correct behavior
-    // by testing the text "Close" doesn't appear initially (since no dispatch happened).
+  test('shows the greeting bubble once the agent answers', async () => {
     render(<VoiceAgent {...defaultProps} />)
-    // In the no-VOICE_URL branch, the call UI is hidden so the close button is absent
+    expect(await screen.findByText(GREETING)).toBeInTheDocument()
+  })
+
+  test('no "Close" button before anything is dispatched', async () => {
+    render(<VoiceAgent {...defaultProps} />)
+    await waitFor(() => expect(global.fetch).toHaveBeenCalled())
     expect(screen.queryByRole('button', { name: /Close/i })).not.toBeInTheDocument()
   })
 
-  test('calls onClose when the component is unmounted cleanly', () => {
+  test('does not call onClose on unmount (only on hang up)', async () => {
     const onClose = jest.fn()
     const { unmount } = render(<VoiceAgent {...defaultProps} onClose={onClose} />)
+    await waitFor(() => expect(global.fetch).toHaveBeenCalled())
     unmount()
-    // onClose is not called on unmount — it's called when user clicks hang up
     expect(onClose).not.toHaveBeenCalled()
   })
 })

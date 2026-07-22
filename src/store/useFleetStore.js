@@ -35,6 +35,7 @@ const nEmg = (i) => ({ id: i.id, kind: i.kind || 'medical', pickup: i.pickup?.re
   driverId: i.assigned_driver_id || null, hospitalId: i.hospital_id || null, requestedBy: i.requested_by || null,
   incidentId: i.incident_id || null, patientsCount: i.patients_count || 1, note: i.note || null,
   bloodBankId: i.blood_bank_id || null,
+  trackToken: i.track_token || null,
   fireStationId: i.fire_station_id || null,
   pickupName: i.pickup?.name || null,
   pickupPt: (typeof i.pickup?.lat === 'number') ? { lat: i.pickup.lat, lng: i.pickup.lng } : null,
@@ -120,6 +121,26 @@ export const useFleetStore = create((set, get) => ({
     })
   },
 
+  // hydrateLive() runs on every fresh page load (the `live` animation state is
+  // client-memory only, never persisted), but the trip's real elapsed time has
+  // kept moving server-side the whole time (eta_complete, set once at dispatch).
+  // Without this, every refresh would snap the vehicle marker back to the route
+  // start even though the progress %/ETA text (driven by the same eta_complete)
+  // correctly shows the trip partway done — a visible contradiction between the
+  // marker position and the reported progress. Seed idx/idxF from elapsed real
+  // time instead of always starting at 0, mirroring RequestsPage's progressOf().
+  elapsedFraction(job) {
+    // Anchor on createdAt + etaComplete, both stable once dispatched — NOT
+    // totalEtaMin, which keeps refreshing with traffic (deriving start as
+    // etaComplete - totalMin made the seeded marker position jump between
+    // refreshes; same class of bug as the progress-bar fix in RequestsPage).
+    if (!job.etaComplete) return 0
+    const end = job.etaComplete * 1000
+    const start = job.createdAt ? new Date(job.createdAt).getTime() : NaN
+    if (isNaN(start) || end <= start) return 0
+    return Math.min(0.98, Math.max(0, (Date.now() - start) / (end - start)))
+  },
+
   // Build live OSRM geometry (client-side) for any EN_ROUTE emergency missing it.
   // Medical = 2 legs (to scene, then to hospital); fire = 1 leg (to scene).
   async hydrateLive() {
@@ -129,7 +150,12 @@ export const useFleetStore = create((set, get) => ({
       // One bad/stale record (missing location/hospital) must not break the rest.
       try {
         const veh = get().vehicles.find((v) => v.id === job.ambulanceId)
-        const pickupLoc = job.kind === 'blood' ? job.pickupPt : locById(job.pickup)
+        // A pickup can arrive either as a named Location reference (job.pickup)
+        // or as a raw lat/lng (job.pickupPt, e.g. a hospital-drawn pin) — try
+        // the reference lookup first, but fall back to the raw coordinate so
+        // a lat/lng-only pickup still gets live route geometry instead of
+        // being silently skipped.
+        const pickupLoc = job.kind === 'blood' ? job.pickupPt : (locById(job.pickup) || job.pickupPt)
         if (!pickupLoc) continue
         const start = veh ? vehicleHomePos(veh) : pickupLoc
 
@@ -146,7 +172,10 @@ export const useFleetStore = create((set, get) => ({
           const etaMin = +(leg1.durationMin + leg2.durationMin + leg3.durationMin).toFixed(1)
           const factor = freeMin > 0 ? etaMin / freeMin : 1
           const speed = factor > 0 ? 1 / factor : 1
-          set((st) => ({ live: { ...st.live, [job.ambulanceId]: { coords, idx: 0, idxF: 0, speed, pos: coords[0], jobId: job.id } },
+          const frac0 = get().elapsedFraction(job)
+          const idxF0 = frac0 * (coords.length - 1)
+          const idx0 = Math.floor(idxF0)
+          set((st) => ({ live: { ...st.live, [job.ambulanceId]: { coords, idx: idx0, idxF: idxF0, speed, pos: coords[idx0], jobId: job.id } },
             emergencies: st.emergencies.map((e) => e.id === job.id ? { ...e, leg1: leg1.coordinates, leg2: leg2.coordinates, leg3: leg3.coordinates, traffic: trafficLevel(factor), trafficFactor: factor } : e) }))
           const distanceKm = +(leg1.distanceKm + leg2.distanceKm + leg3.distanceKm).toFixed(1)
           const etaToPickupMin = +leg1.durationMin.toFixed(1)
@@ -164,7 +193,10 @@ export const useFleetStore = create((set, get) => ({
         const etaMin = +(leg1.durationMin + leg2.durationMin).toFixed(1)
         const factor = freeMin > 0 ? etaMin / freeMin : 1
         const speed = factor > 0 ? 1 / factor : 1
-        set((st) => ({ live: { ...st.live, [job.ambulanceId]: { coords, idx: 0, idxF: 0, speed, pos: coords[0], jobId: job.id } },
+        const frac0 = get().elapsedFraction(job)
+        const idxF0 = frac0 * (coords.length - 1)
+        const idx0 = Math.floor(idxF0)
+        set((st) => ({ live: { ...st.live, [job.ambulanceId]: { coords, idx: idx0, idxF: idxF0, speed, pos: coords[idx0], jobId: job.id } },
           emergencies: st.emergencies.map((e) => e.id === job.id ? { ...e, leg1: leg1.coordinates, leg2: leg2.coordinates, traffic: trafficLevel(factor), trafficFactor: factor } : e) }))
         // Write the traffic-adjusted distance/duration back so the UI ETA matches the animation.
         const distanceKm = +(leg1.distanceKm + leg2.distanceKm).toFixed(1)
@@ -187,9 +219,27 @@ export const useFleetStore = create((set, get) => ({
         const idxF = (l.idxF ?? l.idx) + (l.speed || 1)
         const idx = Math.floor(idxF)
         if (idx >= l.coords.length) {
-          vehicles = vehicles.map((v) => v.id === id ? { ...v, status: 'idle' } : v)
-          emergencies = emergencies.map((e) => e.id === l.jobId ? { ...e, state: 'COMPLETED' } : e)
-          delete live[id]; continue
+          // Reaching the end of the coordinate array is a step-count clock,
+          // not a time clock — it can run ahead of or behind the backend's
+          // eta_complete-based completion (SweepDue), which is what actually
+          // flips status to COMPLETED. Marking COMPLETED here on step-count
+          // alone let the UI say "Arrived" while the server still disagreed,
+          // so a refresh would show it back "in progress". Instead, park the
+          // marker at the final coordinate and wait for the server's own
+          // COMPLETED status to arrive via the next poll (refreshFromApi
+          // already preserves a locally-seen COMPLETED to avoid flicker).
+          const job = emergencies.find((e) => e.id === l.jobId)
+          // Job gone from the board entirely (cancelled/cleared server-side) —
+          // drop the orphaned marker instead of parking it on screen forever.
+          if (!job) { delete live[id]; continue }
+          const due = job.etaComplete && Date.now() >= job.etaComplete * 1000
+          if (due) {
+            vehicles = vehicles.map((v) => v.id === id ? { ...v, status: 'idle' } : v)
+            emergencies = emergencies.map((e) => e.id === l.jobId ? { ...e, state: 'COMPLETED' } : e)
+            delete live[id]; continue
+          }
+          live[id] = { ...l, idx: l.coords.length - 1, idxF: l.coords.length - 1, pos: l.coords[l.coords.length - 1] }
+          continue
         }
         live[id] = { ...l, idx, idxF, pos: l.coords[idx] }
       }

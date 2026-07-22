@@ -97,9 +97,18 @@ export default function UserPortal({ session, onSignOut }) {
       ) : !ready ? (
         <div className="flex-1 min-h-0"><BootScreen /></div>
       ) : (
-        <div className="flex-1 flex flex-col lg:flex-row overflow-hidden">
+        // overflow-y-auto below lg: on mobile this stacks map + both asides
+        // vertically with no per-panel height constraint, so their combined
+        // content height exceeds the viewport — without page-level scroll
+        // here, the bottom of the booking form and the entire "Your
+        // requests" panel are clipped and completely unreachable (confirmed
+        // via a real mobile-width render, ~284px of content inaccessible).
+        // Desktop keeps overflow-hidden + per-pane scroll (each aside's own
+        // overflow-y-auto below), since the 3-pane layout there is already
+        // fully visible without an outer scroll.
+        <div className="flex-1 flex flex-col lg:flex-row overflow-y-auto lg:overflow-hidden">
           {/* LEFT — booking + your requests (scrollable) */}
-          <aside className="w-full lg:w-[400px] shrink-0 lg:border-r border-cmd-border overflow-y-auto bg-cmd-bg">
+          <aside className="w-full lg:w-[400px] shrink-0 lg:border-r border-cmd-border lg:overflow-y-auto bg-cmd-bg">
             <div className="p-4 space-y-5">
               {/* Request form */}
               <div>
@@ -190,7 +199,7 @@ export default function UserPortal({ session, onSignOut }) {
           </main>
 
           {/* RIGHT — your requests */}
-          <aside className="w-full lg:w-[340px] shrink-0 lg:border-l border-cmd-border overflow-y-auto bg-cmd-bg">
+          <aside className="w-full lg:w-[340px] shrink-0 lg:border-l border-cmd-border lg:overflow-y-auto bg-cmd-bg">
             <div className="p-4">
               <h2 className="text-[15px] font-semibold mb-3">Your requests</h2>
               <div className="flex gap-1 mb-3 p-1 bg-brand-light rounded-lg">

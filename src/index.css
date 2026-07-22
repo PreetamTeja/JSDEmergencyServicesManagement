@@ -163,8 +163,12 @@ aside :focus-visible, .on-dark :focus-visible { outline-color: #D6DF27; }
 .hose-reel-spin { animation: hoseReelSpin 2.6s linear infinite; }
 .hose-reel-arc { animation: hoseReelClose 1.6s cubic-bezier(0.4, 0, 0.2, 1) 400ms both; }
 
+/* Boot screen corner spinner (blueprint page) */
+@keyframes blueprintSpin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+.blueprint-spin { animation: blueprintSpin 1.1s linear infinite; transform-origin: center; }
+
 @media (prefers-reduced-motion: reduce) {
-  .ekg-line, .boot-pulse, .boot-beacon, .boot-bar, .radar-sweep, .row-flash, .page-enter, .drawer-panel, .drawer-overlay, .explode-shard, .explode-mark, .reveal-seg, .hose-reel-spin, .hose-reel-arc { animation: none; }
+  .ekg-line, .boot-pulse, .boot-beacon, .boot-bar, .radar-sweep, .row-flash, .page-enter, .drawer-panel, .drawer-overlay, .explode-shard, .explode-mark, .reveal-seg, .hose-reel-spin, .hose-reel-arc, .blueprint-spin { animation: none; }
   .card-lift, .card-lift:hover { transform: none; transition: none; }
   .explode-mark { opacity: 1; }
   .reveal-seg { opacity: 1; transform: scale(1); }
